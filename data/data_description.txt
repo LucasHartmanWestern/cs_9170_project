@@ -1,0 +1,25 @@
+Main features:
+timestamp
+heart rate
+ankle sensor 3D data (accelleration, gyroscope, etc.)
+wrist sensor 3D data (accelleration, gyroscope, etc.)
+chest sensor 3D data (accelleration, gyroscope, etc.)
+participant data (height, weight, etc.)
+activity ID (TARGET FEATURE)
+
+Continuous/Discrete Features:
+Both.
+We will likely need to adjust categorical features such as male/female to be one-hot-encoded.
+
+Size Estimate:
+54 columns (features) in total.
+3,850,505 rows (samples) in total.
+
+18 different physical activities.
+9 participants (1 female, 8 males)
+Data timesteps are every 0.01s.
+
+How to Bias The Dataset:
+Some activities have much less data than others.
+Additionally, there is only 1 female participant.
+We could synthetically produce more data for a specific activity type or for female participants.
