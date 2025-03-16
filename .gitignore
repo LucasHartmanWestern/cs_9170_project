@@ -1,3 +1,5 @@
 /__pycache__
 .DS_Store
-data/*
+data/formatted_data.csv
+data/Optional/*
+data/Protocol/*
