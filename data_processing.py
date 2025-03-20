@@ -173,6 +173,9 @@ def preprocess_subject(subject_id):
     # Remove rows with missing Heart Rate data (this will reduce timestep frequency) 
     df = df[df["Heart Rate"].notna()]
 
+    # Remove all NaN values
+    df.dropna(inplace=True)
+
     # Add subject information to the dataframe
     for subj_info_header in SUBJECT_INFO_HEADERS:
         df[subj_info_header] = SUBJECT_INFO_DICT[subject_id][subj_info_header]
