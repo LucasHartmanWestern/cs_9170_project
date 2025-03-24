@@ -186,3 +186,13 @@ class PPOAgent:
             'critic_state_dict': self.critic.state_dict()
         }
         torch.save(checkpoint, path)
+        print(f"Model saved to {path}")
+        
+    def load(self, path):
+        """
+        Load the actor and critic network parameters from the specified path
+        """
+        checkpoint = torch.load(path)
+        self.actor.load_state_dict(checkpoint['actor_state_dict'])
+        self.critic.load_state_dict(checkpoint['critic_state_dict'])
+        print(f"Model loaded from {path}")

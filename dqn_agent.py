@@ -119,3 +119,12 @@ class DQNAgent:
         Save the Q-network weights to the specified path
         """
         torch.save(self.model.state_dict(), path)
+        print(f"Model saved to {path}")
+
+
+    def load(self, path):
+        """
+        Load the Q-network weights from the specified path
+        """
+        self.model.load_state_dict(torch.load(path))
+        print(f"Model loaded from {path}")
