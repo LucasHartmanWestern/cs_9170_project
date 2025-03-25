@@ -2,6 +2,7 @@ import os
 import time
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 # --- Constants --- #
@@ -85,8 +86,10 @@ SUBJECT_INFO_DICT = {
     108: {"Sex": "Male", "Age": 32,"Height": 179,"Weight": 87,"Resting HR": 66, "Max HR": 188, "Dominant Hand": "Left"},
     109: {"Sex": "Male", "Age": 31,"Height": 168,"Weight": 65,"Resting HR": 54, "Max HR": 189, "Dominant Hand": "Right"},
 }
+VALID_ACTIVITIES = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 24]
+VALID_SUBJECTS = [101, 102, 103, 104, 105, 106, 107, 109]
 
-# --- Categorical Information Getter Methods --- #
+# --- Information Getter Methods --- #
 
 def get_activity(activity_id):
     if activity_id == 0:
@@ -155,6 +158,18 @@ def get_column_units(column_name):
     else:
         print(f"Invalid column name: {column_name}")
         return ""
+    
+def get_biased_feature_percentage(df, print_result=False):
+    '''
+    Get the percentage of rows where "Sex - Female" is 1.
+    '''
+    biased_feature_name = "Sex - Female"
+    total_rows = df.shape[0]
+    biased_rows = df[df[biased_feature_name] == 1].shape[0]
+    percentage = biased_rows / total_rows
+    if print_result:
+        print(f"Percentage of rows where '{biased_feature_name}' == 1 is ~{percentage*100:.2f}%")
+    return percentage
 
 # --- Preprocessing Methods --- #
 
@@ -176,9 +191,20 @@ def preprocess_subject(subject_id):
     # Remove all NaN values
     df.dropna(inplace=True)
 
+    # Convert timestamps into sequential integers for each activity
+    for activity_id in VALID_ACTIVITIES:
+        temp_df = df[df["Activity ID"] == activity_id].copy()
+        if temp_df.shape[0] > 0:
+            temp_df.reset_index(drop=True, inplace=True)
+            df.loc[df["Activity ID"] == activity_id, "Timestamp"] = temp_df.index
+    df["Timestamp"] = df["Timestamp"].astype(int)
+
     # Add subject information to the dataframe
     for subj_info_header in SUBJECT_INFO_HEADERS:
         df[subj_info_header] = SUBJECT_INFO_DICT[subject_id][subj_info_header]
+
+    # Add subject ID to the dataframe
+    df["Subject ID"] = subject_id
 
     return df
 
@@ -188,19 +214,30 @@ def preprocess_all_data():
     Rows with NA heart rate data are removed.
     This effectively reduces the timestep frequency to match the frequency of the heart rate monitor.
     All rows with transient activities (activity ID = 0) are also removed.
-
-    On my M1 Chip Macbook Pro:
-    - Takes ~38 seconds to run when rows with NA heart rate data is INCLUDED.
-    - Takes ~14 seconds to run when rows with NA heart rate data is EXCLUDED.
+    All rows with left-handed subjects are removed.
+    All rows with NaN values are removed.
+    The Timestamp column is converted into sequential integers.
     '''
 
     # Preprocess all subjects
     df = pd.DataFrame()
     for subject_id in tqdm(range(101, 110), desc="Preprocessing subjects"):
+        if subject_id == 108:
+            continue # skip subject 108 due to left-dominant hand
         df = pd.concat([df, preprocess_subject(subject_id)])
 
-     # One-hot-encode Sex and Dominant Hand columns
-    df = pd.get_dummies(df, columns=["Sex", "Dominant Hand"], prefix_sep=" - ", dtype=np.int8)
+    # Remove all rows with left-handed subjects so that all rows are right-handed
+    df = df[df["Dominant Hand"] == "Right"]
+    df = df.drop(columns=["Dominant Hand"])
+
+    # Ensure that each activity only has 1000 sequential rows
+    df = df[df["Activity ID"] != 5] # has minimum row count of 318
+    df = df[df["Activity ID"] != 12] # has minimum row count of 945
+    df = df[df["Activity ID"] != 24] # has minimum row count of 24
+    df = df[df["Timestamp"] < 1000]
+
+     # One-hot-encode column for Sex
+    df = pd.get_dummies(df, columns=["Sex"], prefix_sep=" - ", dtype=np.int8)
 
     # Save to CSV
     print(f"Number of columns: {df.shape[1]}, Number of rows: {df.shape[0]}")
@@ -211,25 +248,101 @@ def preprocess_all_data():
 
 # --- Load Data Methods --- #
 
-def load_preprocessed_dataset(verbose=True):
+def load_preprocessed_dataset(verbose=True, drop_subject_id=True):
     '''
     Load the preprocessed dataset from the CSV file.
     The Timestamp column is at index 0 and the Activity ID column (target feature) is at index 1.
     '''
 
     df = pd.read_csv(os.path.join("data", "formatted_data.csv"))
+
+    if drop_subject_id:
+        df = df.drop(columns=["Subject ID"])
+
     if verbose:
-        print("--- Preprocessed Dataset Info ---")
+        print("---- Preprocessed Dataset Info ----")
         print(f"Number of rows: {df.shape[0]}")
         print(f"Number of columns: {df.shape[1]}")
-        print("---------------------------------")
+        print("-----------------------------------")
 
     return df
 
-# DEBUGGING
-if __name__ == "__main__":
-    start_time = time.time()
-    preprocess_all_data()
-    end_time = time.time()
-    print(f"Completed. Time taken: {end_time - start_time} seconds")
+def train_test_split_data(df, split_size=0.2, random_state=None):
+    '''
+    Split the data into training and testing sets.
+    Ensures that the biased column "Sex - Female" is balanced between the training and testing sets.
 
+    If no random state is provided, a random state is randomly generated.
+    '''
+    random_state = int.from_bytes(os.urandom(4), byteorder="big") if random_state is None else random_state
+    df_initial_row_count = df.shape[0] # DEBUGGING
+
+    male_df = df[df["Sex - Male"] == 1]
+    female_df = df[df["Sex - Female"] == 1]
+    train_male_df, test_male_df = train_test_split(male_df, test_size=split_size, random_state=random_state)
+    train_female_df, test_female_df = train_test_split(female_df, test_size=split_size, random_state=random_state)
+
+    train_df = pd.concat([train_male_df, train_female_df])
+    test_df = pd.concat([test_male_df, test_female_df])
+
+    assert train_df.shape[0] + test_df.shape[0] == df_initial_row_count, "ERROR: Row count mismatch" # DEBUGGING
+    return train_df, test_df, random_state
+
+def get_xy_from_data(df, target_feature_name="Activity ID"):
+    '''
+    Get the X and y data from the dataframe.
+    The X data is all columns except the Activity ID column.
+    The y data is the Activity ID column.
+    '''
+    y = df[target_feature_name]
+    x = df.drop(columns=[target_feature_name])
+    return x, y
+
+# --- Main method for DEBUGGING --- #
+
+if __name__ == "__main__":
+
+    # ----- Preprocess data to create formatted csv file ----- #
+    # start_time = time.time()
+    # preprocess_all_data()
+    # end_time = time.time()
+    # print(f"Completed. Time taken: {end_time - start_time} seconds")
+
+    # ----- Determine the number of rows per activity for each subject ----- #
+    # df = load_preprocessed_dataset(verbose=False, drop_subject_id=False)
+    # act_counts = {
+    #     1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 
+    #     7: [], 9: [], 10: [], 11: [], 12: [], 13: [], 
+    #     16: [], 17: [], 18: [], 19: [], 20: [], 24: []
+    # }
+    # for subject_id in range(101, 110):
+    #     if subject_id == 108:
+    #         continue
+    #     subject_df = df[df["Subject ID"] == subject_id]
+
+    #     for activity in VALID_ACTIVITIES:
+    #         count = subject_df[subject_df["Activity ID"] == activity].shape[0]
+    #         if count > 0:
+    #             act_counts[activity].append(count)
+
+    # for activity in act_counts:
+    #     if len(act_counts[activity]) > 0:
+    #         avg = np.mean(act_counts[activity])
+    #         std_val = np.std(act_counts[activity])
+    #         min_val = np.min(act_counts[activity])
+    #         max_val = np.max(act_counts[activity])
+    #         print(f"Activity {activity} row count: mean={avg:.1f}, std dev={std_val:.1f}, min={min_val}, max={max_val}")
+    #     else:
+    #         print(f"Activity {activity} has no rows")
+
+    # ----- Split data into training and testing sets ----- #
+    # df = load_preprocessed_dataset(verbose=False, drop_subject_id=True)
+    # train_df, test_df = train_test_split_data(df, split_size=0.2, random_state=None)
+
+    # x_train, y_train = get_xy_from_data(train_df)
+    # x_test, y_test = get_xy_from_data(test_df)
+
+    # print(f"training set: x shape={x_train.shape}, y shape={y_train.shape}")
+    # print(f"testing set: x shape={x_test.shape}, y shape={y_test.shape}")
+
+    pass
