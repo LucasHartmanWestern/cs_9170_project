@@ -53,19 +53,41 @@ class DQNAgent:
 
     def predict(self, state):
         """
-        Given a state, select an action using an epsilon-greedy policy.
-        state: A numpy array representing the current state.
-        Returns an integer representing the chosen action.
-        """
-        # With probability epsilon, choose a random action
-        if np.random.rand() <= self.epsilon:
-            return random.randrange(self.action_size)
+        Generate a single synthetic data sample
         
-        # Otherwise, choose the action with the highest predicted Q-value
-        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        with torch.no_grad():
-            q_values = self.model(state_tensor)
-        return q_values.argmax().item()
+        Args:
+            state: The current state
+            
+        Returns:
+            Synthetic data sample (a list of integers)
+        """
+        # Convert state to tensor if it's not already
+        if isinstance(state, list):
+            state = torch.FloatTensor(state).to(self.device)
+        elif isinstance(state, np.ndarray):
+            state = torch.FloatTensor(state).to(self.device)
+        
+        # Ensure state is properly shaped for the network
+        if len(state.shape) == 1:
+            state = state.unsqueeze(0)  # Add batch dimension if needed
+        
+        # Set model to evaluation mode
+        self.model.eval()
+        
+        # Epsilon-greedy action selection
+        if random.random() <= self.epsilon:
+            # Random action: generate a list of random integers
+            synthetic_data = [random.randint(0, 1) for _ in range(self.action_size)]
+        else:
+            # Get Q-values from the model
+            with torch.no_grad():
+                q_values = self.model(state)
+            
+            # Convert Q-values to binary synthetic data (0 or 1)
+            # Values above 0 become 1, below 0 become 0
+            synthetic_data = [1 if q > 0 else 0 for q in q_values.cpu().numpy().flatten()]
+        
+        return synthetic_data
 
     def remember(self, state, action, reward, next_state, done):
         """
@@ -73,46 +95,68 @@ class DQNAgent:
         """
         self.memory.append((state, action, reward, next_state, done))
 
-    def train(self):
+    def learn(self, state, action, reward, next_state, done):
         """
-        Sample a batch from memory and update the Q-network
+        Update policy and value networks using DQN algorithm
+        
+        Args:
+            state: Current state
+            action: Action taken (synthetic data generated)
+            reward: Reward received
+            next_state: Next state
+            done: Whether episode is done
         """
+        # Store the experience in memory
+        self.remember(state, action, reward, next_state, done)
+        
+        # Only start learning if we have enough samples
         if len(self.memory) < self.batch_size:
-            return  # Not enough samples to train
+            return
         
-        # Sample a random batch from the memory
-        batch = random.sample(self.memory, self.batch_size)
-        states, actions, rewards, next_states, dones = zip(*batch)
+        # Sample a batch of experiences
+        minibatch = random.sample(self.memory, self.batch_size)
         
-        # Convert to torch tensors
-        states = torch.FloatTensor(np.stack([np.array(s) for s in states])).to(self.device)
-        actions = torch.LongTensor(actions).unsqueeze(1).to(self.device)
-        rewards = torch.FloatTensor(rewards).unsqueeze(1).to(self.device)
-        next_states = torch.FloatTensor(np.stack([np.array(ns) for ns in next_states])).to(self.device)
-        dones = torch.FloatTensor(dones).unsqueeze(1).to(self.device)
+        # Set model to training mode
+        self.model.train()
         
-        # Compute the Q-values for the current states
-        q_values = self.model(states).gather(1, actions)
+        for state, action, reward, next_state, done in minibatch:
+            # Convert to tensors
+            state = torch.FloatTensor(state).to(self.device)
+            action = torch.FloatTensor(action).to(self.device)
+            reward = torch.FloatTensor([reward]).to(self.device)
+            next_state = torch.FloatTensor(next_state).to(self.device)
+            done = torch.FloatTensor([done]).to(self.device)
+            
+            # Ensure states have batch dimension
+            if len(state.shape) == 1:
+                state = state.unsqueeze(0)
+            if len(next_state.shape) == 1:
+                next_state = next_state.unsqueeze(0)
+            
+            # Get current Q-values
+            current_q = self.model(state)
+            
+            # Get next Q-values
+            with torch.no_grad():
+                next_q = self.model(next_state)
+                max_next_q = torch.max(next_q)
+            
+            # Calculate target Q-value
+            target_q = reward + (1 - done) * self.gamma * max_next_q
+            
+            # Calculate loss
+            # We need to reshape current_q to match the action shape for element-wise multiplication
+            q_values = torch.sum(current_q * action)
+            loss = self.criterion(q_values, target_q)
+            
+            # Optimize the model
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
         
-        # Compute Q-values for the next states
-        with torch.no_grad():
-            next_q_values = self.model(next_states).max(1)[0].unsqueeze(1)
-        
-        # Compute the target Q-values using the Bellman equation
-        expected_q_values = rewards + self.gamma * next_q_values * (1 - dones)
-        
-        # Calculate the loss
-        loss = self.criterion(q_values, expected_q_values)
-        
-        # Optimize the Q-network
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        
-        # Decay epsilon to reduce exploration over time
+        # Decay epsilon
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
-            self.epsilon = max(self.epsilon, self.epsilon_min)
 
     def save(self, path):
         """
