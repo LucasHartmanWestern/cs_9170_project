@@ -158,18 +158,6 @@ def get_column_units(column_name):
     else:
         print(f"Invalid column name: {column_name}")
         return ""
-    
-def get_biased_feature_percentage(df, print_result=False):
-    '''
-    Get the percentage of rows where "Sex - Female" is 1.
-    '''
-    biased_feature_name = "Sex - Female"
-    total_rows = df.shape[0]
-    biased_rows = df[df[biased_feature_name] == 1].shape[0]
-    percentage = biased_rows / total_rows
-    if print_result:
-        print(f"Percentage of rows where '{biased_feature_name}' == 1 is ~{percentage*100:.2f}%")
-    return percentage
 
 # --- Preprocessing Methods --- #
 
@@ -267,40 +255,19 @@ def load_preprocessed_dataset(verbose=True, drop_subject_id=False):
 
     return df
 
-def train_test_split_data(df, split_size=0.2, random_state=None):
-    '''
-    Split the data into training and testing sets.
-    Ensures that the biased column "Sex - Female" is balanced between the training and testing sets.
-
-    If no random state is provided, a random state is randomly generated.
-    '''
-    random_state = int.from_bytes(os.urandom(4), byteorder="big") if random_state is None else random_state
-    df_initial_row_count = df.shape[0] # DEBUGGING
-
-    male_df = df[df["Sex - Female"] == 0]
-    female_df = df[df["Sex - Female"] == 1]
-    train_male_df, test_male_df = train_test_split(male_df, test_size=split_size, random_state=random_state)
-    train_female_df, test_female_df = train_test_split(female_df, test_size=split_size, random_state=random_state)
-
-    train_df = pd.concat([train_male_df, train_female_df])
-    test_df = pd.concat([test_male_df, test_female_df])
-
-    assert train_df.shape[0] + test_df.shape[0] == df_initial_row_count, "ERROR: Row count mismatch" # DEBUGGING
-    return train_df, test_df, random_state
-
-def get_xy_from_data(df, target_feature_name="Activity ID"):
+def get_xy_from_data(df, target_features: list[str]):
     '''
     Get the X and y data from the dataframe.
-    The X data is all columns except the Activity ID column.
-    The y data is the Activity ID column.
+    The X data is all columns except the target features.
+    The y data is the target features.
     '''
-    y = df[target_feature_name]
-    x = df.drop(columns=[target_feature_name])
+    y = df[target_features]
+    x = df.drop(columns=target_features)
     return x, y
 
 # --- Main method for DEBUGGING --- #
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
     # ----- Preprocess data to create formatted csv file ----- #
     # start_time = time.time()
@@ -344,5 +311,3 @@ if __name__ == "__main__":
 
     # print(f"training set: x shape={x_train.shape}, y shape={y_train.shape}")
     # print(f"testing set: x shape={x_test.shape}, y shape={y_test.shape}")
-
-    pass
