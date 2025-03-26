@@ -84,6 +84,23 @@ class FFNNAgent:
         else:
             raise ValueError("Invalid type. Must be 'regression' or 'classification'.")
     
+    def reset(self):
+        """
+        Reset the model and optimizer to their initial state.
+        """
+        # Re-initialize model with the same architecture
+        self.model = FFNNModel(self.input_size, self.hidden_sizes, self.output_size).to(self.device)
+        
+        # Re-initialize optimizer
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        
+        # Re-initialize criterion based on the task type
+        if self.type == "regression":
+            self.criterion = nn.MSELoss()
+        elif self.type == "classification":
+            self.criterion = nn.CrossEntropyLoss()
+        
+
     def predict(self, features):
         """
         Make predictions using the trained model.
