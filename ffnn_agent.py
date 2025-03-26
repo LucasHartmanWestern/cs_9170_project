@@ -137,11 +137,15 @@ class FFNNAgent:
             if self.type == "classification":
                 # Convert class labels to indices if needed
                 if self.classes is not None and not np.issubdtype(targets.dtype, np.integer):
+                    targets = targets.flatten()  # <-- flatten to shape (n,)
                     class_to_idx = {c: i for i, c in enumerate(self.classes)}
                     targets = np.array([class_to_idx[t] for t in targets])
+                else:
+                    targets = targets.flatten()  # <-- always flatten
                 targets = torch.LongTensor(targets).to(self.device)
             else:
                 targets = torch.FloatTensor(targets).to(self.device)
+
         
         # Create dataset and dataloader
         dataset = torch.utils.data.TensorDataset(features, targets)
