@@ -146,8 +146,11 @@ class DQNAgent:
             
             # Calculate loss
             # We need to reshape current_q to match the action shape for element-wise multiplication
+            # Calculate loss
             q_values = torch.sum(current_q * action)
+            target_q = target_q.view_as(q_values) 
             loss = self.criterion(q_values, target_q)
+
             
             # Optimize the model
             self.optimizer.zero_grad()

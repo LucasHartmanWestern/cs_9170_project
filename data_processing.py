@@ -248,7 +248,7 @@ def preprocess_all_data():
 
 # --- Load Data Methods --- #
 
-def load_preprocessed_dataset(verbose=True, drop_subject_id=True):
+def load_preprocessed_dataset(verbose=True, drop_subject_id=False):
     '''
     Load the preprocessed dataset from the CSV file.
     The Timestamp column is at index 0 and the Activity ID column (target feature) is at index 1.
@@ -277,7 +277,7 @@ def train_test_split_data(df, split_size=0.2, random_state=None):
     random_state = int.from_bytes(os.urandom(4), byteorder="big") if random_state is None else random_state
     df_initial_row_count = df.shape[0] # DEBUGGING
 
-    male_df = df[df["Sex - Male"] == 1]
+    male_df = df[df["Sex - Female"] == 0]
     female_df = df[df["Sex - Female"] == 1]
     train_male_df, test_male_df = train_test_split(male_df, test_size=split_size, random_state=random_state)
     train_female_df, test_female_df = train_test_split(female_df, test_size=split_size, random_state=random_state)
