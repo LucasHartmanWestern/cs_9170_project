@@ -178,10 +178,6 @@ class FFNNAgent:
             # Average loss for the epoch
             avg_loss = epoch_loss / batch_count
             losses.append(avg_loss)
-            
-            # Print progress every 10 epochs
-            if (epoch + 1) % 10 == 0:
-                print(f'Epoch [{epoch+1}/{self.epochs}], Loss: {avg_loss:.4f}')
         
         return losses
 
