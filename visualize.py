@@ -1,3 +1,4 @@
+import os
 import json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,14 +17,14 @@ def load_agent_metrics(metrics_path):
     return metrics
 
 
-def plot_rewards(save_path='training_metrics.json'):
+def plot_rewards(metrics_path='training_metrics.json', save_path=None, show=True):
     """
     Plots rewards from the saved training metrics JSON file.
 
     :param save_path: Path to the saved metrics file
     """
     # Load the agent metrics from the saved file
-    metrics = load_agent_metrics(save_path)
+    metrics = load_agent_metrics(metrics_path)
 
     rewards = metrics['rewards']
 
@@ -35,17 +36,22 @@ def plot_rewards(save_path='training_metrics.json'):
     plt.title('Training Rewards Over Timesteps')
     plt.legend()
     plt.tight_layout()
-    plt.show()
+
+    if save_path is not None:
+        plt.savefig(os.path.join(save_path, "rewards_per_timestep.png"))
+
+    if show:
+        plt.show()
 
 
-def plot_rewards_per_episode(save_path='training_metrics.json'):
+def plot_rewards_per_episode(metrics_path='training_metrics.json', save_path=None, show=True):
     """
     Plots rewards from the saved training metrics JSON file.
 
     :param save_path: Path to the saved metrics file
     """
     # Load the agent metrics from the saved file
-    metrics = load_agent_metrics(save_path)
+    metrics = load_agent_metrics(metrics_path)
 
     rewards = metrics['rewards']
 
@@ -61,17 +67,22 @@ def plot_rewards_per_episode(save_path='training_metrics.json'):
     plt.title('Training Rewards Over Episodes')
     plt.legend()
     plt.tight_layout()
-    plt.show()
+
+    if save_path is not None:
+        plt.savefig(os.path.join(save_path, "rewards_per_episode.png"))
+
+    if show:
+        plt.show()
 
 
-def plot_rewards_cum_avg(save_path='training_metrics.json'):
+def plot_rewards_cum_avg(metrics_path='training_metrics.json', save_path=None, show=True):
     """
     Plots rewards from the saved training metrics JSON file.
 
     :param save_path: Path to the saved metrics file
     """
     # Load the agent metrics from the saved file
-    metrics = load_agent_metrics(save_path)
+    metrics = load_agent_metrics(metrics_path)
 
     rewards = metrics['rewards']
 
@@ -89,10 +100,15 @@ def plot_rewards_cum_avg(save_path='training_metrics.json'):
     plt.title('Cumulative Average Training Rewards Over Episodes')
     plt.legend()
     plt.tight_layout()
-    plt.show()
+
+    if save_path is not None:
+        plt.savefig(os.path.join(save_path, "cumulative_rewards.png"))
+
+    if show:
+        plt.show()
 
 
-def plot_mse_histogram(save_path='training_metrics.json'):
+def plot_mse_histogram(metrics_path='training_metrics.json', save_path=None, show=True):
     """
     Plots bar charts for the MSE values of Train, Validation, and Test datasets
     from the saved training metrics JSON file.
@@ -100,7 +116,7 @@ def plot_mse_histogram(save_path='training_metrics.json'):
     :param save_path: Path to the saved metrics file
     """
     # Load the agent metrics from the saved file
-    metrics = load_agent_metrics(save_path)
+    metrics = load_agent_metrics(metrics_path)
 
     # Extract MSE values for Train, Validation, and Test
     train_mse = metrics['train_mse']
@@ -128,10 +144,15 @@ def plot_mse_histogram(save_path='training_metrics.json'):
 
     # Show the plot
     plt.tight_layout()
-    plt.show()
+
+    if save_path is not None:
+        plt.savefig(os.path.join(save_path, "trained_mse.png"))
+
+    if show:
+        plt.show()
 
 
-def plot_female_mse_histogram(save_path='training_metrics.json'):
+def plot_female_mse_histogram(metrics_path='training_metrics.json', save_path=None, show=True):
     """
     Plots histograms for the MSE values of Train Female, Validation Female, and Test Female
     from the saved training metrics JSON file as bar plots.
@@ -139,7 +160,7 @@ def plot_female_mse_histogram(save_path='training_metrics.json'):
     :param save_path: Path to the saved metrics file
     """
     # Load the agent metrics from the saved file
-    metrics = load_agent_metrics(save_path)
+    metrics = load_agent_metrics(metrics_path)
 
     # Extract MSE values for Train Female, Validation Female, and Test Female
     train_female_mse = metrics['train_female_mse']
@@ -166,10 +187,15 @@ def plot_female_mse_histogram(save_path='training_metrics.json'):
 
     # Show the plot
     plt.tight_layout()
-    plt.show()
+
+    if save_path is not None:
+        plt.savefig(os.path.join(save_path, "trained_female_mse.png"))
+
+    if show:
+        plt.show()
 
 
-def plot_baseline_mse_histogram(baseline_results):
+def plot_baseline_mse_histogram(baseline_results, save_path=None, show=True):
     """
     Plots histograms for the MSE of Train, Validation, and Test datasets from the baseline FFNN model.
     Includes histograms for both regular MSE and Female MSE.
@@ -189,19 +215,25 @@ def plot_baseline_mse_histogram(baseline_results):
 
     # Plot Regular MSE (Train, Validation, Test) in the first subplot
     plt.subplot(1, 2, 1)
-    plt.bar(['Train', 'Validation', 'Test'], [train_mse, val_mse, test_mse],
+    bar_container = plt.bar(['Train', 'Validation', 'Test'], [train_mse, val_mse, test_mse],
             color=['tab:blue', 'tab:orange', 'tab:green'])
+    plt.bar_label(bar_container, fmt="{:.2f}")
     plt.xlabel('Dataset')
     plt.ylabel('MSE')
     plt.title('Regular MSE for Train, Validation, and Test')
 
     # Plot Female MSE (Train, Validation, Test) in the second subplot
     plt.subplot(1, 2, 2)
-    plt.bar(['Train', 'Validation', 'Test'], [train_female_mse, val_female_mse, test_female_mse],
+    bar_container = plt.bar(['Train', 'Validation', 'Test'], [train_female_mse, val_female_mse, test_female_mse],
             color=['tab:red', 'tab:purple', 'tab:olive'])
+    plt.bar_label(bar_container, fmt="{:.2f}")
     plt.xlabel('Dataset')
     plt.ylabel('Female MSE')
     plt.title('Female MSE for Train, Validation, and Test')
-
     plt.tight_layout()
-    plt.show()
+
+    if save_path is not None:
+        plt.savefig(os.path.join(save_path, "baseline_mse.png"))
+
+    if show:
+        plt.show()
