@@ -16,9 +16,19 @@ class QNetwork(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, action_size)
         )
+        # Sigmoid activation for binary output
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         return self.net(x)
+    
+    def get_binary_output(self, x):
+        # Get continuous values from the network
+        logits = self.net(x)
+        # Apply sigmoid to get values between 0 and 1
+        probs = self.sigmoid(logits)
+        # Convert to binary (0 or 1) based on threshold of 0.5
+        return probs
 
 class DQNAgent:
     def __init__(self, state_size, action_size, hidden_size=64, lr=1e-3,
@@ -79,13 +89,12 @@ class DQNAgent:
             # Random action: generate a list of random integers
             synthetic_data = [random.randint(0, 1) for _ in range(self.action_size)]
         else:
-            # Get Q-values from the model
+            # Get probabilities from the model using sigmoid activation
             with torch.no_grad():
-                q_values = self.model(state)
+                probs = self.model.get_binary_output(state)
             
-            # Convert Q-values to binary synthetic data (0 or 1)
-            # Values above 0 become 1, below 0 become 0
-            synthetic_data = [1 if q > 0 else 0 for q in q_values.cpu().numpy().flatten()]
+            # Convert probabilities to binary (0 or 1) with threshold 0.5
+            synthetic_data = [1 if p >= 0.5 else 0 for p in probs.cpu().numpy().flatten()]
         
         return synthetic_data
 

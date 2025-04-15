@@ -37,7 +37,6 @@ def plot_rewards(save_path='training_metrics.json'):
     plt.tight_layout()
     plt.show()
 
-
 def plot_rewards_per_episode(save_path='training_metrics.json'):
     """
     Plots rewards from the saved training metrics JSON file.

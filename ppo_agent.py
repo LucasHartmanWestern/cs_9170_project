@@ -107,12 +107,6 @@ class PPOAgent:
             
             # Sample action from distribution
             action = dist.sample()
-            
-            # Calculate log probability of the action
-            log_prob = dist.log_prob(action).sum(dim=-1)
-            
-            # Get value estimate from critic
-            value = self.critic(state)
         
         # Return the synthetic data (action) as a list of floats
         return action.cpu().numpy().flatten().tolist()
