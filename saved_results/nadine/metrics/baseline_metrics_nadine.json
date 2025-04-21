@@ -1,0 +1,1 @@
+{"baseline": {"train": {"mse": 30.9129, "female_mse": 6.1674}, "val": {"mse": 226.0691, "female_mse": 33.8329}, "test": {"mse": 51.3987, "female_mse": 10.4091}}}

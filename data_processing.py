@@ -2,7 +2,6 @@ import os
 import time
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 # --- Constants --- #
@@ -267,47 +266,11 @@ def get_xy_from_data(df, target_features: list[str]):
 
 # --- Main method for DEBUGGING --- #
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
 
     # ----- Preprocess data to create formatted csv file ----- #
-    # start_time = time.time()
-    # preprocess_all_data()
-    # end_time = time.time()
-    # print(f"Completed. Time taken: {end_time - start_time} seconds")
+    start_time = time.time()
+    preprocess_all_data()
+    end_time = time.time()
+    print(f"Completed. Time taken: {end_time - start_time} seconds")
 
-    # ----- Determine the number of rows per activity for each subject ----- #
-    # df = load_preprocessed_dataset(verbose=False, drop_subject_id=False)
-    # act_counts = {
-    #     1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 
-    #     7: [], 9: [], 10: [], 11: [], 12: [], 13: [], 
-    #     16: [], 17: [], 18: [], 19: [], 20: [], 24: []
-    # }
-    # for subject_id in range(101, 110):
-    #     if subject_id == 108:
-    #         continue
-    #     subject_df = df[df["Subject ID"] == subject_id]
-
-    #     for activity in VALID_ACTIVITIES:
-    #         count = subject_df[subject_df["Activity ID"] == activity].shape[0]
-    #         if count > 0:
-    #             act_counts[activity].append(count)
-
-    # for activity in act_counts:
-    #     if len(act_counts[activity]) > 0:
-    #         avg = np.mean(act_counts[activity])
-    #         std_val = np.std(act_counts[activity])
-    #         min_val = np.min(act_counts[activity])
-    #         max_val = np.max(act_counts[activity])
-    #         print(f"Activity {activity} row count: mean={avg:.1f}, std dev={std_val:.1f}, min={min_val}, max={max_val}")
-    #     else:
-    #         print(f"Activity {activity} has no rows")
-
-    # ----- Split data into training and testing sets ----- #
-    # df = load_preprocessed_dataset(verbose=False, drop_subject_id=True)
-    # train_df, test_df = train_test_split_data(df, split_size=0.2, random_state=None)
-
-    # x_train, y_train = get_xy_from_data(train_df)
-    # x_test, y_test = get_xy_from_data(test_df)
-
-    # print(f"training set: x shape={x_train.shape}, y shape={y_train.shape}")
-    # print(f"testing set: x shape={x_test.shape}, y shape={y_test.shape}")
