@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-
-
 class ReplayBuffer:
     def __init__(self, state_dim, action_dim, capacity, device):
         self.capacity = capacity
