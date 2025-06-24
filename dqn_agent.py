@@ -33,7 +33,7 @@ class QNetwork(nn.Module):
 class DQNAgent:
     def __init__(self, state_size, action_size, hidden_size=64, lr=1e-3,
                  gamma=0.99, batch_size=32, memory_size=10000,
-                 epsilon_start=1.0, epsilon_min=0.01, epsilon_decay=0.995):
+                 epsilon_start=1.0, epsilon_min=0.01, epsilon_decay=0.995, seed=42):
         """
         state_size: Dimension of state space
         action_size: Number of possible actions
@@ -43,6 +43,7 @@ class DQNAgent:
         batch_size: Number of experiences to sample for training
         memory_size: Maximum size of the replay buffer
         epsilon_*: Parameters for the epsilon-greedy policy
+        seed: Random seed for reproducibility
         """
         self.state_size = state_size
         self.action_size = action_size
@@ -60,6 +61,7 @@ class DQNAgent:
         self.epsilon = epsilon_start
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
+        self.seed = seed
 
     def predict(self, state):
         """
@@ -67,10 +69,15 @@ class DQNAgent:
         
         Args:
             state: The current state
-            
+            random_state: Random seed for reproducibility
         Returns:
             Synthetic data sample (a list of integers)
         """
+        # Set random seed for reproducibility
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
+
         # Convert state to tensor if it's not already
         if isinstance(state, list):
             state = torch.FloatTensor(state).to(self.device)
@@ -115,6 +122,11 @@ class DQNAgent:
             next_state: Next state
             done: Whether episode is done
         """
+        # Set random seed for reproducibility
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
+
         # Store the experience in memory
         self.remember(state, action, reward, next_state, done)
         

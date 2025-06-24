@@ -29,7 +29,7 @@ class FFNNModel(nn.Module):
 class FFNNAgent:
     def __init__(self, input_size, hidden_sizes=[64, 64], output_size=1, 
                  learning_rate=0.001, batch_size=32, epochs=100, type="regression", 
-                 classes=None, device=None):
+                 classes=None, device=None, seed=42):
         """
         Initialize the Feed-Forward Neural Network agent.
         
@@ -43,6 +43,7 @@ class FFNNAgent:
             type: Type of task - "regression" or "classification"
             classes: List of class labels for classification tasks
             device: Device to run the model on (cpu or cuda)
+            seed: Random seed for reproducibility
         """
         self.input_size = input_size
         self.hidden_sizes = hidden_sizes
@@ -50,7 +51,7 @@ class FFNNAgent:
         self.batch_size = batch_size
         self.epochs = epochs
         self.type = type
-        
+        self.seed = seed
         # Handle classification-specific setup
         if type == "classification":
             if classes is not None:
@@ -111,6 +112,11 @@ class FFNNAgent:
         Returns:
             Predictions as numpy array
         """
+        # Set random seed for reproducibility
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
+
         # Convert to tensor if needed
         if isinstance(features, np.ndarray):
             features = torch.FloatTensor(features).to(self.device)
@@ -146,6 +152,11 @@ class FFNNAgent:
         Returns:
             List of training losses
         """
+        # Set random seed for reproducibility
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
+
         # Convert to tensors if needed
         if isinstance(features, np.ndarray):
             features = torch.FloatTensor(features).to(self.device)

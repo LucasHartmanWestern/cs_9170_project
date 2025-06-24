@@ -46,7 +46,8 @@ def plot_ffnn_losses(losses):
     plt.show()
 
 
-def generate_state(df, mf_ratio, n_samples):
+def generate_state(df, mf_ratio, n_samples, seed=42):
+    np.random.seed(seed)
     timestamp = np.random.uniform(df['Timestamp'].min(), df['Timestamp'].max())
     male_female_ratio = mf_ratio 
     num_samples = n_samples
@@ -114,7 +115,8 @@ def train_ffnn_baseline(
         df_test, 
         target_features,
         save_location,
-        show_loss_plots=True
+        show_loss_plots=True,
+        seed=42
     ):
     """
     Trains and evaluates three FFNN models:
@@ -128,6 +130,9 @@ def train_ffnn_baseline(
         df_val: Full validation DataFrame.
         df_test: Full testing DataFrame.
         target_features: List of feature names to be used for training.
+        save_location: Path to save the results.
+        show_loss_plots: Whether to show the loss plots.
+        seed: Random seed for reproducibility.
         
     Returns:
         A dictionary containing train, validation, and test errors for each method.
@@ -165,9 +170,9 @@ def train_ffnn_baseline(
     df_majority = df_train[df_train["Sex - Female"] == 0]
     
     # Oversample minority: sample with replacement until the counts are equal
-    df_minority_oversampled = df_minority.sample(n=len(df_majority), replace=True, random_state=42)
+    df_minority_oversampled = df_minority.sample(n=len(df_majority), replace=True, random_state=seed)
     # Combine oversampled minority with majority and shuffle
-    df_train_oversampled = pd.concat([df_majority, df_minority_oversampled]).sample(frac=1, random_state=42).reset_index(drop=True)
+    df_train_oversampled = pd.concat([df_majority, df_minority_oversampled]).sample(frac=1, random_state=seed).reset_index(drop=True)
     x_train_oversampled, y_train_oversampled = get_xy_from_data(df_train_oversampled, target_features)
     
     print("\nTraining FFNN on training data with minority oversampling (resampling)...")
@@ -191,8 +196,8 @@ def train_ffnn_baseline(
     # Experiment 3: Baseline with Majority Elimination (Undersampling)
     # ---------------------------------------------------------
     # Undersample majority: take a subset equal to the number of minority samples
-    df_majority_undersampled = df_majority.sample(n=len(df_minority), random_state=42)
-    df_train_undersampled = pd.concat([df_minority, df_majority_undersampled]).sample(frac=1, random_state=42).reset_index(drop=True)
+    df_majority_undersampled = df_majority.sample(n=len(df_minority), random_state=seed)
+    df_train_undersampled = pd.concat([df_minority, df_majority_undersampled]).sample(frac=1, random_state=seed).reset_index(drop=True)
     x_train_undersampled, y_train_undersampled = get_xy_from_data(df_train_undersampled, target_features)
     
     print("\nTraining FFNN on training data with majority elimination (undersampling)...")
@@ -288,7 +293,8 @@ def train_agents(
         synthetic_data_amount, 
         accuracy_reward_multiplier,
         save_location, 
-        show_loss_plots=True
+        show_loss_plots=True,
+        seed=42
     ):
     rewards = []
     val_accuracies = []
@@ -309,7 +315,7 @@ def train_agents(
     # Initial male-female ratio
     sex_female_idx = x_train.columns.get_loc('Sex - Female')
     mf_ratio = np.mean(x_train.iloc[:, sex_female_idx])
-    state = generate_state(x_train, mf_ratio, 0)
+    state = generate_state(x_train, mf_ratio, 0, seed=seed)
 
     for episode in range(episodes):
         print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
@@ -417,7 +423,7 @@ def train_agents(
             else:
                 reward = mini_reward
 
-            next_state = generate_state(x_train, mf_ratio, len(synthetic_data) + 1)
+            next_state = generate_state(x_train, mf_ratio, len(synthetic_data) + 1, seed=seed)
             dqn_agent.learn(state, discrete_action, reward, next_state, done)
             ppo_agent.learn(state, continuous_action, reward, next_state, done)
 

@@ -38,7 +38,7 @@ class Critic(nn.Module):
 class PPOAgent:
     def __init__(self, state_size, action_size, hidden_size=64, lr=3e-4,
                  gamma=0.99, clip_epsilon=0.2, update_epochs=4, batch_size=64,
-                 c1=0.5, c2=0.01, action_std=0.5):
+                 c1=0.5, c2=0.01, action_std=0.5, seed=42):
         """
         state_size: dimension of the state space
         action_size: dimension of continuous action space (synthetic data size)
@@ -51,6 +51,7 @@ class PPOAgent:
         c1: coefficient for the value loss
         c2: coefficient for the entropy bonus
         action_std: initial standard deviation for continuous actions
+        seed: Random seed for reproducibility
         """
         self.state_size = state_size
         self.action_size = action_size
@@ -61,7 +62,7 @@ class PPOAgent:
         self.c1 = c1
         self.c2 = c2
         self.action_std = action_std
-
+        self.seed = seed
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.actor = Actor(state_size, action_size, hidden_size).to(self.device)
         self.critic = Critic(state_size, hidden_size).to(self.device)
@@ -83,6 +84,11 @@ class PPOAgent:
         Returns:
             Synthetic data sample (a list of floats)
         """
+        # Set random seed for reproducibility
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
+
         # Convert state to tensor if it's not already
         if isinstance(state, list):
             state = torch.FloatTensor(state).to(self.device)
@@ -127,7 +133,13 @@ class PPOAgent:
             reward: Reward received
             next_state: Next state
             done: Whether episode is done
+            random_state: Random seed for reproducibility
         """
+        # Set random seed for reproducibility
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
+        
         # Convert inputs to tensors if they aren't already
         if isinstance(state, list):
             state = torch.FloatTensor(state).to(self.device)
