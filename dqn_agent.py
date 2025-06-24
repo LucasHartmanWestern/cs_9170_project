@@ -1,9 +1,45 @@
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import random
-from collections import deque
+
+
+
+class ReplayBuffer:
+    def __init__(self, state_dim, action_dim, capacity, device):
+        self.capacity = capacity
+        self.device = device
+
+        # Pre-allocate buffers
+        self.states      = torch.zeros((capacity, state_dim),   device=device)
+        self.actions     = torch.zeros((capacity, action_dim),  device=device)
+        self.rewards     = torch.zeros((capacity, 1),           device=device)
+        self.next_states = torch.zeros((capacity, state_dim),   device=device)
+        self.dones       = torch.zeros((capacity, 1),           device=device)
+
+        self.ptr   = 0
+        self.size  = 0
+
+    def push(self, state, action, reward, next_state, done):
+        idx = self.ptr
+        self.states[idx]      = state
+        self.actions[idx]     = action
+        self.rewards[idx]     = reward
+        self.next_states[idx] = next_state
+        self.dones[idx]       = done
+
+        self.ptr = (self.ptr + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
+
+    def sample(self, batch_size):
+        idxs = torch.randint(0, self.size, (batch_size,), device=self.device)
+        return (
+            self.states[idxs],
+            self.actions[idxs],
+            self.rewards[idxs],
+            self.next_states[idxs],
+            self.dones[idxs],
+        )
+
 
 # NN for approximating Q-values
 class QNetwork(nn.Module):
@@ -31,37 +67,32 @@ class QNetwork(nn.Module):
         return probs
 
 class DQNAgent:
-    def __init__(self, state_size, action_size, hidden_size=64, lr=1e-3,
-                 gamma=0.99, batch_size=32, memory_size=10000,
-                 epsilon_start=1.0, epsilon_min=0.01, epsilon_decay=0.995, seed=42):
-        """
-        state_size: Dimension of state space
-        action_size: Number of possible actions
-        hidden_size: Number of neurons in hidden layers
-        lr: Learning rate for optimizer
-        gamma: Discount factor
-        batch_size: Number of experiences to sample for training
-        memory_size: Maximum size of the replay buffer
-        epsilon_*: Parameters for the epsilon-greedy policy
-        seed: Random seed for reproducibility
-        """
-        self.state_size = state_size
-        self.action_size = action_size
-        self.gamma = gamma
-        self.batch_size = batch_size
-        self.memory = deque(maxlen=memory_size)
+    def __init__(self, state_size, action_size, hidden_size=64, lr=1e-3, gamma=0.99, batch_size=32, memory_size=10000, epsilon_start=1.0, epsilon_min=0.01, epsilon_decay=0.995, seed=42):
+        
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.gamma      = gamma
+        self.state_size  = state_size
+        self.action_size = action_size
+        self.batch_size = batch_size
+        self.seed       = seed
 
-        # Initialize the Q-Network
-        self.model = QNetwork(state_size, action_size, hidden_size).to(self.device)
+        # ε-greedy params
+        self.epsilon     = epsilon_start
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+
+        # model, opt, loss
+        self.model     = QNetwork(state_size, action_size, hidden_size).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         self.criterion = nn.MSELoss()
 
-        # Epsilon parameters for ε-greedy action selection
-        self.epsilon = epsilon_start
-        self.epsilon_min = epsilon_min
-        self.epsilon_decay = epsilon_decay
-        self.seed = seed
+        # GPU replay buffer
+        self.memory = ReplayBuffer(state_size, action_size, memory_size, self.device)
+
+        # for reproducibility
+        torch.manual_seed(seed)
+
+
 
     def predict(self, state):
         """
@@ -73,35 +104,25 @@ class DQNAgent:
         Returns:
             Synthetic data sample (a list of integers)
         """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
-
         # Convert state to tensor if it's not already
-        if isinstance(state, list):
-            state = torch.FloatTensor(state).to(self.device)
-        elif isinstance(state, np.ndarray):
-            state = torch.FloatTensor(state).to(self.device)
+        state = torch.FloatTensor(state).to(self.device)
         
         # Ensure state is properly shaped for the network
         if len(state.shape) == 1:
             state = state.unsqueeze(0)  # Add batch dimension if needed
         
-        # Set model to evaluation mode
-        self.model.eval()
-        
         # Epsilon-greedy action selection
-        if random.random() <= self.epsilon:
+        if torch.rand(1, device=self.device).item() <= self.epsilon:
             # Random action: generate a list of random integers
-            synthetic_data = [random.randint(0, 1) for _ in range(self.action_size)]
+            synthetic_data = torch.randint(0, 2, (self.action_size,), device=self.device).tolist()
         else:
             # Get probabilities from the model using sigmoid activation
+            self.model.eval()
             with torch.no_grad():
                 probs = self.model.get_binary_output(state)
             
             # Convert probabilities to binary (0 or 1) with threshold 0.5
-            synthetic_data = [1 if p >= 0.5 else 0 for p in probs.cpu().numpy().flatten()]
+            synthetic_data = (probs >= 0.5).int().squeeze(0).tolist()
         
         return synthetic_data
 
@@ -109,7 +130,13 @@ class DQNAgent:
         """
         Store a transition (experience) in the replay memory.
         """
-        self.memory.append((state, action, reward, next_state, done))
+        s  = torch.as_tensor(state,      dtype=torch.float32, device=self.device)
+        a  = torch.as_tensor(action,     dtype=torch.float32, device=self.device)
+        r  = torch.as_tensor([reward],   dtype=torch.float32, device=self.device)
+        ns = torch.as_tensor(next_state, dtype=torch.float32, device=self.device)
+        d  = torch.as_tensor([done],     dtype=torch.float32, device=self.device)
+
+        self.memory.push(s, a, r, ns, d)
 
     def learn(self, state, action, reward, next_state, done):
         """
@@ -122,62 +149,31 @@ class DQNAgent:
             next_state: Next state
             done: Whether episode is done
         """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
-
         # Store the experience in memory
         self.remember(state, action, reward, next_state, done)
         
         # Only start learning if we have enough samples
-        if len(self.memory) < self.batch_size:
+        if self.memory.size < self.batch_size:
             return
         
-        # Sample a batch of experiences
-        minibatch = random.sample(self.memory, self.batch_size)
+        # CHANGED TO SAMPLE ALL AT ONCE
+        states, actions, rewards, next_states, dones = \
+            self.memory.sample(self.batch_size)
         
-        # Set model to training mode
         self.model.train()
+        q_pred = (self.model(states) * actions).sum(dim=1, keepdim=True)
         
-        for state, action, reward, next_state, done in minibatch:
-            # Convert to tensors
-            state = torch.FloatTensor(state).to(self.device)
-            action = torch.FloatTensor(action).to(self.device)
-            reward = torch.FloatTensor([reward]).to(self.device)
-            next_state = torch.FloatTensor(next_state).to(self.device)
-            done = torch.FloatTensor([done]).to(self.device)
-            
-            # Ensure states have batch dimension
-            if len(state.shape) == 1:
-                state = state.unsqueeze(0)
-            if len(next_state.shape) == 1:
-                next_state = next_state.unsqueeze(0)
-            
-            # Get current Q-values
-            current_q = self.model(state)
-            
-            # Get next Q-values
-            with torch.no_grad():
-                next_q = self.model(next_state)
-                max_next_q = torch.max(next_q)
-            
-            # Calculate target Q-value
-            target_q = reward + (1 - done) * self.gamma * max_next_q
-            
-            # Calculate loss
-            # We need to reshape current_q to match the action shape for element-wise multiplication
-            # Calculate loss
-            q_values = torch.sum(current_q * action)
-            target_q = target_q.view_as(q_values) 
-            loss = self.criterion(q_values, target_q)
 
-            
-            # Optimize the model
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+        with torch.no_grad():
+            q_next   = self.model(next_states).max(dim=1, keepdim=True)[0]
+            q_target = rewards + (1 - dones) * self.gamma * q_next
         
+        
+        loss = self.criterion(q_pred, q_target)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
         # Decay epsilon
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
@@ -194,5 +190,7 @@ class DQNAgent:
         """
         Load the Q-network weights from the specified path
         """
-        self.model.load_state_dict(torch.load(path))
+        state_dict = torch.load(path, map_location=self.device)
+        self.model.load_state_dict(state_dict)
+        self.model.to(self.device)
         print(f"Model loaded from {path}")
