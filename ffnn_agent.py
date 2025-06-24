@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
-import random
 
 class FFNNModel(nn.Module):
     def __init__(self, input_size, hidden_sizes, output_size):
@@ -51,7 +50,12 @@ class FFNNAgent:
         self.batch_size = batch_size
         self.epochs = epochs
         self.type = type
+
+        # Set random seed for reproducibility
+        torch.manual_seed(seed)
+        dqn_rng = np.random.default_rng(seed)
         self.seed = seed
+
         # Handle classification-specific setup
         if type == "classification":
             if classes is not None:
@@ -89,6 +93,8 @@ class FFNNAgent:
         """
         Reset the model and optimizer to their initial state.
         """
+        # Set random seed for reproducibility
+        torch.manual_seed(self.seed)
         # Re-initialize model with the same architecture
         self.model = FFNNModel(self.input_size, self.hidden_sizes, self.output_size).to(self.device)
         
@@ -112,10 +118,7 @@ class FFNNAgent:
         Returns:
             Predictions as numpy array
         """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
+
 
         # Convert to tensor if needed
         if isinstance(features, np.ndarray):
@@ -152,11 +155,6 @@ class FFNNAgent:
         Returns:
             List of training losses
         """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
-
         # Convert to tensors if needed
         if isinstance(features, np.ndarray):
             features = torch.FloatTensor(features).to(self.device)

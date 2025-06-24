@@ -46,13 +46,12 @@ def plot_ffnn_losses(losses):
     plt.show()
 
 
-def generate_state(df, mf_ratio, n_samples, seed=42):
-    np.random.seed(seed)
-    timestamp = np.random.uniform(df['Timestamp'].min(), df['Timestamp'].max())
+def generate_state(df, mf_ratio, n_samples, rng):
+    timestamp = rng.uniform(df['Timestamp'].min(), df['Timestamp'].max())
     male_female_ratio = mf_ratio 
     num_samples = n_samples
-    age = np.random.uniform(24, 31)
-    activity_id = np.random.choice([1, 2])
+    age = rng.uniform(24, 31)
+    activity_id = rng.choice([1, 2])
     return np.array([timestamp, male_female_ratio, num_samples, age, activity_id])
 
 
@@ -296,6 +295,11 @@ def train_agents(
         show_loss_plots=True,
         seed=42
     ):
+
+    # Set random seed for reproducibility
+    torch.manual_seed(seed)
+    rng = np.random.default_rng(seed)
+    
     rewards = []
     val_accuracies = []
     test_accuracies = []
@@ -315,7 +319,8 @@ def train_agents(
     # Initial male-female ratio
     sex_female_idx = x_train.columns.get_loc('Sex - Female')
     mf_ratio = np.mean(x_train.iloc[:, sex_female_idx])
-    state = generate_state(x_train, mf_ratio, 0, seed=seed)
+    state = generate_state(x_train, mf_ratio, 0, rng)
+
 
     for episode in range(episodes):
         print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
@@ -371,7 +376,6 @@ def train_agents(
             mini_reward = compute_mini_reward(np.array(synthetic_data), mf_ratio)
             done = i == synthetic_data_amount - 1
 
-
             if done:
                 print(f"Episode {episode + 1}/{episodes}: Training FFNN")
                 
@@ -386,7 +390,7 @@ def train_agents(
 
                 # Shuffle combined training data
                 indices = np.arange(combined_data.shape[0])
-                np.random.shuffle(indices)
+                rng.shuffle(indices)
                 combined_data = combined_data[indices]
                 combined_labels = combined_labels[indices]
 
@@ -423,7 +427,7 @@ def train_agents(
             else:
                 reward = mini_reward
 
-            next_state = generate_state(x_train, mf_ratio, len(synthetic_data) + 1, seed=seed)
+            next_state = generate_state(x_train, mf_ratio, len(synthetic_data) + 1, rng)
             dqn_agent.learn(state, discrete_action, reward, next_state, done)
             ppo_agent.learn(state, continuous_action, reward, next_state, done)
 

@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import random
+
 from collections import deque
 
 # NN for approximating Q-values
@@ -45,6 +45,10 @@ class DQNAgent:
         epsilon_*: Parameters for the epsilon-greedy policy
         seed: Random seed for reproducibility
         """
+        # Set random seed for reproducibility
+        torch.manual_seed(seed)
+        self.rng = np.random.default_rng(seed)
+        
         self.state_size = state_size
         self.action_size = action_size
         self.gamma = gamma
@@ -61,7 +65,7 @@ class DQNAgent:
         self.epsilon = epsilon_start
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
-        self.seed = seed
+
 
     def predict(self, state):
         """
@@ -73,11 +77,6 @@ class DQNAgent:
         Returns:
             Synthetic data sample (a list of integers)
         """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
-
         # Convert state to tensor if it's not already
         if isinstance(state, list):
             state = torch.FloatTensor(state).to(self.device)
@@ -92,9 +91,9 @@ class DQNAgent:
         self.model.eval()
         
         # Epsilon-greedy action selection
-        if random.random() <= self.epsilon:
+        if self.rng.random() <= self.epsilon:
             # Random action: generate a list of random integers
-            synthetic_data = [random.randint(0, 1) for _ in range(self.action_size)]
+            synthetic_data = [self.rng.integers(0, 1) for _ in range(self.action_size)]
         else:
             # Get probabilities from the model using sigmoid activation
             with torch.no_grad():
@@ -122,11 +121,6 @@ class DQNAgent:
             next_state: Next state
             done: Whether episode is done
         """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
-
         # Store the experience in memory
         self.remember(state, action, reward, next_state, done)
         
@@ -135,7 +129,10 @@ class DQNAgent:
             return
         
         # Sample a batch of experiences
-        minibatch = random.sample(self.memory, self.batch_size)
+        indices = self.rng.choice(range(len(self.memory)), size=self.batch_size, replace=False)
+        # Get minibatch (convert to list first to allow indexing)
+        memory_list = list(self.memory)
+        minibatch = [memory_list[i] for i in indices]
         
         # Set model to training mode
         self.model.train()
