@@ -73,6 +73,9 @@ class DQNAgent:
         self.action_size = action_size
         self.batch_size = batch_size
         self.seed       = seed
+        # for reproducibility
+        torch.manual_seed(seed)
+        self.rng = torch.Generator(device=self.device).manual_seed(self.seed)
 
         # ε-greedy params
         self.epsilon     = epsilon_start
@@ -81,16 +84,10 @@ class DQNAgent:
 
         # model, opt, loss
         self.model     = QNetwork(state_size, action_size, hidden_size).to(self.device)
+        #replay buffer
+        self.memory = ReplayBuffer(state_size, action_size, memory_size, self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         self.criterion = nn.MSELoss()
-
-        # GPU replay buffer
-        self.memory = ReplayBuffer(state_size, action_size, memory_size, self.device)
-
-        # for reproducibility
-        torch.manual_seed(seed)
-
-
 
     def predict(self, state):
         """
@@ -109,13 +106,13 @@ class DQNAgent:
         if len(state.shape) == 1:
             state = state.unsqueeze(0)  # Add batch dimension if needed
         
+        self.model.eval()
+
         # Epsilon-greedy action selection
-        if torch.rand(1, device=self.device).item() <= self.epsilon:
-            # Random action: generate a list of random integers
-            synthetic_data = torch.randint(0, 2, (self.action_size,), device=self.device).tolist()
+        if torch.rand(1, generator=self.rng, device=self.device).item() <= self.epsilon:
+            # Single call returns a tensor of shape (action_size,)
+            synthetic_data = torch.randint(0, 2, (self.action_size,),generator=self.rng,device=self.device).tolist()
         else:
-            # Get probabilities from the model using sigmoid activation
-            self.model.eval()
             with torch.no_grad():
                 probs = self.model.get_binary_output(state)
             
@@ -154,23 +151,42 @@ class DQNAgent:
         if self.memory.size < self.batch_size:
             return
         
-        # CHANGED TO SAMPLE ALL AT ONCE
-        states, actions, rewards, next_states, dones = \
-            self.memory.sample(self.batch_size)
+        # Sample batch
+        idx = torch.randperm(self.memory.size, generator=self.rng, device=self.device)
+        idx = idx[: self.batch_size]  
+
+        states      = self.memory.states[idx]
+        actions     = self.memory.actions[idx]
+        rewards     = self.memory.rewards[idx]
+        next_states = self.memory.next_states[idx]
+        dones       = self.memory.dones[idx]
         
         self.model.train()
-        q_pred = (self.model(states) * actions).sum(dim=1, keepdim=True)
-        
+        for state, action, reward, next_state, done in zip(
+            states, actions, rewards, next_states, dones
+        ):
+            # ensure batch dim of 1
+            if state.ndim == 1:
+                state      = state.unsqueeze(0)
+                next_state = next_state.unsqueeze(0)
 
-        with torch.no_grad():
-            q_next   = self.model(next_states).max(dim=1, keepdim=True)[0]
-            q_target = rewards + (1 - dones) * self.gamma * q_next
+            # current Q(s,·)
+            current_q = self.model(state)
+
+            #next-Q vector and its max
+            with torch.no_grad():
+                next_q     = self.model(next_state)   # shape (1, action_size)
+                max_next_q = next_q.max()             
+
+            # Bellman target
+            target_q = reward + (1 - done) * self.gamma * max_next_q
+            q_values = (current_q * action).sum()
         
         
-        loss = self.criterion(q_pred, q_target)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+            loss = self.criterion(q_values, target_q)
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
         # Decay epsilon
         if self.epsilon > self.epsilon_min:
