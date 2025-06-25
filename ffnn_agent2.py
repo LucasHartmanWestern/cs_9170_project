@@ -1,12 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-import numpy as np
-import random
 
-import torch
-import torch.nn as nn
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+torch.use_deterministic_algorithms(True) 
 
 class FFNNModel(nn.Module):
     def __init__(
@@ -60,58 +58,61 @@ class FFNNAgent:
             device: Device to run the model on (cpu or cuda)
             seed: Random seed for reproducibility
         """
+
+
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.seed   = seed
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(self.seed)
+        print(f"FFNN Using device: {self.device}")
+        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+
         self.input_size   = input_size
         self.hidden_sizes = hidden_sizes
         self.batch_size   = batch_size
         self.epochs       = epochs
         self.learning_rate = learning_rate
-        self.task_type = type
+        self.type = type
 
 
-        if self.task_type == "classification":
+        if self.type == "classification":
             if classes is not None:
                 self.classes = classes 
             else:
-                list(range(output_size))
+                self.classes = list(range(output_size))
+
             self.output_size = len(self.classes)
-        elif self.task_type == "regression":
+
+        elif self.type == "regression":
             self.classes = None
             self.output_size = output_size
         else:
             raise ValueError("Type must be 'regression' or 'classification'")
         
-        # Device & seeding
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.seed   = seed
-        torch.manual_seed(seed)
-        print(f"FFNN Using device: {self.device}")
-            
 
-        # For reproduciblity
-        self.dl_generator = torch.Generator(device=self.device).manual_seed(seed)
         # Initialize model
         self.model = FFNNModel(input_size, hidden_sizes, self.output_size).to(self.device) 
         # Initialize optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        
-        # Loss function - MSE for regression, CrossEntropy for classification
-        if type == "regression":
-            self.criterion = nn.MSELoss()
-        elif type == "classification":
-            self.criterion = nn.CrossEntropyLoss()
-        else:
-            raise ValueError("Invalid type. Must be 'regression' or 'classification'.")
+        self.criterion = (
+            nn.MSELoss()
+            if self.type == "regression"
+            else nn.CrossEntropyLoss()
+        )
     
     def reset(self):
         """
         Reset the model and optimizer to their initial state.
         """
-        # Re-initialize model with the same architecture
+        torch.manual_seed(self.seed)
+        torch.cuda.manual_seed_all(self.seed)
+
+        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+
         self.model = FFNNModel(self.input_size, self.hidden_sizes, self.output_size).to(self.device)
-        
-        # Re-initialize optimizer
+
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        
+
         # Re-initialize criterion based on the task type
         if self.type == "regression":
             self.criterion = nn.MSELoss()
@@ -122,41 +123,34 @@ class FFNNAgent:
     def predict(self, features):
         """
         Make predictions using the trained model.
-        
+
         Args:
             features: Input features (numpy array or torch tensor)
-            
-        Returns:
-            Predictions as numpy array
-        """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
 
-        # Convert to tensor if needed
-        if isinstance(features, np.ndarray):
-            features = torch.FloatTensor(features).to(self.device)
-        
-        # Set model to evaluation mode
+        Returns:
+            List of predictions (floats for regression, class labels for classification)
+        """
+
+        if not torch.is_tensor(features):
+            features = torch.as_tensor(features, dtype=torch.float32, device=self.device)
+        else:
+            features = features.to(self.device, dtype=torch.float32)
+
         self.model.eval()
-        
-        # Make predictions
+
         with torch.no_grad():
-            predictions = self.model(features)
-            
-            # For classification, convert to class predictions
+            outputs = self.model(features) # shape (batch_size, output_size)
+
             if self.type == "classification":
-                predictions = torch.argmax(predictions, dim=1)
-                # Map to class labels if available
+                preds = torch.argmax(outputs, dim=1).cpu()
                 if self.classes is not None:
-                    predictions = np.array([self.classes[idx] for idx in predictions.cpu().numpy()])
+                    # Map to class labels
+                    return [self.classes[idx] for idx in preds.tolist()]
                 else:
-                    predictions = predictions.cpu().numpy()
+                    return preds
             else:
-                predictions = predictions.cpu().numpy()
-        
-        return predictions
+                return outputs.cpu()
+
     
     def train(self, features, targets):
         """
@@ -169,33 +163,54 @@ class FFNNAgent:
         Returns:
             List of training losses
         """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
 
         # Convert to tensors if needed
-        if isinstance(features, np.ndarray):
-            features = torch.FloatTensor(features).to(self.device)
-        
-        if isinstance(targets, np.ndarray):
-            if self.type == "classification":
-                # Convert class labels to indices if needed
-                if self.classes is not None and not np.issubdtype(targets.dtype, np.integer):
-                    targets = targets.flatten()  # <-- flatten to shape (n,)
-                    class_to_idx = {c: i for i, c in enumerate(self.classes)}
-                    targets = np.array([class_to_idx[t] for t in targets])
-                else:
-                    targets = targets.flatten()  # <-- always flatten
-                targets = torch.LongTensor(targets).to(self.device)
-            else:
-                targets = torch.FloatTensor(targets).to(self.device)
+        if not torch.is_tensor(features):
+            features = torch.as_tensor(features, dtype=torch.float32, device=self.device)
+        else:
+            features = features.to(self.device, dtype=torch.float32)
 
+        if features.dim() == 1:
+            features = features.unsqueeze(0)
+
+        # If classification, and classes are provided, check if targets are string labels.
+        # If so, mapto integer indices
+        if self.type == "classification":
+            if self.classes is not None:
+                contains_str_labels = False
+                for t in targets:
+                    if isinstance(t, str):
+                        contains_str_labels = True
+                        break
+                if contains_str_labels:
+                    class_to_idx = { label: idx for idx, label in enumerate(self.classes) }
+                    
+                    mapped_targets = []
+                    for t in targets:
+                        try:
+                            mapped_targets.append(class_to_idx[t])
+                        except KeyError:
+                            raise ValueError(f"Unknown class label: {t}")
+
+                    targets = mapped_targets
         
+        dtype = torch.long if self.type == "classification" else torch.float32
+        if not torch.is_tensor(targets):
+            targets = torch.as_tensor(targets, dtype=dtype, device=self.device)
+        else:
+            targets = targets.to(self.device, dtype=dtype)
+
+        if targets.dim() == 0:
+            targets = targets.unsqueeze(0)
+
         # Create dataset and dataloader
+        torch.manual_seed(self.seed)
+        torch.cuda.manual_seed_all(self.seed)
+        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+
         dataset = torch.utils.data.TensorDataset(features, targets)
         dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=self.batch_size, shuffle=True
+            dataset, batch_size=self.batch_size, shuffle=True, generator=self.dl_generator
         )
         
         # Set model to training mode
@@ -203,27 +218,26 @@ class FFNNAgent:
         
         # Training loop
         losses = []
-        for epoch in range(self.epochs):
+        for _ in range(self.epochs):
             epoch_loss = 0.0
             batch_count = 0
-            
+
             for batch_features, batch_targets in dataloader:
-                # Forward pass
+                # Forward
                 outputs = self.model(batch_features)
                 loss = self.criterion(outputs, batch_targets)
-                
-                # Backward pass and optimize
+
+                # Backward + optimize
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                
+
                 epoch_loss += loss.item()
                 batch_count += 1
-            
-            # Average loss for the epoch
-            avg_loss = epoch_loss / batch_count
-            losses.append(avg_loss)
-        
+
+            # Record average loss
+            losses.append(epoch_loss / batch_count)
+
         return losses
 
     def save(self, path):
@@ -234,43 +248,62 @@ class FFNNAgent:
             path: Path to save the model
         """
         checkpoint = {
-            'model_state_dict': self.model.state_dict(),
+            'model_state_dict':     self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'input_size': self.input_size,
-            'hidden_sizes': self.hidden_sizes,
-            'output_size': self.output_size,
-            'learning_rate': self.learning_rate,
-            'type': self.type,
-            'classes': self.classes
+            'input_size':           self.input_size,
+            'hidden_sizes':         self.hidden_sizes,
+            'output_size':          self.output_size,
+            'learning_rate':        self.learning_rate,
+            'batch_size':           self.batch_size,
+            'epochs':               self.epochs,
+            'type':                 self.type,
+            'classes':              self.classes,
+            'seed':                 self.seed,
         }
         torch.save(checkpoint, path)
         print(f"Model saved to {path}")
 
+
     def load(self, path):
         """
-        Load the model from the specified path.
-        
+        Load the model and optimizer state from the specified path.
+
         Args:
-            path: Path to load the model from
+            path: Path to load the checkpoint from
         """
         checkpoint = torch.load(path, map_location=self.device)
-        
-        # Recreate the model with the same architecture
-        self.input_size = checkpoint['input_size']
+
+        # Restore hyper-parameters
+        self.seed         = checkpoint.get('seed', 42)
+        torch.manual_seed(self.seed)
+        torch.cuda.manual_seed_all(self.seed)
+
+        self.input_size   = checkpoint['input_size']
         self.hidden_sizes = checkpoint['hidden_sizes']
-        self.output_size = checkpoint['output_size']
-        self.learning_rate = checkpoint['learning_rate']
-        self.type = checkpoint.get('type', 'regression')  # Default to regression for backward compatibility
-        self.classes = checkpoint.get('classes', None)
-        
-        # Initialize model with loaded architecture
-        self.model = FFNNModel(self.input_size, self.hidden_sizes, self.output_size).to(self.device)
-        
-        # Load model parameters
+        self.output_size  = checkpoint['output_size']
+        self.learning_rate= checkpoint['learning_rate']
+        self.batch_size   = checkpoint['batch_size']
+        self.epochs       = checkpoint['epochs']
+        self.type         = checkpoint.get('type', 'regression')
+        self.classes      = checkpoint.get('classes', None)
+        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+
+
+        # Rebuild the model and optimizer
+        self.model = FFNNModel(
+            self.input_size,
+            self.hidden_sizes,
+            self.output_size
+        ).to(self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
-        
-        # Initialize optimizer and load its state
+
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        
+
+        # Make sure optimizer tensors are on the right device
+        for state in self.optimizer.state.values():
+            for k, v in state.items():
+                if isinstance(v, torch.Tensor):
+                    state[k] = v.to(self.device)
+
         print(f"Model loaded from {path}")
