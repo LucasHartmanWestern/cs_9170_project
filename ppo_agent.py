@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
-import random
 from torch.distributions import Normal
 
 # Actor network: outputs mean and log_std for continuous actions
@@ -53,6 +52,10 @@ class PPOAgent:
         action_std: initial standard deviation for continuous actions
         seed: Random seed for reproducibility
         """
+        # Set random seed for reproducibility
+        torch.manual_seed(seed)
+        self.rng = np.random.default_rng(seed)
+        
         self.state_size = state_size
         self.action_size = action_size
         self.gamma = gamma
@@ -62,7 +65,6 @@ class PPOAgent:
         self.c1 = c1
         self.c2 = c2
         self.action_std = action_std
-        self.seed = seed
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.actor = Actor(state_size, action_size, hidden_size).to(self.device)
         self.critic = Critic(state_size, hidden_size).to(self.device)
@@ -84,11 +86,6 @@ class PPOAgent:
         Returns:
             Synthetic data sample (a list of floats)
         """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
-
         # Convert state to tensor if it's not already
         if isinstance(state, list):
             state = torch.FloatTensor(state).to(self.device)
@@ -135,11 +132,6 @@ class PPOAgent:
             done: Whether episode is done
             random_state: Random seed for reproducibility
         """
-        # Set random seed for reproducibility
-        torch.manual_seed(self.seed)
-        np.random.seed(self.seed)
-        random.seed(self.seed)
-        
         # Convert inputs to tensors if they aren't already
         if isinstance(state, list):
             state = torch.FloatTensor(state).to(self.device)
