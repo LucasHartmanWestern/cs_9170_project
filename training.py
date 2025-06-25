@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from data_processing import get_xy_from_data
 
@@ -308,6 +309,9 @@ def train_agents(
     test_female_accuracies = []
     train_female_accuracies = []
 
+    episode_times = []
+    overall_start_time = time.time()
+
     synthetic_data = []
     synthetic_labels = []
 
@@ -321,8 +325,8 @@ def train_agents(
     mf_ratio = np.mean(x_train.iloc[:, sex_female_idx])
     state = generate_state(x_train, mf_ratio, 0, rng)
 
-
     for episode in range(episodes):
+        episode_start_time = time.time()
         print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
         for i in range(synthetic_data_amount):
             if synthetic_data:
@@ -387,7 +391,6 @@ def train_agents(
                 combined_data = np.vstack([x_train.to_numpy(), synthetic_data_np])
                 combined_labels = np.vstack([y_train, synthetic_labels_np])
 
-
                 # Shuffle combined training data
                 indices = np.arange(combined_data.shape[0])
                 rng.shuffle(indices)
@@ -421,7 +424,6 @@ def train_agents(
                 print(f"Test MSE: {test_mse:.4f} | Test Female MSE: {test_female_mse:.4f}")
                 print("\n--------------------------------\n")
 
-
                 synthetic_data = []
                 synthetic_labels = []
             else:
@@ -434,6 +436,12 @@ def train_agents(
             rewards.append(reward)
             state = next_state
 
+        # Track and print episode time
+        episode_end_time = time.time()
+        episode_duration = episode_end_time - episode_start_time
+        episode_times.append(episode_duration)
+        print(f"Episode {episode + 1}/{episodes} completed in {episode_duration:.2f} seconds.")
+
         metrics = {
             'rewards': rewards,
             'train_mse': train_accuracies,
@@ -441,9 +449,13 @@ def train_agents(
             'test_mse': test_accuracies,
             'train_female_mse': train_female_accuracies,
             'val_female_mse': val_female_accuracies,
-            'test_female_mse': test_female_accuracies
+            'test_female_mse': test_female_accuracies,
+            'episode_times': episode_times
         }
 
+    overall_end_time = time.time()
+    overall_duration = overall_end_time - overall_start_time
+    print(f"All episodes completed in {overall_duration:.2f} seconds.")
 
     os.makedirs(save_location, exist_ok=True)
     save_path = os.path.join(save_location, 'training_metrics.json')

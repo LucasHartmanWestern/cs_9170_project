@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
-torch.use_deterministic_algorithms(True) 
+# torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.benchmark = False
+# torch.use_deterministic_algorithms(True) 
 
 class FFNNModel(nn.Module):
     def __init__(

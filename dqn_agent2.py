@@ -127,9 +127,9 @@ class DQNAgent:
         """
         s  = torch.as_tensor(state,      dtype=torch.float32, device=self.device)
         a  = torch.as_tensor(action,     dtype=torch.float32, device=self.device)
-        r  = torch.as_tensor([reward],   dtype=torch.float32, device=self.device)
+        r  = torch.as_tensor(reward,   dtype=torch.float32, device=self.device)
         ns = torch.as_tensor(next_state, dtype=torch.float32, device=self.device)
-        d  = torch.as_tensor([done],     dtype=torch.float32, device=self.device)
+        d  = torch.as_tensor(done,     dtype=torch.float32, device=self.device)
 
         self.memory.push(s, a, r, ns, d)
 
@@ -180,7 +180,7 @@ class DQNAgent:
 
             # Bellman target
             target_q = reward + (1 - done) * self.gamma * max_next_q
-            q_values = (current_q * action).sum()
+            q_values = (current_q * action).sum().unsqueeze(0)
         
         
             loss = self.criterion(q_values, target_q)
