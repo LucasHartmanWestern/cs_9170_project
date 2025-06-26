@@ -48,20 +48,24 @@ def plot_ffnn_losses(losses):
 #RETHINK THIS
 def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
 
+    timestamps = tensor[:, timestamp_idx]
+    t_min, t_max = timestamps.min().item(), timestamps.max().item()
+
+    timestamp   = (t_max - t_min) * torch.rand(1, generator=rng, device=device) + t_min
+    age         = 24.0 + 7.0 * torch.rand(1, generator=rng, device=device)
+    activity_id = torch.randint(1, 3, (1,), generator=rng, device=device).float()
+
+    if not torch.is_tensor(mf_ratio):
+        mf_ratio = torch.tensor([mf_ratio], dtype=torch.float32, device=device)
+    elif mf_ratio.dim() == 0:
+        mf_ratio = mf_ratio.unsqueeze(0)
+
     if not torch.is_tensor(n_samples):
         n_samples = torch.tensor([n_samples], dtype=torch.float32, device=device)
     elif n_samples.dim() == 0:
         n_samples = n_samples.unsqueeze(0)
-    
-    timestamps = tensor[:, timestamp_idx]
-    
-    t_min, t_max = timestamps.min().item(), timestamps.max().item()
-    timestamp    = (t_max - t_min) * torch.rand(1, generator=rng, device=device) + t_min
-    age = 24.0 + 7.0 * torch.rand(1, generator=rng, device=device)
-    activity_id = torch.randint(1, 3, (1,), generator=rng, device=device).float()
 
     state_vector = torch.cat([timestamp, mf_ratio, n_samples, age, activity_id], dim=0)
-
     return state_vector
 
 #m/f ratio reward 
