@@ -2,7 +2,6 @@ import os
 import json
 import copy
 import torch
-import pandas as pd
 import matplotlib.pyplot as plt
 import time
 import torch.nn.functional as F
@@ -48,6 +47,11 @@ def plot_ffnn_losses(losses):
 
 #RETHINK THIS
 def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
+
+    if not torch.is_tensor(n_samples):
+        n_samples = torch.tensor([n_samples], dtype=torch.float32, device=device)
+    elif n_samples.dim() == 0:
+        n_samples = n_samples.unsqueeze(0)
     
     timestamps = tensor[:, timestamp_idx]
     
@@ -55,8 +59,8 @@ def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
     timestamp    = (t_max - t_min) * torch.rand(1, generator=rng, device=device) + t_min
     age = 24.0 + 7.0 * torch.rand(1, generator=rng, device=device)
     activity_id = torch.randint(1, 3, (1,), generator=rng, device=device).float()
-    
-    state_vector = torch.cat([timestamp, mf_ratio.unsqueeze(0), n_samples.unsqueeze(0), age, activity_id], dim=0) 
+
+    state_vector = torch.cat([timestamp, mf_ratio, n_samples, age, activity_id], dim=0)
 
     return state_vector
 
@@ -65,9 +69,6 @@ def compute_mini_reward(synthetic_data, mf_ratio):
     std_term = synthetic_data.std(dim=0, unbiased=False).mean()
     gauss    = torch.exp(-((mf_ratio - 0.5)**2) / 0.1)
     return (std_term + gauss).item()
-
-
-
 
 
 #Predict Resting HR, Max HR, Age, Weight, and Height
@@ -121,8 +122,9 @@ def train_agents(
     x_test  = torch.tensor(x_test_df.values,  dtype=torch.float32, device=device)
     y_test  = torch.tensor(y_test_df.values,  dtype=torch.float32, device=device)
 
-    # Initial male-female ratio
-    mf_ratio = x_train[:, sex_female_idx].mean()
+
+    N = x_train.size(0)
+    mf_ratio = train_female_ratio  = x_train[:, sex_female_idx].mean()
     n_samples  = torch.tensor(0.0, dtype=torch.float32, device=device)
     timestamp_idx = x_train_df.columns.get_loc('Timestamp')
     
@@ -132,16 +134,12 @@ def train_agents(
         episode_start_time = time.time()
         print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
 
+        #Resets
         synthetic_data = torch.empty(synthetic_data_amount, x_train.shape[1], device=device)
         synthetic_labels = torch.empty(synthetic_data_amount, y_train.shape[1], device=device)
-        
-        for i in range(synthetic_data_amount):
-            if i > 0:
-                combined = torch.cat([x_train, synthetic_data[: i]], dim=0)
-            else:
-                combined = x_train
+        sum_synth_female = 0.0
 
-            mf_ratio = combined[:, sex_female_idx].mean()
+        for i in range(synthetic_data_amount):
 
             discrete_action = torch.as_tensor(
                 dqn_agent.predict(state),
@@ -159,11 +157,8 @@ def train_agents(
             row[sex_female_idx] = discrete_action[0]
             hr_idx = x_train_df.columns.get_loc("Heart Rate")
             row[hr_idx]           = discrete_action[1]
-            
-            # get the column indices for continuous features
             cont_idx = x_train_df.columns.get_indexer(continuous_columns).tolist()
             row[cont_idx]         = continuous_action
-
             synthetic_data[i] = row
 
             # build synthetic label row
@@ -176,6 +171,10 @@ def train_agents(
             ], dim=0)
             
             synthetic_labels[i] = tgt_vals
+
+            sum_synth_female += row[sex_female_idx].item()
+            n_synth = i + 1
+            mf_ratio = (N * train_female_ratio  + sum_synth_female) / (N + n_synth)
       
             mini_reward = compute_mini_reward(synthetic_data[: i+1 ], mf_ratio)
 
