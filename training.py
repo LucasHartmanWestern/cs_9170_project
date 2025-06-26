@@ -58,6 +58,7 @@ def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
     t_min, t_max = timestamps.min().item(), timestamps.max().item()
     timestamp    = (t_max - t_min) * torch.rand(1, generator=rng, device=device) + t_min
     age = 24.0 + 7.0 * torch.rand(1, generator=rng, device=device)
+    
     activity_id = torch.randint(1, 3, (1,), generator=rng, device=device).float()
 
     state_vector = torch.cat([timestamp, mf_ratio, n_samples, age, activity_id], dim=0)
