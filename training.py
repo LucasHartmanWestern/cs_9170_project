@@ -135,8 +135,8 @@ def train_ffnn_baseline(
         if show_loss_plots:
             plot_ffnn_losses(losses)
         m_tr, _, fm_tr = evaluate_ffnn(agent, x_tr, y_tr, sex_female_idx)
-        m_v,  _, fm_v  = evaluate_ffnn(agent, x_tr, y_tr, sex_female_idx)
-        m_te, _, fm_te = evaluate_ffnn(agent, x_tr, y_tr, sex_female_idx)
+        m_v,  _, fm_v  = evaluate_ffnn(agent, x_v, y_v, sex_female_idx)
+        m_te, _, fm_te = evaluate_ffnn(agent, x_te, y_te, sex_female_idx)
         print(f"{tag} Train MSE: {m_tr:.4f} | Female MSE: {fm_tr:.4f}")
         print(f"{tag} Val   MSE: {m_v:.4f}  | Female MSE: {fm_v:.4f}")
         print(f"{tag} Test  MSE: {m_te:.4f} | Female MSE: {fm_te:.4f}\n")
