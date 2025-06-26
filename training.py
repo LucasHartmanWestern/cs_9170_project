@@ -5,6 +5,7 @@ import torch
 import matplotlib.pyplot as plt
 import time
 import torch.nn.functional as F
+import pandas as pd
 from data_processing import get_xy_from_data
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -108,11 +109,14 @@ def train_ffnn_baseline(
     """
     # fix seeds
     torch.manual_seed(seed)
+    rng = torch.Generator().manual_seed(seed)
 
     # 1) Extract numpy, then convert to torch tensors on device
     x_train_df, y_train_df = get_xy_from_data(df_train, target_features)
     x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
     x_test_df,  y_test_df  = get_xy_from_data(df_test,  target_features)
+
+    sex_female_idx = x_train_df.columns.get_loc('Sex - Female')
 
     x_train = torch.tensor(x_train_df.values, dtype=torch.float32, device=device)
     y_train = torch.tensor(y_train_df.values, dtype=torch.float32, device=device)
@@ -125,12 +129,14 @@ def train_ffnn_baseline(
 
     def _run_and_eval(agent, x_tr, y_tr, x_v, y_v, x_te, y_te, tag):
         print(f"\n--- {tag} ---")
-        losses = agent.train(x_tr, y_tr)
+        dataset = TensorDataset(x_tr, y_tr)
+        loader = DataLoader(dataset, batch_size=x_tr.size(0), shuffle=True)
+        losses = agent.train(loader)
         if show_loss_plots:
             plot_ffnn_losses(losses)
-        m_tr, _, fm_tr = evaluate_ffnn(agent, x_tr, y_tr)
-        m_v,  _, fm_v  = evaluate_ffnn(agent, x_v,  y_v)
-        m_te, _, fm_te = evaluate_ffnn(agent, x_te, y_te)
+        m_tr, _, fm_tr = evaluate_ffnn(agent, x_tr, y_tr, sex_female_idx)
+        m_v,  _, fm_v  = evaluate_ffnn(agent, x_tr, y_tr, sex_female_idx)
+        m_te, _, fm_te = evaluate_ffnn(agent, x_tr, y_tr, sex_female_idx)
         print(f"{tag} Train MSE: {m_tr:.4f} | Female MSE: {fm_tr:.4f}")
         print(f"{tag} Val   MSE: {m_v:.4f}  | Female MSE: {fm_v:.4f}")
         print(f"{tag} Test  MSE: {m_te:.4f} | Female MSE: {fm_te:.4f}\n")
@@ -150,7 +156,7 @@ def train_ffnn_baseline(
     df_min = df_train[df_train["Sex - Female"] == 1]
     df_maj = df_train[df_train["Sex - Female"] == 0]
     maj_size = len(df_maj)
-    if shufle:
+    if shuffle:
         df_min_os  = df_min.sample(n=maj_size, replace=True,  random_state=seed)
         df_train_os = pd.concat([df_maj, df_min_os]).sample(frac=1,random_state=seed).reset_index(drop=True)
     else:
@@ -177,7 +183,7 @@ def train_ffnn_baseline(
         df_maj_us  = df_maj.sample(n=min_size, random_state=seed)
         df_train_us = pd.concat([df_min, df_maj_us]).sample(frac=1, random_state=seed).reset_index(drop=True)
     else:
-        rand_begin = rng.randint(0,maj_size-min_size)
+        rand_begin = int(torch.randint(0, maj_size - min_size, (1,), generator=rng).item())
         df_maj_us  = df_maj.iloc[rand_begin:(rand_begin+min_size)]
         df_train_us =  pd.concat([df_min, df_maj_us]).reset_index(drop=True)
         
@@ -224,7 +230,8 @@ def train_agents(
     torch.manual_seed(seed)
     rng = torch.Generator(device=device).manual_seed(seed)
     # For the DataLoader shuffle
-    cpu_rng = torch.Generator().manual_seed(seed)
+    cpu_rng = torch.Generator(device='cpu').manual_seed(seed)
+
     
     rewards = []
     val_accuracies = []
@@ -401,88 +408,3 @@ def train_agents(
     print(f"Metrics saved to {save_path}")
     return metrics
 
-def train_ffnn_baseline(
-    ffnn_agent,
-    df_train,
-    df_val,
-    df_test,
-    target_features,
-    save_location,
-    show_loss_plots=True,
-    seed=42,
-    device='cpu'
-):
-
-    # fix seeds
-    torch.manual_seed(seed)
-
-    # 1) Extract numpy, then convert to torch tensors on device
-    x_train_df, y_train_df = get_xy_from_data(df_train, target_features)
-    x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
-    x_test_df,  y_test_df  = get_xy_from_data(df_test,  target_features)
-
-    x_train = torch.tensor(x_train_df.values, dtype=torch.float32, device=device)
-    y_train = torch.tensor(y_train_df.values, dtype=torch.float32, device=device)
-    x_val   = torch.tensor(x_val_df.values,   dtype=torch.float32, device=device)
-    y_val   = torch.tensor(y_val_df.values,   dtype=torch.float32, device=device)
-    x_test  = torch.tensor(x_test_df.values,  dtype=torch.float32, device=device)
-    y_test  = torch.tensor(y_test_df.values,  dtype=torch.float32, device=device)
-
-    results: dict[str, dict[str, dict[str, float]]] = {}
-
-    def _run_and_eval(agent, x_tr, y_tr, x_v, y_v, x_te, y_te, tag):
-        print(f"\n--- {tag} ---")
-        losses = agent.train(x_tr, y_tr)
-        if show_loss_plots:
-            plot_ffnn_losses(losses)
-        m_tr, _, fm_tr = evaluate_ffnn(agent, x_tr, y_tr)
-        m_v,  _, fm_v  = evaluate_ffnn(agent, x_v,  y_v)
-        m_te, _, fm_te = evaluate_ffnn(agent, x_te, y_te)
-        print(f"{tag} Train MSE: {m_tr:.4f} | Female MSE: {fm_tr:.4f}")
-        print(f"{tag} Val   MSE: {m_v:.4f}  | Female MSE: {fm_v:.4f}")
-        print(f"{tag} Test  MSE: {m_te:.4f} | Female MSE: {fm_te:.4f}\n")
-        return {
-            "train": {"mse": m_tr,  "female_mse": fm_tr},
-            "val":   {"mse": m_v,   "female_mse": fm_v},
-            "test":  {"mse": m_te,  "female_mse": fm_te},
-        }
-
-    # Experiment 1: baseline
-    print("\nTraining FFNN baseline on original data…")
-    base_agent = copy.deepcopy(ffnn_agent)
-    results["baseline"] = _run_and_eval(
-        base_agent, x_train, y_train, x_val, y_val, x_test, y_test, "Baseline")
-
-    # Experiment 2: oversampling minority
-    df_min = df_train[df_train["Sex - Female"] == 1]
-    df_maj = df_train[df_train["Sex - Female"] == 0]
-    df_min_os  = df_min.sample(n=len(df_maj), replace=True,  random_state=seed)
-    df_train_os = pd.concat([df_maj, df_min_os]).sample(frac=1, random_state=seed).reset_index(drop=True)
-    x_os_df, y_os_df = get_xy_from_data(df_train_os, target_features)
-    x_os = torch.tensor(x_os_df.values, dtype=torch.float32, device=device)
-    y_os = torch.tensor(y_os_df.values, dtype=torch.float32, device=device)
-
-    print("\nTraining FFNN with minority oversampling…")
-    os_agent = copy.deepcopy(ffnn_agent)
-    results["oversample"] = _run_and_eval(
-        os_agent, x_os, y_os, x_val, y_val, x_test, y_test, "Oversampled")
-
-    # Experiment 3: undersampling majority
-    df_maj_us  = df_maj.sample(n=len(df_min), random_state=seed)
-    df_train_us = pd.concat([df_min, df_maj_us]).sample(frac=1, random_state=seed).reset_index(drop=True)
-    x_us_df, y_us_df = get_xy_from_data(df_train_us, target_features)
-    x_us = torch.tensor(x_us_df.values, dtype=torch.float32, device=device)
-    y_us = torch.tensor(y_us_df.values, dtype=torch.float32, device=device)
-
-    print("\nTraining FFNN with majority undersampling…")
-    us_agent = copy.deepcopy(ffnn_agent)
-    results["undersample"] = _run_and_eval(
-        us_agent, x_us, y_us, x_val, y_val, x_test, y_test, "Undersampled")
-
-    # Persist
-    os.makedirs(save_location, exist_ok=True)
-    with open(os.path.join(save_location, "baseline_metrics.json"), "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"Saved all metrics to {save_location}/baseline_metrics.json")
-
-    return results
