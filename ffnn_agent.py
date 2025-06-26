@@ -144,68 +144,46 @@ class FFNNAgent:
         
         return predictions
     
-    def train(self, features, targets):
+    def train(self, loader: torch.utils.data.DataLoader) -> list[float]:
         """
-        Train the model on the provided dataset.
-        
-        Args:
-            features: Input features (numpy array or torch tensor)
-            targets: Target values (numpy array or torch tensor)
-            
-        Returns:
-            List of training losses
-        """
-        # Convert to tensors if needed
-        if isinstance(features, np.ndarray):
-            features = torch.FloatTensor(features).to(self.device)
-        
-        if isinstance(targets, np.ndarray):
-            if self.type == "classification":
-                # Convert class labels to indices if needed
-                if self.classes is not None and not np.issubdtype(targets.dtype, np.integer):
-                    targets = targets.flatten()  # <-- flatten to shape (n,)
-                    class_to_idx = {c: i for i, c in enumerate(self.classes)}
-                    targets = np.array([class_to_idx[t] for t in targets])
-                else:
-                    targets = targets.flatten()  # <-- always flatten
-                targets = torch.LongTensor(targets).to(self.device)
-            else:
-                targets = torch.FloatTensor(targets).to(self.device)
+        Train the model on the provided DataLoader.
 
-        
-        # Create dataset and dataloader
-        dataset = torch.utils.data.TensorDataset(features, targets)
-        dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=self.batch_size, shuffle=True
-        )
-        
-        # Set model to training mode
+        Args:
+            loader: DataLoader yielding (features, targets) batches
+
+        Returns:
+            List of average training loss per epoch
+        """
+        # switch to train mode
         self.model.train()
-        
-        # Training loop
-        losses = []
+        losses: list[float] = []
+
         for epoch in range(self.epochs):
             epoch_loss = 0.0
             batch_count = 0
-            
-            for batch_features, batch_targets in dataloader:
-                # Forward pass
+
+            for batch_features, batch_targets in loader:
+                # move to device
+                batch_features = batch_features.to(self.device)
+                batch_targets  = batch_targets .to(self.device)
+
+                # forward + loss
                 outputs = self.model(batch_features)
                 loss = self.criterion(outputs, batch_targets)
-                
-                # Backward pass and optimize
+
+                # backward + step
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                
+
                 epoch_loss += loss.item()
                 batch_count += 1
-            
-            # Average loss for the epoch
-            avg_loss = epoch_loss / batch_count
-            losses.append(avg_loss)
-        
+
+            # record epoch’s mean loss
+            losses.append(epoch_loss / batch_count)
+
         return losses
+
 
     def save(self, path):
         """

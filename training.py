@@ -7,21 +7,19 @@ import matplotlib.pyplot as plt
 import time
 import torch.nn.functional as F
 from data_processing import get_xy_from_data
+from torch.utils.data import TensorDataset, DataLoader
 
 def evaluate_ffnn(agent, x_t, y_t, sex_female_idx):
     # Determine the device from the agent’s model
     device = next(agent.model.parameters()).device
 
-    # Move inputs and labels to that device
     x_t = x_t.to(device)
     y_t = y_t.to(device)
 
-    # Get predictions and ensure they’re on the same device
     preds = agent.predict(x_t)
     if isinstance(preds, torch.Tensor):
         preds = preds.to(device)
     else:
-        # If predict returns a NumPy array, convert it
         preds = torch.tensor(preds, dtype=torch.float32, device=device)
 
     # Compute losses
@@ -64,11 +62,214 @@ def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
 
 #m/f ratio reward 
 def compute_mini_reward(synthetic_data, mf_ratio):
-    # mf_ratio: 0-dim tensor
     std_term = synthetic_data.std(dim=0, unbiased=False).mean()
     gauss    = torch.exp(-((mf_ratio - 0.5)**2) / 0.1)
     return (std_term + gauss).item()
 
+
+
+
+
+#Predict Resting HR, Max HR, Age, Weight, and Height
+#Based on Timestamp, Activity ID, Sex, Curr HR, etc...
+def train_agents(
+        df_train, 
+        df_val, 
+        df_test, 
+        target_features,
+        dqn_agent, 
+        ppo_agent, 
+        ffnn_agent, 
+        continuous_columns, 
+        episodes, 
+        synthetic_data_amount, 
+        accuracy_reward_multiplier,
+        save_location,
+        eval_val_only=True,
+        show_loss_plots=True,
+        seed=42,
+        device='cpu'
+    ):
+    overall_start_time = time.time()
+
+    torch.manual_seed(seed)
+    rng = torch.Generator(device=device).manual_seed(seed)
+    
+    rewards = []
+    val_accuracies = []
+    test_accuracies = []
+    train_accuracies = []
+    val_female_accuracies = []
+    test_female_accuracies = []
+    train_female_accuracies = []
+
+    episode_times = []
+    synthetic_data = []
+    synthetic_labels = []
+
+    x_train_df, y_train_df = get_xy_from_data(df_train, target_features)
+    x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
+    x_test_df,  y_test_df  = get_xy_from_data(df_test,  target_features)
+
+    sex_female_idx = x_train_df.columns.get_loc('Sex - Female')
+    hr_idx         = x_train_df.columns.get_loc('Heart Rate')
+
+    x_train = torch.tensor(x_train_df.values, dtype=torch.float32, device=device)
+    y_train = torch.tensor(y_train_df.values, dtype=torch.float32, device=device)
+    x_val   = torch.tensor(x_val_df.values,   dtype=torch.float32, device=device)
+    y_val   = torch.tensor(y_val_df.values,   dtype=torch.float32, device=device)
+    x_test  = torch.tensor(x_test_df.values,  dtype=torch.float32, device=device)
+    y_test  = torch.tensor(y_test_df.values,  dtype=torch.float32, device=device)
+
+    # Initial male-female ratio
+    mf_ratio = x_train[:, sex_female_idx].mean()
+    n_samples  = torch.tensor(0.0, dtype=torch.float32, device=device)
+    timestamp_idx = x_train_df.columns.get_loc('Timestamp')
+    
+    state = generate_state(x_train, timestamp_idx, mf_ratio, n_samples, rng, device)
+
+    for episode in range(episodes):
+        episode_start_time = time.time()
+        print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
+        synthetic_data = []
+        synthetic_labels = []
+        
+        for i in range(synthetic_data_amount):
+            if synthetic_data:
+                sd = torch.stack(synthetic_data)
+                combined = torch.cat([x_train, sd], dim=0)
+            else:
+                combined = x_train
+
+            mf_ratio = combined[:, sex_female_idx].mean()
+
+            discrete_action = torch.as_tensor(
+                dqn_agent.predict(state),
+                dtype=torch.float32,
+                device=device
+            ).flatten()
+            
+            continuous_action = torch.as_tensor(
+                ppo_agent.predict(state),
+                dtype=torch.float32,
+                device=device
+            ).flatten()
+
+            row = torch.zeros(x_train.size(1), device=device)
+            row[sex_female_idx] = discrete_action[0]
+            hr_idx = x_train_df.columns.get_loc("Heart Rate")
+            row[hr_idx]           = discrete_action[1]
+            
+            # get the column indices for continuous features
+            cont_idx = x_train_df.columns.get_indexer(continuous_columns).tolist()
+            row[cont_idx]         = continuous_action
+            synthetic_data.append(row)
+
+            # build synthetic label row
+            age = state[3].unsqueeze(0)
+            preds = discrete_action[2:6]
+            tgt_vals = torch.cat([
+                preds[:2],   # shape (2,)
+                age,         # shape (1,)
+                preds[2:]    # shape (2,)
+            ], dim=0)
+            
+            synthetic_labels.append(tgt_vals)
+      
+            mini_reward = compute_mini_reward(torch.stack(synthetic_data), mf_ratio)
+            done        = (i == synthetic_data_amount - 1)
+
+            #Once all synthetic data samples have been generated
+            if done:
+                print(f"Episode {episode + 1}/{episodes}: Training FFNN")
+                
+                ffnn_agent.reset()
+
+                # synth_data and synth_labels are lists of 1×D and 1×5 tensors
+                syn_data   = torch.stack(synthetic_data, dim=0)
+                syn_labels = torch.stack(synthetic_labels, dim=0)
+
+                # concatenate real + synthetic
+                combined_data   = torch.cat([x_train, syn_data], dim=0)    # (N+n, D)
+                combined_labels = torch.cat([y_train, syn_labels], dim=0) # (N+n, 5)
+
+                combined_dataset = TensorDataset(combined_data, combined_labels)
+                loader = DataLoader(
+                    combined_dataset,
+                    batch_size=combined_data.size(0),
+                    shuffle=True,
+                    generator=rng,
+                    pin_memory=(device!='cpu')#Don't enable on cpu
+                )
+
+                # Train FFNN
+                losses = ffnn_agent.train(loader)
+                if show_loss_plots:
+                    plot_ffnn_losses(losses)
+
+                print(f"Episode {episode + 1}/{episodes}: Evaluating FFNN")
+
+                val_mse, val_mae, val_female_mse = evaluate_ffnn(ffnn_agent, x_val, y_val, sex_female_idx)
+                val_accuracies.append(val_mse)
+                val_female_accuracies.append(val_female_mse)
+                if not eval_val_only:
+                    train_mse, train_mae, train_female_mse = evaluate_ffnn(ffnn_agent, x_train, y_train, sex_female_idx)
+                    test_mse, test_mae, test_female_mse = evaluate_ffnn(ffnn_agent, x_test, y_test, sex_female_idx)
+                    train_accuracies.append(train_mse)
+                    test_accuracies.append(test_mse)
+                    train_female_accuracies.append(train_female_mse)
+                    test_female_accuracies.append(test_female_mse)
+                # Reward is based on validation performance and mini reward
+                reward = (accuracy_reward_multiplier * val_mse * -1) + (mini_reward)
+                print(f'mini reward: {mini_reward}')
+
+                print(f"Episode {episode + 1}/{episodes} | Reward: {reward:.4f}")
+                print(f"Train MSE: {train_mse:.4f} | Train Female MSE: {train_female_mse:.4f}")
+                if not eval_val_only:
+                    print(f"Val MSE: {val_mse:.4f} | Val Female MSE: {val_female_mse:.4f}")
+                    print(f"Test MSE: {test_mse:.4f} | Test Female MSE: {test_female_mse:.4f}")
+                print("\n--------------------------------\n")
+
+                synthetic_data = []
+                synthetic_labels = []
+            else:
+                reward = mini_reward
+
+            next_state = generate_state(x_train, timestamp_idx, mf_ratio, torch.tensor(len(synthetic_data)+1., dtype=torch.float32, device=device), rng, device)
+            dqn_agent.learn(state, discrete_action, reward, next_state, done)
+            ppo_agent.learn(state, continuous_action, reward, next_state, done)
+
+            rewards.append(reward)
+            state = next_state
+
+        # Track and print episode time
+        episode_end_time = time.time()
+        episode_duration = episode_end_time - episode_start_time
+        episode_times.append(episode_duration)
+        print(f"Episode {episode + 1}/{episodes} completed in {episode_duration:.2f} seconds.")
+
+        metrics = {
+            'rewards': rewards,
+            'train_mse': train_accuracies,
+            'val_mse': val_accuracies,
+            'test_mse': test_accuracies,
+            'train_female_mse': train_female_accuracies,
+            'val_female_mse': val_female_accuracies,
+            'test_female_mse': test_female_accuracies,
+            'episode_times': episode_times
+        }
+
+    overall_end_time = time.time()
+    overall_duration = overall_end_time - overall_start_time
+    print(f"All episodes completed in {overall_duration:.2f} seconds.")
+
+    os.makedirs(save_location, exist_ok=True)
+    save_path = os.path.join(save_location, 'training_metrics.json')
+    with open(save_path, 'w') as f:
+        json.dump(metrics, f)
+    print(f"Metrics saved to {save_path}")
+
+    return metrics
 
 def train_ffnn_baseline(
     ffnn_agent,
@@ -81,10 +282,7 @@ def train_ffnn_baseline(
     seed=42,
     device='cpu'
 ):
-    """
-    Trains and evaluates three FFNN models (baseline, oversample, undersample)
-    entirely in torch.
-    """
+
     # fix seeds
     torch.manual_seed(seed)
 
@@ -158,207 +356,3 @@ def train_ffnn_baseline(
     print(f"Saved all metrics to {save_location}/baseline_metrics.json")
 
     return results
-
-def train_agents(
-        df_train, 
-        df_val, 
-        df_test, 
-        target_features,
-        dqn_agent, 
-        ppo_agent, 
-        ffnn_agent, 
-        continuous_columns, 
-        episodes, 
-        synthetic_data_amount, 
-        accuracy_reward_multiplier,
-        save_location, 
-        show_loss_plots=True,
-        seed=42,
-        device='cpu'
-    ):
-    overall_start_time = time.time()
-    # Set random seed for reproducibility
-    torch.manual_seed(seed)
-    rng = torch.Generator(device=device).manual_seed(seed)
-    
-    rewards = []
-    val_accuracies = []
-    test_accuracies = []
-    train_accuracies = []
-    val_female_accuracies = []
-    test_female_accuracies = []
-    train_female_accuracies = []
-
-    episode_times = []
-
-
-    synthetic_data = []
-    synthetic_labels = []
-
-    # ---- Prepare baseline splits using the helper ----
-    # Prepare splits and move to torch
-    x_train_df, y_train_df = get_xy_from_data(df_train, target_features)
-    x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
-    x_test_df,  y_test_df  = get_xy_from_data(df_test,  target_features)
-
-    sex_female_idx = x_train_df.columns.get_loc('Sex - Female')
-    hr_idx         = x_train_df.columns.get_loc('Heart Rate')
-    cont_idx_list  = x_train_df.columns.get_indexer(continuous_columns).tolist()
-
-    x_train = torch.tensor(x_train_df.values, dtype=torch.float32, device=device)
-    y_train = torch.tensor(y_train_df.values, dtype=torch.float32, device=device)
-    x_val   = torch.tensor(x_val_df.values,   dtype=torch.float32, device=device)
-    y_val   = torch.tensor(y_val_df.values,   dtype=torch.float32, device=device)
-    x_test  = torch.tensor(x_test_df.values,  dtype=torch.float32, device=device)
-    y_test  = torch.tensor(y_test_df.values,  dtype=torch.float32, device=device)
-
-
-
-    # Initial male-female ratio
-    mf_ratio = x_train[:, sex_female_idx].mean()
-    n_samples  = torch.tensor(0.0, dtype=torch.float32, device=device)
-    timestamp_idx = x_train_df.columns.get_loc('Timestamp')
-    
-    state = generate_state(x_train, timestamp_idx, mf_ratio, n_samples, rng, device)
-
-    for episode in range(episodes):
-        episode_start_time = time.time()
-        print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
-        synthetic_data = []
-        synthetic_labels = []
-        
-        for i in range(synthetic_data_amount):
-            if synthetic_data:
-                sd = torch.stack(synthetic_data)
-                combined = torch.cat([x_train, sd], dim=0)
-            else:
-                combined = x_train
-
-            mf_ratio = combined[:, sex_female_idx].mean()
-
-            discrete_action = torch.as_tensor(
-                dqn_agent.predict(state),
-                dtype=torch.float32,
-                device=device
-            ).flatten()
-            
-            continuous_action = torch.as_tensor(
-                ppo_agent.predict(state),
-                dtype=torch.float32,
-                device=device
-            ).flatten()
-
-            row = torch.zeros(x_train.size(1), device=device)
-            row[sex_female_idx] = discrete_action[0]
-            hr_idx = x_train_df.columns.get_loc("Heart Rate")
-            row[hr_idx]           = discrete_action[1]
-            
-            # get the column indices for continuous features
-            cont_idx = x_train_df.columns.get_indexer(continuous_columns).tolist()
-            row[cont_idx]         = continuous_action
-            synthetic_data.append(row)
-
-
-            # build synthetic label row
-            age = state[3].unsqueeze(0)               # shape (1,)
-            
-            preds = discrete_action[2:6]             # shape (4,)
-            tgt_vals = torch.cat([
-                preds[:2],   # shape (2,)
-                age,         # shape (1,)
-                preds[2:]    # shape (2,)
-            ], dim=0)                                 # → shape (5,)
-            
-            synthetic_labels.append(tgt_vals)
-
-            
-            mini_reward = compute_mini_reward(torch.stack(synthetic_data), mf_ratio)
-            done        = (i == synthetic_data_amount - 1)
-
-            if done:
-                print(f"Episode {episode + 1}/{episodes}: Training FFNN")
-                
-                ffnn_agent.reset()
-
-                # synth_data and synth_labels are lists of 1×D and 1×5 tensors
-                syn_data   = torch.stack(synthetic_data, dim=0)
-                syn_labels = torch.stack(synthetic_labels, dim=0)
-
-                # concatenate real + synthetic
-                combined_data   = torch.cat([x_train, syn_data], dim=0)    # (N+n, D)
-                combined_labels = torch.cat([y_train, syn_labels], dim=0) # (N+n, 5)
-
-                # Shuffle combined training data
-                perm = torch.randperm(combined_data.size(0), generator=rng, device=device)
-                combined_data   = combined_data[perm]
-                combined_labels = combined_labels[perm]
-
-                # Train FFNN
-                losses = ffnn_agent.train(combined_data, combined_labels)
-                if show_loss_plots:
-                    plot_ffnn_losses(losses)
-
-                print(f"Episode {episode + 1}/{episodes}: Evaluating FFNN")
-
-                train_mse, train_mae, train_female_mse = evaluate_ffnn(ffnn_agent, x_train, y_train, sex_female_idx)
-                val_mse, val_mae, val_female_mse = evaluate_ffnn(ffnn_agent, x_val, y_val, sex_female_idx)
-                test_mse, test_mae, test_female_mse = evaluate_ffnn(ffnn_agent, x_test, y_test, sex_female_idx)
-
-                # Reward is based on validation performance and mini reward
-                reward = (accuracy_reward_multiplier * val_mse * -1) + (mini_reward)
-                print(f'mini reward: {mini_reward}')
-
-                train_accuracies.append(train_mse)
-                val_accuracies.append(val_mse)
-                test_accuracies.append(test_mse)
-                train_female_accuracies.append(train_female_mse)
-                val_female_accuracies.append(val_female_mse)
-                test_female_accuracies.append(test_female_mse)
-
-                print(f"Episode {episode + 1}/{episodes} | Reward: {reward:.4f}")
-                print(f"Train MSE: {train_mse:.4f} | Train Female MSE: {train_female_mse:.4f}")
-                print(f"Val MSE: {val_mse:.4f} | Val Female MSE: {val_female_mse:.4f}")
-                print(f"Test MSE: {test_mse:.4f} | Test Female MSE: {test_female_mse:.4f}")
-                print("\n--------------------------------\n")
-
-                synthetic_data = []
-                synthetic_labels = []
-            else:
-                reward = mini_reward
-
-            next_state = generate_state(x_train, timestamp_idx, mf_ratio, torch.tensor(len(synthetic_data)+1., dtype=torch.float32, device=device), rng, device)
-            dqn_agent.learn(state, discrete_action, reward, next_state, done)
-            ppo_agent.learn(state, continuous_action, reward, next_state, done)
-
-            rewards.append(reward)
-            state = next_state
-
-        # Track and print episode time
-        episode_end_time = time.time()
-        episode_duration = episode_end_time - episode_start_time
-        episode_times.append(episode_duration)
-        print(f"Episode {episode + 1}/{episodes} completed in {episode_duration:.2f} seconds.")
-
-        metrics = {
-            'rewards': rewards,
-            'train_mse': train_accuracies,
-            'val_mse': val_accuracies,
-            'test_mse': test_accuracies,
-            'train_female_mse': train_female_accuracies,
-            'val_female_mse': val_female_accuracies,
-            'test_female_mse': test_female_accuracies,
-            'episode_times': episode_times
-        }
-
-    overall_end_time = time.time()
-    overall_duration = overall_end_time - overall_start_time
-    print(f"All episodes completed in {overall_duration:.2f} seconds.")
-
-    os.makedirs(save_location, exist_ok=True)
-    save_path = os.path.join(save_location, 'training_metrics.json')
-    with open(save_path, 'w') as f:
-        json.dump(metrics, f)
-    print(f"Metrics saved to {save_path}")
-
-    return metrics
-

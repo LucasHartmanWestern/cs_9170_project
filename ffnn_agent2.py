@@ -152,82 +152,34 @@ class FFNNAgent:
                 return outputs.cpu()
 
     
-    def train(self, features, targets):
+    def train(self, loader: torch.utils.data.DataLoader) -> list[float]:
         """
-        Train the model on the provided dataset.
-        
+        Train the model on the provided DataLoader.
+
         Args:
-            features: Input features (numpy array or torch tensor)
-            targets: Target values (numpy array or torch tensor)
-            
+            loader: DataLoader yielding (features, targets) batches
+
         Returns:
-            List of training losses
+            List of average training loss per epoch
         """
-
-        # Convert to tensors if needed
-        if not torch.is_tensor(features):
-            features = torch.as_tensor(features, dtype=torch.float32, device=self.device)
-        else:
-            features = features.to(self.device, dtype=torch.float32)
-
-        if features.dim() == 1:
-            features = features.unsqueeze(0)
-
-        # If classification, and classes are provided, check if targets are string labels.
-        # If so, mapto integer indices
-        if self.type == "classification":
-            if self.classes is not None:
-                contains_str_labels = False
-                for t in targets:
-                    if isinstance(t, str):
-                        contains_str_labels = True
-                        break
-                if contains_str_labels:
-                    class_to_idx = { label: idx for idx, label in enumerate(self.classes) }
-                    
-                    mapped_targets = []
-                    for t in targets:
-                        try:
-                            mapped_targets.append(class_to_idx[t])
-                        except KeyError:
-                            raise ValueError(f"Unknown class label: {t}")
-
-                    targets = mapped_targets
-        
-        dtype = torch.long if self.type == "classification" else torch.float32
-        if not torch.is_tensor(targets):
-            targets = torch.as_tensor(targets, dtype=dtype, device=self.device)
-        else:
-            targets = targets.to(self.device, dtype=dtype)
-
-        if targets.dim() == 0:
-            targets = targets.unsqueeze(0)
-
-        # Create dataset and dataloader
-        torch.manual_seed(self.seed)
-        torch.cuda.manual_seed_all(self.seed)
-        self.dl_generator = torch.Generator().manual_seed(self.seed)
-
-        dataset = torch.utils.data.TensorDataset(features, targets)
-        dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=self.batch_size, shuffle=True, generator=self.dl_generator
-        )
-        
-        # Set model to training mode
+        # switch to train mode
         self.model.train()
-        
-        # Training loop
-        losses = []
-        for _ in range(self.epochs):
+        losses: list[float] = []
+
+        for epoch in range(self.epochs):
             epoch_loss = 0.0
             batch_count = 0
 
-            for batch_features, batch_targets in dataloader:
-                # Forward
+            for batch_features, batch_targets in loader:
+                # move to device
+                batch_features = batch_features.to(self.device)
+                batch_targets  = batch_targets .to(self.device)
+
+                # forward + loss
                 outputs = self.model(batch_features)
                 loss = self.criterion(outputs, batch_targets)
 
-                # Backward + optimize
+                # backward + step
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
@@ -235,7 +187,7 @@ class FFNNAgent:
                 epoch_loss += loss.item()
                 batch_count += 1
 
-            # Record average loss
+            # record epoch’s mean loss
             losses.append(epoch_loss / batch_count)
 
         return losses

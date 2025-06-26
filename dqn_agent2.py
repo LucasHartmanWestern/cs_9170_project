@@ -86,6 +86,7 @@ class DQNAgent:
 
         # model, opt, loss
         self.model     = QNetwork(state_size, action_size, hidden_size).to(self.device)
+
         #replay buffer
         self.memory = ReplayBuffer(state_size, action_size, memory_size, self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
@@ -122,7 +123,6 @@ class DQNAgent:
         else:
             with torch.no_grad():
                 probs = self.model.get_binary_output(state)
-            
             # Convert probabilities to binary (0 or 1) with threshold 0.5
             synthetic_data = (probs >= 0.5).int().squeeze(0).tolist()
         
