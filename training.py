@@ -94,6 +94,8 @@ def train_agents(
 
     torch.manual_seed(seed)
     rng = torch.Generator(device=device).manual_seed(seed)
+    # For the DataLoader shuffle
+    cpu_rng = torch.Generator().manual_seed(seed)
     
     rewards = []
     val_accuracies = []
@@ -198,8 +200,8 @@ def train_agents(
                     combined_dataset,
                     batch_size=combined_data.size(0),
                     shuffle=True,
-                    generator=rng,
-                    pin_memory=(device!='cpu')#Don't enable on cpu
+                    generator=cpu_rng,
+                    pin_memory=(False)#Don't enable on cpu
                 )
 
                 # Train FFNN
