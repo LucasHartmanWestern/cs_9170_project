@@ -150,8 +150,6 @@ class FFNNAgent:
                     return preds
             else:
                 return outputs.cpu()
-
-    
     def train(self, loader: torch.utils.data.DataLoader) -> list[float]:
         """
         Train the model on the provided DataLoader.

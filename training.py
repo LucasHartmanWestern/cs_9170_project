@@ -104,8 +104,6 @@ def train_agents(
     train_female_accuracies = []
 
     episode_times = []
-    synthetic_data = []
-    synthetic_labels = []
 
     x_train_df, y_train_df = get_xy_from_data(df_train, target_features)
     x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
@@ -131,13 +129,13 @@ def train_agents(
     for episode in range(episodes):
         episode_start_time = time.time()
         print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
-        synthetic_data = []
-        synthetic_labels = []
+
+        synthetic_data = torch.empty(synthetic_data_amount, x_train.shape[1], device=device)
+        synthetic_labels = torch.empty(synthetic_data_amount, y_train.shape[1], device=device)
         
         for i in range(synthetic_data_amount):
-            if synthetic_data:
-                sd = torch.stack(synthetic_data)
-                combined = torch.cat([x_train, sd], dim=0)
+            if i > 0:
+                combined = torch.cat([x_train, synthetic_data[: i]], dim=0)
             else:
                 combined = x_train
 
@@ -163,7 +161,8 @@ def train_agents(
             # get the column indices for continuous features
             cont_idx = x_train_df.columns.get_indexer(continuous_columns).tolist()
             row[cont_idx]         = continuous_action
-            synthetic_data.append(row)
+
+            synthetic_data[i] = row
 
             # build synthetic label row
             age = state[3].unsqueeze(0)
@@ -174,9 +173,10 @@ def train_agents(
                 preds[2:]    # shape (2,)
             ], dim=0)
             
-            synthetic_labels.append(tgt_vals)
+            synthetic_labels[i] = tgt_vals
       
-            mini_reward = compute_mini_reward(torch.stack(synthetic_data), mf_ratio)
+            mini_reward = compute_mini_reward(synthetic_data[: i+1 ], mf_ratio)
+
             done        = (i == synthetic_data_amount - 1)
 
             #Once all synthetic data samples have been generated
@@ -185,13 +185,9 @@ def train_agents(
                 
                 ffnn_agent.reset()
 
-                # synth_data and synth_labels are lists of 1×D and 1×5 tensors
-                syn_data   = torch.stack(synthetic_data, dim=0)
-                syn_labels = torch.stack(synthetic_labels, dim=0)
-
                 # concatenate real + synthetic
-                combined_data   = torch.cat([x_train, syn_data], dim=0)    # (N+n, D)
-                combined_labels = torch.cat([y_train, syn_labels], dim=0) # (N+n, 5)
+                combined_data   = torch.cat([x_train, synthetic_data], dim=0)    # (N+n, D)
+                combined_labels = torch.cat([y_train, synthetic_labels], dim=0) # (N+n, 5)
 
                 combined_dataset = TensorDataset(combined_data, combined_labels)
                 loader = DataLoader(
@@ -231,8 +227,6 @@ def train_agents(
                     print(f"Test MSE: {test_mse:.4f} | Test Female MSE: {test_female_mse:.4f}")
                 print("\n--------------------------------\n")
 
-                synthetic_data = []
-                synthetic_labels = []
             else:
                 reward = mini_reward
 
@@ -276,7 +270,6 @@ def train_agents(
     with open(save_path, 'w') as f:
         json.dump(metrics, f)
     print(f"Metrics saved to {save_path}")
-
     return metrics
 
 def train_ffnn_baseline(
