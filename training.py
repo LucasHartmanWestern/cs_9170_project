@@ -224,9 +224,10 @@ def train_agents(
                 print(f'mini reward: {mini_reward}')
 
                 print(f"Episode {episode + 1}/{episodes} | Reward: {reward:.4f}")
-                print(f"Train MSE: {train_mse:.4f} | Train Female MSE: {train_female_mse:.4f}")
+                print(f"Val MSE: {val_mse:.4f} | Val Female MSE: {val_female_mse:.4f}")
+
                 if not eval_val_only:
-                    print(f"Val MSE: {val_mse:.4f} | Val Female MSE: {val_female_mse:.4f}")
+                    print(f"Train MSE: {train_mse:.4f} | Train Female MSE: {train_female_mse:.4f}")
                     print(f"Test MSE: {test_mse:.4f} | Test Female MSE: {test_female_mse:.4f}")
                 print("\n--------------------------------\n")
 
@@ -248,16 +249,23 @@ def train_agents(
         episode_times.append(episode_duration)
         print(f"Episode {episode + 1}/{episodes} completed in {episode_duration:.2f} seconds.")
 
-        metrics = {
-            'rewards': rewards,
-            'train_mse': train_accuracies,
-            'val_mse': val_accuracies,
-            'test_mse': test_accuracies,
-            'train_female_mse': train_female_accuracies,
-            'val_female_mse': val_female_accuracies,
-            'test_female_mse': test_female_accuracies,
-            'episode_times': episode_times
-        }
+        if eval_val_only:
+            metrics = {
+                'rewards': rewards,
+                'val_mse': val_accuracies,
+                'episode_times': episode_times
+            }
+        else:
+            metrics = {
+                'rewards': rewards,
+                'train_mse': train_accuracies,
+                'val_mse': val_accuracies,
+                'test_mse': test_accuracies,
+                'train_female_mse': train_female_accuracies,
+                'val_female_mse': val_female_accuracies,
+                'test_female_mse': test_female_accuracies,
+                'episode_times': episode_times
+            }
 
     overall_end_time = time.time()
     overall_duration = overall_end_time - overall_start_time
