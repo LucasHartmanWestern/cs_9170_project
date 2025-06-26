@@ -41,46 +41,31 @@ class Critic(nn.Module):
 class PPOAgent:
     def __init__(self, state_size, action_size, hidden_size=64, lr=3e-4,
                  gamma=0.99, clip_epsilon=0.2, update_epochs=4, batch_size=64,
-                 c1=0.5, c2=0.01, action_std=0.5, seed=42):
-        """
-        state_size: dimension of the state space
-        action_size: dimension of continuous action space (synthetic data size)
-        hidden_size: hidden layer size for both networks
-        lr: learning rate
-        gamma: discount factor
-        clip_epsilon: clipping parameter for PPO
-        update_epochs: number of epochs to update the policy per training iteration
-        batch_size: minibatch size for PPO updates
-        c1: coefficient for the value loss
-        c2: coefficient for the entropy bonus
-        action_std: initial standard deviation for continuous actions
-        seed: Random seed for reproducibility
-        """
+                 c1=0.5, c2=0.01, action_std=0.5, device='cpu', seed=42):
+
         # Set random seed for reproducibility
         self.seed = seed
         torch.manual_seed(self.seed)
         torch.cuda.manual_seed_all(self.seed)
-        self.dl_generator = torch.Generator().manual_seed(self.seed)
-        
+        self.rng = torch.Generator().manual_seed(self.seed)
+        self.device = device
+
+        self.gamma = gamma
         self.state_size = state_size
         self.action_size = action_size
-        self.gamma = gamma
+        self.batch_size = batch_size
+
         self.clip_epsilon = clip_epsilon
         self.update_epochs = update_epochs
-        self.batch_size = batch_size
         self.c1 = c1
         self.c2 = c2
         self.action_std = action_std
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(state_size, action_size, hidden_size).to(self.device)
         self.critic = Critic(state_size, hidden_size).to(self.device)
 
         # Single optimizer for both actor and critic
         self.optimizer = optim.Adam(list(self.actor.parameters()) + list(self.critic.parameters()), lr=lr)
-
-        # Memory for storing trajectories (on-policy data)
-        # Each entry is a tuple: (state, action, log_prob, reward, done, value)
         self.memory = []
     
     def predict(self, state):
@@ -93,11 +78,13 @@ class PPOAgent:
         Returns:
             Synthetic data sample (a list of floats)
         """
-        # Convert state to tensor if it's not already
-        if not torch.is_tensor(state):
-            state = torch.as_tensor(state, dtype=torch.float32, device=self.device)
+
+        if torch.is_tensor(state):
+            # already a Tensor—clone+detach to avoid in-place/grad issues
+            state = state.clone().detach().float().to(self.device)
         else:
-            state = state.to(self.device, dtype=torch.float32)
+            # numpy array or list
+            state = torch.tensor(state, dtype=torch.float32, device=self.device)
         
         # Ensure state is properly shaped for the network
         if len(state.shape) == 1:
@@ -135,7 +122,7 @@ class PPOAgent:
         """
         torch.manual_seed(self.seed)
         torch.cuda.manual_seed_all(self.seed)
-        self.dl_generator.manual_seed(self.seed)
+        self.rng.manual_seed(self.seed)
 
         # Convert inputs to tensors if they aren't already
         state      = torch.as_tensor(state,      dtype=torch.float32, device=self.device)
@@ -230,7 +217,7 @@ class PPOAgent:
                 dataset,
                 batch_size=self.batch_size,
                 shuffle=True,
-                generator=self.dl_generator
+                generator=self.rng
             )
 
 

@@ -65,17 +65,19 @@ class QNetwork(nn.Module):
         return probs
 
 class DQNAgent:
-    def __init__(self, state_size, action_size, hidden_size=64, lr=1e-3, gamma=0.99, batch_size=32, memory_size=10000, epsilon_start=1.0, epsilon_min=0.01, epsilon_decay=0.995, seed=42):
+    def __init__(self, state_size, action_size, hidden_size=64, lr=1e-3, gamma=0.99, batch_size=32, memory_size=10000, epsilon_start=1.0, epsilon_min=0.01, epsilon_decay=0.995, device='cpu', seed=42):
+
+        self.seed = seed
+        torch.manual_seed(seed)
+        self.device = device
+        self.rng = torch.Generator(self.device).manual_seed(self.seed)
+
         
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.gamma      = gamma
+        self.gamma = gamma
         self.state_size  = state_size
         self.action_size = action_size
         self.batch_size = batch_size
-        self.seed       = seed
-        # for reproducibility
-        torch.manual_seed(seed)
-        self.rng = torch.Generator(device=self.device).manual_seed(self.seed)
+
 
         # ε-greedy params
         self.epsilon     = epsilon_start
@@ -100,7 +102,12 @@ class DQNAgent:
             Synthetic data sample (a list of integers)
         """
         # Convert state to tensor if it's not already
-        state = torch.FloatTensor(state).to(self.device)
+        if torch.is_tensor(state):
+            # already a Tensor—clone+detach to avoid in-place/grad issues
+            state = state.clone().detach().float().to(self.device)
+        else:
+            # numpy array or list
+            state = torch.tensor(state, dtype=torch.float32, device=self.device)
         
         # Ensure state is properly shaped for the network
         if len(state.shape) == 1:

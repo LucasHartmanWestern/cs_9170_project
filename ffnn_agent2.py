@@ -42,13 +42,13 @@ class FFNNModel(nn.Module):
 class FFNNAgent:
     def __init__(self, input_size, hidden_sizes=[64, 64], output_size=1, 
                  learning_rate=0.001, batch_size=32, epochs=100, type="regression", 
-                 classes=None, device=None, seed=42):
+                 classes=None, device='cpu', seed=42):
         """
         Initialize the Feed-Forward Neural Network agent.
         
         Args:
             input_size: Number of input features
-            hidden_sizes: List of hidden layer sizes
+            hidden_sizes: List of hidden layer sizess
             output_size: Number of output values
             learning_rate: Learning rate for optimizer
             batch_size: Batch size for training
@@ -60,12 +60,12 @@ class FFNNAgent:
         """
 
 
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device 
         self.seed   = seed
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(self.seed)
         print(f"FFNN Using device: {self.device}")
-        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+        self.dl_generator = torch.Generator().manual_seed(self.seed)
 
         self.input_size   = input_size
         self.hidden_sizes = hidden_sizes
@@ -107,7 +107,7 @@ class FFNNAgent:
         torch.manual_seed(self.seed)
         torch.cuda.manual_seed_all(self.seed)
 
-        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+        self.dl_generator = torch.Generator().manual_seed(self.seed)
 
         self.model = FFNNModel(self.input_size, self.hidden_sizes, self.output_size).to(self.device)
 
@@ -206,7 +206,7 @@ class FFNNAgent:
         # Create dataset and dataloader
         torch.manual_seed(self.seed)
         torch.cuda.manual_seed_all(self.seed)
-        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+        self.dl_generator = torch.Generator().manual_seed(self.seed)
 
         dataset = torch.utils.data.TensorDataset(features, targets)
         dataloader = torch.utils.data.DataLoader(
@@ -286,7 +286,7 @@ class FFNNAgent:
         self.epochs       = checkpoint['epochs']
         self.type         = checkpoint.get('type', 'regression')
         self.classes      = checkpoint.get('classes', None)
-        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+        self.dl_generator = torch.Generator().manual_seed(self.seed)
 
 
         # Rebuild the model and optimizer
