@@ -9,38 +9,34 @@ import pandas as pd
 from data_processing import get_xy_from_data
 from torch.utils.data import TensorDataset, DataLoader
 
-def evaluate_ffnn(agent, x_t, y_t, sex_female_idx):
-    # Determine the device from the agent’s model
-    device = next(agent.model.parameters()).device
+def evaluate_model(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int) -> tuple[float, float]:
+    agent.model.eval()
+    with torch.no_grad():
+        preds = agent.predict(x)
 
-    x_t = x_t.to(device)
-    y_t = y_t.to(device)
+        if not isinstance(preds, torch.Tensor):
+            preds = torch.tensor(preds, device=y.device, dtype=y.dtype)
+    
+    # Compute overall MSE
+    mse = F.mse_loss(preds, y).item()
+    mae = F.l1_loss(preds, y).item()
 
-    preds = agent.predict(x_t)
-    if isinstance(preds, torch.Tensor):
-        preds = preds.to(device)
-    else:
-        preds = torch.tensor(preds, dtype=torch.float32, device=device)
-
-    # Compute losses
-    mse = F.mse_loss(preds, y_t).item()
-    mae = F.l1_loss(preds, y_t).item()
-
-    # Female‐specific evaluation
-    female_mask = x_t[:, sex_female_idx] == 1
+    # Compute female-only MSE
+    female_mask = x[:, sex_idx] == 1
     if female_mask.any():
-        fmse = F.mse_loss(preds[female_mask], y_t[female_mask]).item()
+        pred_f = preds[female_mask]
+        y_f = y[female_mask]
+        female_mse = F.mse_loss(pred_f, y_f).item()
     else:
-        fmse = float('nan')
+        female_mse = float('nan')
+    return mse, mae, female_mse
 
-    return mse, mae, fmse
 
-
-def plot_ffnn_losses(losses):
+def plot_losses(losses):
     # Plot training loss
     plt.figure(figsize=(10, 5))
     plt.plot(losses)
-    plt.title('FFNN Training Loss')
+    plt.title('Training Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.grid(True)
@@ -48,7 +44,6 @@ def plot_ffnn_losses(losses):
 
 #RETHINK THIS
 def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
-
     timestamps = tensor[:, timestamp_idx]
     t_min, t_max = timestamps.min().item(), timestamps.max().item()
 
@@ -91,8 +86,8 @@ def compute_mini_reward(synthetic_data, mf_ratio):
     return mini_reward
 
 
-def train_ffnn_baseline(
-    ffnn_agent,
+def train_model_baseline(
+    agent,
     df_train,
     df_val,
     df_test,
@@ -104,9 +99,10 @@ def train_ffnn_baseline(
     shuffle=False
 ):
     """
-    Trains and evaluates three FFNN models (baseline, oversample, undersample)
+    Trains and evaluates three FFNN or LSTM models (baseline, oversample, undersample)
     entirely in torch.
     """
+    overall_start_time = time.time()
     # fix seeds
     torch.manual_seed(seed)
     rng = torch.Generator().manual_seed(seed)
@@ -125,18 +121,21 @@ def train_ffnn_baseline(
     x_test  = torch.tensor(x_test_df.values,  dtype=torch.float32, device=device)
     y_test  = torch.tensor(y_test_df.values,  dtype=torch.float32, device=device)
 
-    results: dict[str, dict[str, dict[str, float]]] = {}
+    results = {}
 
     def _run_and_eval(agent, x_tr, y_tr, x_v, y_v, x_te, y_te, tag):
         print(f"\n--- {tag} ---")
         dataset = TensorDataset(x_tr, y_tr)
-        loader = DataLoader(dataset, batch_size=x_tr.size(0), shuffle=True)
+        loader = DataLoader(dataset, batch_size=agent.batch_size, shuffle=shuffle)
         losses = agent.train(loader)
+
         if show_loss_plots:
-            plot_ffnn_losses(losses)
-        m_tr, _, fm_tr = evaluate_ffnn(agent, x_tr, y_tr, sex_female_idx)
-        m_v,  _, fm_v  = evaluate_ffnn(agent, x_v, y_v, sex_female_idx)
-        m_te, _, fm_te = evaluate_ffnn(agent, x_te, y_te, sex_female_idx)
+            plot_losses(losses)
+
+        m_tr, _, fm_tr = evaluate_model(agent, x_tr, y_tr, sex_female_idx)
+        m_v,  _, fm_v  = evaluate_model(agent, x_v, y_v, sex_female_idx)
+        m_te, _, fm_te = evaluate_model(agent, x_te, y_te, sex_female_idx)
+
         print(f"{tag} Train MSE: {m_tr:.4f} | Female MSE: {fm_tr:.4f}")
         print(f"{tag} Val   MSE: {m_v:.4f}  | Female MSE: {fm_v:.4f}")
         print(f"{tag} Test  MSE: {m_te:.4f} | Female MSE: {fm_te:.4f}\n")
@@ -147,12 +146,14 @@ def train_ffnn_baseline(
         }
 
     # Experiment 1: baseline
-    print("\nTraining FFNN baseline on original data…")
-    base_agent = copy.deepcopy(ffnn_agent)
-    results["baseline"] = _run_and_eval(
-        base_agent, x_train, y_train, x_val, y_val, x_test, y_test, "Baseline")
-
+    print(f"\nTraining {type(agent).__name__} baseline on original data…")
+    one_start_time = time.time()
+    base_agent = copy.deepcopy(agent)
+    results["baseline"] = _run_and_eval(base_agent, x_train, y_train, x_val, y_val, x_test, y_test, "Baseline")
+    one_end_time = time.time()
+    print(f'Experiment 1 time: {one_end_time - one_start_time}')
     # Experiment 2: oversampling minority
+    two_start_time = time.time()
     df_min = df_train[df_train["Sex - Female"] == 1]
     df_maj = df_train[df_train["Sex - Female"] == 0]
     maj_size = len(df_maj)
@@ -172,12 +173,13 @@ def train_ffnn_baseline(
     x_os = torch.tensor(x_os_df.values, dtype=torch.float32, device=device)
     y_os = torch.tensor(y_os_df.values, dtype=torch.float32, device=device)
 
-    print("\nTraining FFNN with minority oversampling…")
-    os_agent = copy.deepcopy(ffnn_agent)
-    results["oversample"] = _run_and_eval(
-        os_agent, x_os, y_os, x_val, y_val, x_test, y_test, "Oversampled")
-
+    print(f"\nTraining {type(agent).__name__} with minority oversampling…")
+    os_agent = copy.deepcopy(agent)
+    results["oversample"] = _run_and_eval(os_agent, x_os, y_os, x_val, y_val, x_test, y_test, "Oversampled")
+    two_end_time = time.time()
+    print(f'Experiment 2 time: { two_end_time - two_start_time}')
     # Experiment 3: undersampling majority
+    three_start_time = time.time()
     min_size = len(df_min)
     if shuffle:
         df_maj_us  = df_maj.sample(n=min_size, random_state=seed)
@@ -191,10 +193,12 @@ def train_ffnn_baseline(
     x_us = torch.tensor(x_us_df.values, dtype=torch.float32, device=device)
     y_us = torch.tensor(y_us_df.values, dtype=torch.float32, device=device)
 
-    print("\nTraining FFNN with majority undersampling…")
-    us_agent = copy.deepcopy(ffnn_agent)
-    results["undersample"] = _run_and_eval(
-        us_agent, x_us, y_us, x_val, y_val, x_test, y_test, "Undersampled")
+    print(f"\nTraining {type(agent).__name__} with majority undersampling…")
+    us_agent = copy.deepcopy(agent)
+
+    results["undersample"] = _run_and_eval(us_agent, x_us, y_us, x_val, y_val, x_test, y_test, "Undersampled")
+    three_end_time = time.time()
+    print(f'Experiment 3 time: { three_end_time - three_start_time}')
 
     # Persist
     os.makedirs(save_location, exist_ok=True)
@@ -204,9 +208,6 @@ def train_ffnn_baseline(
 
     return results
 
-
-
-
 def train_agents(
         df_train, 
         df_val, 
@@ -214,7 +215,7 @@ def train_agents(
         target_features,
         dqn_agent, 
         ppo_agent, 
-        ffnn_agent, 
+        base_agent, 
         continuous_columns, 
         episodes, 
         synthetic_data_amount, 
@@ -223,7 +224,8 @@ def train_agents(
         eval_val_only=True,
         show_loss_plots=True,
         seed=42,
-        device='cpu'
+        device='cpu',
+        shuffle=False
     ):
     overall_start_time = time.time()
 
@@ -317,9 +319,9 @@ def train_agents(
 
             #Once all synthetic data samples have been generated
             if done:
-                print(f"Episode {episode + 1}/{episodes}: Training FFNN")
+                print(f"Episode {episode + 1}/{episodes}: Training {type(base_agent).__name__} ")
                 
-                ffnn_agent.reset()
+                base_agent.reset()
 
                 # concatenate real + synthetic
                 combined_data   = torch.cat([x_train, synthetic_data], dim=0)    # (N+n, D)
@@ -329,24 +331,24 @@ def train_agents(
                 loader = DataLoader(
                     combined_dataset,
                     batch_size=combined_data.size(0),
-                    shuffle=True,
+                    shuffle=shuffle,
                     generator=cpu_rng,
                     pin_memory=(False)#Don't enable on cpu
                 )
 
-                # Train FFNN
-                losses = ffnn_agent.train(loader)
+                # Train FFNN or LSTM
+                losses = base_agent.train(loader)
                 if show_loss_plots:
-                    plot_ffnn_losses(losses)
+                    plot_losses(losses)
 
-                print(f"Episode {episode + 1}/{episodes}: Evaluating FFNN")
+                print(f"Episode {episode + 1}/{episodes}: Evaluating {type(base_agent).__name__} ")
 
-                val_mse, val_mae, val_female_mse = evaluate_ffnn(ffnn_agent, x_val, y_val, sex_female_idx)
+                val_mse, val_mae, val_female_mse = evaluate_model(base_agent, x_val, y_val, sex_female_idx)
                 val_accuracies.append(val_mse)
                 val_female_accuracies.append(val_female_mse)
                 if not eval_val_only:
-                    train_mse, train_mae, train_female_mse = evaluate_ffnn(ffnn_agent, x_train, y_train, sex_female_idx)
-                    test_mse, test_mae, test_female_mse = evaluate_ffnn(ffnn_agent, x_test, y_test, sex_female_idx)
+                    train_mse, train_mae, train_female_mse = evaluate_model(base_agent, x_train, y_train, sex_female_idx)
+                    test_mse, test_mae, test_female_mse = evaluate_model(base_agent, x_test, y_test, sex_female_idx)
                     train_accuracies.append(train_mse)
                     test_accuracies.append(test_mse)
                     train_female_accuracies.append(train_female_mse)
