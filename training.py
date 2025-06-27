@@ -138,7 +138,7 @@ def train_model_baseline(
 
         print(f"{tag} Train MSE: {m_tr:.4f} | Female MSE: {fm_tr:.4f}")
         print(f"{tag} Val   MSE: {m_v:.4f}  | Female MSE: {fm_v:.4f}")
-        print(f"{tag} Test  MSE: {m_te:.4f} | Female MSE: {fm_te:.4f}\n")
+        print(f"{tag} Test  MSE: {m_te:.4f} | Female MSE: {fm_te:.4f}")
         return {
             "train": {"mse": m_tr,  "female_mse": fm_tr},
             "val":   {"mse": m_v,   "female_mse": fm_v},
@@ -151,7 +151,7 @@ def train_model_baseline(
     base_agent = copy.deepcopy(agent)
     results["baseline"] = _run_and_eval(base_agent, x_train, y_train, x_val, y_val, x_test, y_test, "Baseline")
     one_end_time = time.time()
-    print(f'Experiment 1 time: {one_end_time - one_start_time}')
+    print(f'Experiment 1 time: {one_end_time - one_start_time}\n')
     # Experiment 2: oversampling minority
     two_start_time = time.time()
     df_min = df_train[df_train["Sex - Female"] == 1]
@@ -177,7 +177,7 @@ def train_model_baseline(
     os_agent = copy.deepcopy(agent)
     results["oversample"] = _run_and_eval(os_agent, x_os, y_os, x_val, y_val, x_test, y_test, "Oversampled")
     two_end_time = time.time()
-    print(f'Experiment 2 time: { two_end_time - two_start_time}')
+    print(f'Experiment 2 time: { two_end_time - two_start_time}\n')
     # Experiment 3: undersampling majority
     three_start_time = time.time()
     min_size = len(df_min)
@@ -198,7 +198,7 @@ def train_model_baseline(
 
     results["undersample"] = _run_and_eval(us_agent, x_us, y_us, x_val, y_val, x_test, y_test, "Undersampled")
     three_end_time = time.time()
-    print(f'Experiment 3 time: { three_end_time - three_start_time}')
+    print(f'Experiment 3 time: { three_end_time - three_start_time}\n')
 
     # Persist
     os.makedirs(save_location, exist_ok=True)
@@ -363,7 +363,6 @@ def train_agents(
                 if not eval_val_only:
                     print(f"Train MSE: {train_mse:.4f} | Train Female MSE: {train_female_mse:.4f}")
                     print(f"Test MSE: {test_mse:.4f} | Test Female MSE: {test_female_mse:.4f}")
-                print("\n--------------------------------\n")
 
             else:
                 reward = mini_reward
@@ -380,7 +379,8 @@ def train_agents(
         episode_duration = episode_end_time - episode_start_time
         episode_times.append(episode_duration)
         print(f"Episode {episode + 1}/{episodes} completed in {episode_duration:.2f} seconds.")
-
+        print("\n--------------------------------\n")
+        
         if eval_val_only:
             metrics = {
                 'rewards': rewards,
