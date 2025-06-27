@@ -278,11 +278,11 @@ def train_agents(
 
         for i in range(synthetic_data_amount):
 
-            discrete_action = torch.as_tensor(
-                dqn_agent.predict(state),
-                dtype=torch.float32,
-                device=device
-            ).flatten()
+            # discrete_action = torch.as_tensor(
+            #     dqn_agent.predict(state),
+            #     dtype=torch.float32,
+            #     device=device
+            # ).flatten()
             
             continuous_action = torch.as_tensor(
                 ppo_agent.predict(state),
@@ -290,17 +290,27 @@ def train_agents(
                 device=device
             ).flatten()
 
+            # row = torch.zeros(x_train.size(1), device=device)
+            # row[sex_female_idx] = discrete_action[0]
+            # hr_idx = x_train_df.columns.get_loc("Heart Rate")
+            # row[hr_idx]         = discrete_action[1]
+            # cont_idx = x_train_df.columns.get_indexer(continuous_columns).tolist()
+            # row[cont_idx]       = continuous_action
+            # synthetic_data[i] = row
+
+            # print(f'continues action {continuous_action}')
+
             row = torch.zeros(x_train.size(1), device=device)
-            row[sex_female_idx] = discrete_action[0]
+            row[sex_female_idx] = continuous_action[-6]
             hr_idx = x_train_df.columns.get_loc("Heart Rate")
-            row[hr_idx]           = discrete_action[1]
-            cont_idx = x_train_df.columns.get_indexer(continuous_columns).tolist()
-            row[cont_idx]         = continuous_action
+            row[hr_idx]         = continuous_action[-5]
+            cont_idx = x_train_df.columns.get_indexer(continuous_columns[:-6]).tolist()
+            row[cont_idx]       = continuous_action[:-6]
             synthetic_data[i] = row
 
             # build synthetic label row
             age = state[3].unsqueeze(0)
-            preds = discrete_action[2:6]
+            preds = continuous_action[-4:]
             tgt_vals = torch.cat([
                 preds[:2],   # shape (2,)
                 age,         # shape (1,)
@@ -354,7 +364,10 @@ def train_agents(
                     train_female_accuracies.append(train_female_mse)
                     test_female_accuracies.append(test_female_mse)
                 # Reward is based on validation performance and mini reward
-                reward = (accuracy_reward_multiplier * val_mse * -1) + (mini_reward)
+                # reward = (accuracy_reward_multiplier * val_mse * -1) + (mini_reward)
+
+                reward = -1*(val_mse+val_female_mse) 
+                
                 print(f'mini reward: {mini_reward}')
 
                 print(f"Episode {episode + 1}/{episodes} | Reward: {reward:.4f}")
@@ -364,14 +377,18 @@ def train_agents(
                     print(f"Train MSE: {train_mse:.4f} | Train Female MSE: {train_female_mse:.4f}")
                     print(f"Test MSE: {test_mse:.4f} | Test Female MSE: {test_female_mse:.4f}")
 
-            else:
-                reward = mini_reward
+                # dqn_agent.learn(state, discrete_action, reward, next_state, done)
+                ppo_agent.learn(state, continuous_action, reward, next_state, done)  
+                rewards.append(reward)
+
+            # else:
+            #     reward = mini_reward
 
             next_state = generate_state(x_train, timestamp_idx, mf_ratio, torch.tensor(len(synthetic_data)+1., dtype=torch.float32, device=device), rng, device)
-            dqn_agent.learn(state, discrete_action, reward, next_state, done)
-            ppo_agent.learn(state, continuous_action, reward, next_state, done)
+            # dqn_agent.learn(state, discrete_action, reward, next_state, done)
+            # ppo_agent.learn(state, continuous_action, reward, next_state, done)
 
-            rewards.append(reward)
+            # rewards.append(reward)
             state = next_state
 
         # Track and print episode time
