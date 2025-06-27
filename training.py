@@ -330,7 +330,7 @@ def train_agents(
                 combined_dataset = TensorDataset(combined_data, combined_labels)
                 loader = DataLoader(
                     combined_dataset,
-                    batch_size=combined_data.size(0),
+                    batch_size=base_agent.batch_size,
                     shuffle=shuffle,
                     generator=cpu_rng,
                     pin_memory=(False)#Don't enable on cpu
