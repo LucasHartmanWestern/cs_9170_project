@@ -41,6 +41,11 @@ def load_data(seq_len=1000):
     return data
 
 
+def save_synthetic_data(opt, generated_data):
+    save_path = os.path.join(opt.outf, opt.name, "generated_data")
+    np.savetxt(os.path.join(save_path, 'synthetic_data.csv'), generated_data, delimiter=',')
+
+
 def evaluate(opt, ori_data, generated_data):
     metric_iteration = opt.metric_iteration
 
@@ -89,13 +94,17 @@ def train():
     model.train()
     print("Training complete.")
 
+    # SAVE SYNTHETIC DATA
+    save_synthetic_data(opt, model.generated_data)
+    print("Synthetic data saved.")
+
     # EVALUATE MODEL
-    evaluate(opt, ori_data, model.generated_data)
-    print("Evaluation complete.")
+    # evaluate(opt, ori_data, model.generated_data) # Doesn't work because of deprecated Tensorflow code
+    # print("Evaluation complete.")
 
     # VISUALIZE
-    visualize(opt, ori_data, model.generated_data)
-    print("Figures created.")
+    # visualize(opt, ori_data, model.generated_data) # Doesn't work because of deprecated Tensorflow code
+    # print("Figures created.")
 
 
 if __name__ == '__main__':
