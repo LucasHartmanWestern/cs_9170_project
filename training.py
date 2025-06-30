@@ -22,15 +22,15 @@ def evaluate_model(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int) -> tup
     mae = F.l1_loss(preds, y).item()
 
     # Compute female-only MSE
-    female_mask = x[:, sex_idx] == 1
+    female_mask = y[:, sex_idx] == 1
     if female_mask.any():
         pred_f = preds[female_mask]
         y_f = y[female_mask]
         female_mse = F.mse_loss(pred_f, y_f).item()
     else:
         female_mse = float('nan')
-    return mse, mae, female_mse
 
+    return mse, mae, female_mse
 
 def plot_losses(losses):
     # Plot training loss
@@ -69,17 +69,17 @@ def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
     
     activity_id = torch.randint(1, 3, (1,), generator=rng, device=device).float()
 
-    state_vector = torch.cat([timestamp, mf_ratio, n_samples, age, activity_id], dim=0)
+    state_vector = torch.cat([timestamp, age, activity_id, mf_ratio, n_samples], dim=0)
     return state_vector
 
 #m/f ratio reward 
-def compute_mini_reward(synthetic_data, mf_ratio):
+def compute_mini_reward(synthetic_features, mf_ratio):
     # mf_ratio: 0-dim tensor
     #setting a cap for maximum std
     max_cap = 2
-    std = synthetic_data.std(dim=0, unbiased=False).mean()
+    std = synthetic_features.std(dim=0, unbiased=False).mean()
     # print(f'std {std}')
-    std_term = min(max_cap,synthetic_data.std(dim=0, unbiased=False).mean())
+    std_term = min(max_cap,synthetic_features.std(dim=0, unbiased=False).mean())
     gauss    = max_cap*torch.exp(-((mf_ratio - 0.5)**2) / 0.1)
     mini_reward = (std_term + gauss).item()
     # print(f' mini reward {mini_reward:.2f} std = {std:.2f}, gaus {gauss:.2f}')
@@ -102,7 +102,6 @@ def train_model_baseline(
     Trains and evaluates three FFNN or LSTM models (baseline, oversample, undersample)
     entirely in torch.
     """
-    overall_start_time = time.time()
     # fix seeds
     torch.manual_seed(seed)
     rng = torch.Generator().manual_seed(seed)
@@ -112,7 +111,7 @@ def train_model_baseline(
     x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
     x_test_df,  y_test_df  = get_xy_from_data(df_test,  target_features)
 
-    sex_female_idx = x_train_df.columns.get_loc('Sex - Female')
+    sex_female_idx = y_train_df.columns.get_loc('Sex - Female')
 
     x_train = torch.tensor(x_train_df.values, dtype=torch.float32, device=device)
     y_train = torch.tensor(y_train_df.values, dtype=torch.float32, device=device)
@@ -218,7 +217,7 @@ def train_agents(
         base_agent, 
         continuous_columns, 
         episodes, 
-        synthetic_data_amount, 
+        synthetic_features_amount, 
         accuracy_reward_multiplier,
         save_location,
         eval_val_only=True,
@@ -245,12 +244,12 @@ def train_agents(
 
     episode_times = []
 
+    #Split dependent on target_features
     x_train_df, y_train_df = get_xy_from_data(df_train, target_features)
     x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
     x_test_df,  y_test_df  = get_xy_from_data(df_test,  target_features)
 
-    sex_female_idx = x_train_df.columns.get_loc('Sex - Female')
-    hr_idx         = x_train_df.columns.get_loc('Heart Rate')
+    sex_female_idx = y_train_df.columns.get_loc('Sex - Female')
 
     x_train = torch.tensor(x_train_df.values, dtype=torch.float32, device=device)
     y_train = torch.tensor(y_train_df.values, dtype=torch.float32, device=device)
@@ -261,10 +260,11 @@ def train_agents(
 
 
     N = x_train.size(0)
-    mf_ratio = train_female_ratio  = x_train[:, sex_female_idx].mean()
+    mf_ratio = train_female_ratio  = y_train[:, sex_female_idx].mean()
     n_samples  = torch.tensor(0.0, dtype=torch.float32, device=device)
     timestamp_idx = x_train_df.columns.get_loc('Timestamp')
     
+    #Gives [timestamp, age, activity_id, mf_ratio, n_samples]
     state = generate_state(x_train, timestamp_idx, mf_ratio, n_samples, rng, device)
 
     for episode in range(episodes):
@@ -272,11 +272,11 @@ def train_agents(
         print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
 
         #Resets
-        synthetic_data = torch.empty(synthetic_data_amount, x_train.shape[1], device=device)
-        synthetic_labels = torch.empty(synthetic_data_amount, y_train.shape[1], device=device)
+        synthetic_features = torch.empty(synthetic_features_amount, x_train.shape[1], device=device)
+        synthetic_targets = torch.empty(synthetic_features_amount, y_train.shape[1], device=device)
         sum_synth_female = 0.0
 
-        for i in range(synthetic_data_amount):
+        for i in range(synthetic_features_amount):
 
             discrete_action = torch.as_tensor(
                 dqn_agent.predict(state),
@@ -290,32 +290,36 @@ def train_agents(
                 device=device
             ).flatten()
 
-            row = torch.zeros(x_train.size(1), device=device)
-            row[sex_female_idx] = discrete_action[0]
-            hr_idx = x_train_df.columns.get_loc("Heart Rate")
-            row[hr_idx]           = discrete_action[1]
-            cont_idx = x_train_df.columns.get_indexer(continuous_columns).tolist()
-            row[cont_idx]         = continuous_action
-            synthetic_data[i] = row
+            # Get state defined fields
+            timestamp = state[0].unsqueeze(0)
+            age = state[1].unsqueeze(0)
+            activity_id = state[2].unsqueeze(0)
 
-            # build synthetic label row
-            age = state[3].unsqueeze(0)
-            preds = discrete_action[2:6]
-            tgt_vals = torch.cat([
-                preds[:2],   # shape (2,)
-                age,         # shape (1,)
-                preds[2:]    # shape (2,)
+            #cat feature variables
+            features = torch.cat([
+                timestamp, #timestamp from state
+                activity_id, #activity_id from state
+                continuous_action, #all sensor data
+                discrete_action[2:4] #"Resting HR", "Max HR",
+            ])
+
+            synthetic_features[i] = features
+
+            labels = torch.cat([
+                discrete_action[:2],   # Sex, Heart Rate
+                age,                   # Age from state
+                discrete_action[-2:]    # Weight, Height
             ], dim=0)
             
-            synthetic_labels[i] = tgt_vals
+            synthetic_targets[i] = labels
 
-            sum_synth_female += row[sex_female_idx].item()
+            sum_synth_female += synthetic_targets[i,sex_female_idx].item() #Get number of female entires
             n_synth = i + 1
             mf_ratio = (N * train_female_ratio  + sum_synth_female) / (N + n_synth)
       
-            mini_reward = compute_mini_reward(synthetic_data[: i+1 ], mf_ratio)
+            mini_reward = compute_mini_reward(synthetic_features[: i+1 ], mf_ratio)
 
-            done        = (i == synthetic_data_amount - 1)
+            done        = (i == synthetic_features_amount - 1)
 
             #Once all synthetic data samples have been generated
             if done:
@@ -324,8 +328,8 @@ def train_agents(
                 base_agent.reset()
 
                 # concatenate real + synthetic
-                combined_data   = torch.cat([x_train, synthetic_data], dim=0)    # (N+n, D)
-                combined_labels = torch.cat([y_train, synthetic_labels], dim=0) # (N+n, 5)
+                combined_data   = torch.cat([x_train, synthetic_features], dim=0)    # (N+n, D)
+                combined_labels = torch.cat([y_train, synthetic_targets], dim=0) # (N+n, 5)
 
                 combined_dataset = TensorDataset(combined_data, combined_labels)
                 loader = DataLoader(
@@ -367,7 +371,7 @@ def train_agents(
             else:
                 reward = mini_reward
 
-            next_state = generate_state(x_train, timestamp_idx, mf_ratio, torch.tensor(len(synthetic_data)+1., dtype=torch.float32, device=device), rng, device)
+            next_state = generate_state(x_train, timestamp_idx, mf_ratio, torch.tensor(i + 1, dtype=torch.float32, device=device), rng, device)
             dqn_agent.learn(state, discrete_action, reward, next_state, done)
             ppo_agent.learn(state, continuous_action, reward, next_state, done)
 
