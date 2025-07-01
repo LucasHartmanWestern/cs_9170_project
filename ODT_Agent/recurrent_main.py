@@ -621,14 +621,14 @@ class Experiment:
             entropy_reg,
         ):
             # a_hat is a SquashedNormal Distribution
-            log_likelihood = a_hat_dist.log_likelihood(a)[attention_mask > 0].mean()
+            log_prob = a_hat_dist.log_prob(a)[attention_mask > 0].mean()
 
             entropy = a_hat_dist.entropy().mean()
-            loss = -(log_likelihood + entropy_flag * entropy_reg * entropy)
+            loss = -(log_prob + entropy_flag * entropy_reg * entropy)
 
             return (
                 loss,
-                -log_likelihood,
+                -log_prob,
                 entropy,
             )
             

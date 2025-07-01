@@ -42,9 +42,11 @@ class Experiment:
         self.state_dim, self.act_dim, self.action_range = self._get_env_spec(variant)
 
 
-        self.offline_trajs, self.state_mean, self.state_std = self._load_dataset(
+        self.offline_trajs, self.state_mean, self.state_std, self.action_mean, self.action_std = self._load_dataset(
             variant["env"]
         )
+        self.environment.action_mean = self.action_mean
+        self.environment.action_std = self.action_std
         
         self.delayed_reward_flag = variant['delayed_reward']
         
@@ -143,7 +145,7 @@ class Experiment:
     def _get_env_spec(self, variant):
         env = self.environment
         state_dim = env.state_shape[0]
-        act_dim = env.action_range[0].shape[0]
+        act_dim = env.action_dim.shape[0]
 
         action_range = env.action_range
         return state_dim, act_dim, action_range
@@ -194,45 +196,12 @@ class Experiment:
             print(f"Model loaded at {path_prefix}/model.pt")
 
     def _load_dataset(self, env_name):
-        dataset_path = f"/home/epigou/cs_9170_project/Dataset_Test.pkl"
+        dataset_path = f"/home/epigou/cs_9170_project/Dataset_Large2.pkl"
         with open(dataset_path, "rb") as f:
             trajectories = pickle.load(f)
 
         states, traj_lens, returns = [], [], []
         totrets, totshape = [], []
-        
-        
-        if env_name.find('antmaze') != -1: # False: 
-            one_step_traj_count = 0
-            
-            # if it is antmaze, rule out trajectories that are 1-len
-            
-            idx = []
-            print("before-len:", len(trajectories))
-            for i in range(len(trajectories)):
-                #print('state:', trajectories[i]['state'])
-                # print('obs:', trajectories[i]['observations'])
-                
-                trajectories[i]['rewards'] -= 1
-                print(trajectories[i]['rewards'])
-                if trajectories[i]['observations'].shape[0] == 1 and self.variant['remove_trivial_trajs'] == 1:
-                    one_step_traj_count += 1
-                    if one_step_traj_count >= 10: continue
-                
-                idx.append(i)
-            # medium-play: 10752 -> 1316
-            # medium-diverse: 2955 -> 1203
-            # umaze-diverse: 1035 -> 1020
-            # large-diverse: 7182 -> 1743
-            # large-play: 13499 -> 1870
-            trajectories = [trajectories[i] for i in idx] 
-            print("after-len:", len(trajectories))
-            #print("subreward!")
-            #for i in range(len(trajectories)):
-            #     print("start:", trajectories[i]['observations'][0], "end:", trajectories[i]['observations'][-1], "len:", trajectories[i]['observations'].shape)
-            #     print("total_reward:", trajectories[i]['rewards']) 
-            
-            #exit(0)
         
         for i in range(len(trajectories)):
             #print("REW-before:", trajectories[i]['rewards'].sum())
@@ -272,6 +241,11 @@ class Experiment:
         # used for input normalization
         states = np.concatenate(states, axis=0)
         state_mean, state_std = np.mean(states, axis=0), np.std(states, axis=0) + 1e-6
+
+        all_actions = np.concatenate([path["actions"] for path in trajectories], axis=0)
+        action_mean = np.mean(all_actions, axis=0)
+        action_std  = np.std(all_actions,  axis=0) + 1e-6
+
         num_timesteps = sum(traj_lens)
 
         print("=" * 50)
@@ -294,7 +268,7 @@ class Experiment:
         sorted_inds = sorted_inds[-num_trajectories:]
         trajectories = [trajectories[ii] for ii in sorted_inds]
 
-        return trajectories, state_mean, state_std
+        return trajectories, state_mean, state_std, action_mean, action_std
 
     def determine_rl_params(self, variant):
         if variant['rl_algo'] == 'TD3':
@@ -332,7 +306,7 @@ class Experiment:
         t0 = time.time()  
         with torch.no_grad():
             # generate init state
-            target_return = [target_explore * self.reward_scale] * online_envs.num_envs
+            target_return = [target_explore * self.reward_scale]
 
             print("target-return:", target_return)
             #exit(0)
@@ -341,7 +315,7 @@ class Experiment:
                 self.state_dim,
                 self.act_dim,
                 self.model,
-                self.variant['online_data_mode'],
+                self.variant,
                 max_ep_len=max_ep_len,
                 reward_scale=self.reward_scale,
                 target_return=target_return,
@@ -357,19 +331,21 @@ class Experiment:
         if self.variant['rl_algo'] in ["PPO", "AWR"]:
             self.online_buffer.add_new_trajs(trajs)
         self.aug_trajs += trajs
-        self.total_transitions_sampled += np.sum(lengths)
+        self.total_transitions_sampled += lengths.sum().item()
         print("collect:", t1 - t0, "addtraj:", time.time() - t1, "total-return:", returns)
         return {
-            "aug_traj/return": np.mean(returns),
-            "aug_traj/length": np.mean(lengths),
+            "aug_traj/return": returns.mean().item(),
+            "aug_traj/length": lengths.float().mean().item(),
         }
+
+
 
     def pretrain(self, eval_envs, loss_fn):
         print("\n\n\n*** Pretrain ***")
 
         eval_fns = [
             create_vec_eval_episodes_fn(
-                env=eval_envs,
+                env=self.environment,
                 eval_rtg=self.variant["eval_rtg"],
                 state_dim=self.state_dim,
                 act_dim=self.act_dim,
@@ -419,6 +395,8 @@ class Experiment:
                 act_dim=self.act_dim,
                 state_mean=self.state_mean,
                 state_std=self.state_std,
+                action_mean=self.action_mean,
+                action_std=self.action_std,
                 reward_scale=self.reward_scale,
                 action_range=self.action_range
             )
@@ -501,7 +479,7 @@ class Experiment:
         )
         eval_fns = [
             create_vec_eval_episodes_fn(
-                env=eval_envs,
+                env=self.environment,
                 eval_rtg=self.variant["eval_rtg"],
                 state_dim=self.state_dim,
                 act_dim=self.act_dim,
@@ -544,6 +522,8 @@ class Experiment:
                 act_dim=self.act_dim,
                 state_mean=self.state_mean,
                 state_std=self.state_std,
+                action_mean=self.action_mean,
+                action_std=self.action_std,
                 reward_scale=self.reward_scale,
                 action_range=self.action_range
             )
@@ -575,7 +555,7 @@ class Experiment:
             elif self.variant['rl_algo'] == "AWR":
                 self.online_buffer.prune(self.variant['AWR_buffer_size'])
             if evaluation:
-                eval_outputs, eval_reward = self.evaluate(eval_fns, self.variant['video_debug'], self.EXP_NAME+"-iter"+str(self.online_iter))
+                eval_outputs, eval_reward = self.evaluate(eval_fns, 0, self.EXP_NAME+"-iter"+str(self.online_iter))
                 outputs.update(eval_outputs)
 
             t3 = time.time()
@@ -622,7 +602,7 @@ class Experiment:
             entropy_reg,
         ):
             # a_hat is a SquashedNormal Distribution
-            log_likelihood = a_hat_dist.log_likelihood(a)[attention_mask > 0].mean()
+            log_likelihood = a_hat_dist.log_prob(a)[attention_mask > 0].mean()
 
             entropy = a_hat_dist.entropy().mean()
             loss = -(log_likelihood + entropy_flag * entropy_reg * entropy)
@@ -636,27 +616,22 @@ class Experiment:
         def mse_loss_fn(a_hat, a, attention_mask):
             return ((a_hat - a) ** 2)[attention_mask > 0].mean()
 
-        def get_env_builder(seed, env_name, target_goal=None):
-            def make_env_fn():
-                env = self.environment
-                return env
 
-            return make_env_fn
+
 
         print("\n\nMaking Eval Env.....")
         env_name = self.variant["env"]
         target_goal = None
 
-        eval_envs = get_env_builder(self.seed, env_name=env_name, target_goal=target_goal)
+
 
         self.start_time = time.time()
         if self.variant["max_pretrain_iters"]:
-            self.pretrain(eval_envs, (loss_fn if self.variant['stoc'] == 1 else mse_loss_fn))
+            self.pretrain(self.environment, (loss_fn if self.variant['stoc'] == 1 else mse_loss_fn))
 
         if self.variant["max_online_iters"]:
             print("\n\nMaking Online Env.....")
-            online_envs = get_env_builder(self.seed, env_name=env_name, target_goal=target_goal)
-            self.online_tuning(online_envs, eval_envs, (loss_fn if self.variant['stoc'] == 1 else mse_loss_fn))
+            self.online_tuning(self.environment, self.environment, (loss_fn if self.variant['stoc'] == 1 else mse_loss_fn))
 
 
 def call_odt(env):
@@ -677,7 +652,7 @@ def call_odt(env):
         "custom_dataset":        0,
         "delayed_reward":        0,
         "remove_trivial_trajs":  1,
-        "replay_size":           1_000_000,
+        "replay_size":           10,
         "save_dir":              "./Temp",
 
         # ─── model & architecture ────────────────────────────────────────
@@ -696,15 +671,15 @@ def call_odt(env):
         "weight_decay":          1e-4,
         "grad_clip":             1,
         "lr_scheduler":          1,
-        "warmup_steps":          1000,
+        "warmup_steps":          25,
 
         # ─── data-loader & loops ─────────────────────────────────────────
-        "batch_size":            36,
+        "batch_size":            2,
         "num_updates_per_pretrain_iter": 1,
         "num_updates_per_online_iter":   1,
-        "max_pretrain_iters":    3,
-        "max_online_iters":      100,
-        "num_online_rollouts":   10,
+        "max_pretrain_iters":    0,
+        "max_online_iters":      2,
+        "num_online_rollouts":   1,
         "eval_interval":         10,
 
         # ─── supervised vs RL mix ───────────────────────────────────────
@@ -750,7 +725,7 @@ def call_odt(env):
         # ─── evaluation returns ──────────────────────────────────────────
         "online_rtg":            1.0,
         "eval_rtg":              0.0,
-        "minimum_sapairs_per_iter": 1_000,
+        "minimum_sapairs_per_iter": 5,
 
         # ─── critic settings ────────────────────────────────────────────
         "critic_time_dim":       1,
@@ -779,11 +754,10 @@ def call_odt(env):
     # suffix_alg = "-none" if args.actor_rl_coeff < 1e-10 else args.rl_algo
     # suffix_det = "-stoc" if args.stoc == 1 else "-det"
     EXP_NAME = "Synth-Data"
-    # wandb.init(
-    #     entity  = "YOUR_ENTITY",
-    #     project = "odt-TD3branch",
-    #     name    = EXP_NAME
-    # )
+    wandb.init(
+        project="odt-TD3branch",    # pick any project name you like
+        name=EXP_NAME,  
+    )
 
     print("=" * 50)
     # 7) Run pretrain + online finetuning

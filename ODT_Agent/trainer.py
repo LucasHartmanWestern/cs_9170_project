@@ -17,7 +17,7 @@ from .data import create_dataloader
 
 
 ########################################################################################## 
-from RL_as_Vitamin_for_Online_Decision_Transformers.decision_transformer.models.decision_transformer import TanhTransform, SquashedNormal
+from ODT_Agent.decision_transformer.models.decision_transformer import TanhTransform, SquashedNormal
 ##########################################################################################
 
 class SequenceTrainer:
@@ -329,12 +329,12 @@ class SequenceTrainer:
                                ordering,
                                padding_mask=padding_mask,
                            )
-                       old_logprob = old_action_preds.log_likelihood(actions).unsqueeze(-1)
+                       old_logprob = old_action_preds.log_prob(actions).unsqueeze(-1)
                        print("recorded_old_logprob:", recorded_old_logprob.view(-1))
                        #self.model_target.train()
                    ###################
                    
-                   logprob = action_preds.log_likelihood(actions).unsqueeze(-1)
+                   logprob = action_preds.log_prob(actions).unsqueeze(-1)
                    # dist_entropy = action_preds.entropy().unsqueeze(-1)
                    #print("shape1:", logprob.shape, old_logprob.shape)
                    assert logprob.shape == old_logprob.shape, "Error!"
@@ -530,7 +530,7 @@ class SequenceTrainer:
                     )
                     te = time.time()
                     if self.model.stochastic_policy:
-                        policy_logpp = action_preds.log_likelihood(actions).unsqueeze(-1)
+                        policy_logpp = action_preds.log_prob(actions).unsqueeze(-1)
                         ent = action_preds.entropy()
                     else:
                         policy_logpp = -((action_preds - actions) ** 2).sum(dim=-1).unsqueeze(-1)
@@ -690,7 +690,7 @@ class SequenceTrainer:
         with torch.no_grad():
             if self.model.stochastic_policy: 
                 next_actions = action_dist.sample()
-                next_actions_logprob = action_dist.log_likelihood(next_actions) 
+                next_actions_logprob = action_dist.log_prob(next_actions) 
                 target_Q = self.get_target_Q(next_states, next_actions, timesteps) - self.model.temperature() * next_actions_logprob.unsqueeze(-1) * (self.soft_flag != 0)
                 
             else:
@@ -728,7 +728,7 @@ class SequenceTrainer:
         action_dist = self.construct_next_action(trajs)
         with torch.no_grad():
             next_actions = action_dist.sample()
-            next_actions_logprob = action_dist.log_likelihood(next_actions) # entropy() ?
+            next_actions_logprob = action_dist.log_prob(next_actions) # entropy() ?
             
             t2 = time.time()
             
@@ -923,7 +923,7 @@ class SequenceTrainer:
             exp_adv = torch.exp(self.beta * adv.detach()).clamp(max=EXP_ADV_MAX).squeeze(dim=-1)
             action = action_preds.mean if self.model.stochastic_policy else action_preds
             if self.model.stochastic_policy:
-                policy_logpp = action_preds.log_likelihood(actions)
+                policy_logpp = action_preds.log_prob(actions)
             else:
                 policy_logpp = -((action_preds - actions) ** 2).sum(dim=-1)
             
@@ -962,7 +962,7 @@ class SequenceTrainer:
                     weights = torch.clamp(torch.exp(adv_pi), max=20).squeeze(-1) 
                 
             if self.model.stochastic_policy:
-                policy_logpp = action_preds.log_likelihood(actions)
+                policy_logpp = action_preds.log_prob(actions)
             else:
                 policy_logpp = -((action_preds - actions) ** 2).sum(dim=-1)
             # print(policy_logpp.shape, weights.shape, padding_mask.shape)

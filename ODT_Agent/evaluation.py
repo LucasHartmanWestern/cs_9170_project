@@ -41,16 +41,17 @@ def create_vec_eval_episodes_fn(
             video_debug=video_debug
         )
         
-        if video_debug == 0: returns, lengths, trajs = ret
-        else: returns, lengths, trajs, video = ret
+        returns, lengths, trajs = ret
         
         suffix = "_gm" if use_mean else ""
-        
+        returns_t = torch.tensor(returns, dtype=torch.float32, device=device)
+        lengths_t = torch.tensor(lengths, dtype=torch.float32, device=device)
+
         return {
-            f"evaluation/return_mean{suffix}": np.mean(returns),
-            f"evaluation/return_std{suffix}": np.std(returns),
-            f"evaluation/length_mean{suffix}": np.mean(lengths),
-            f"evaluation/length_std{suffix}": np.std(lengths),
+            f"evaluation/return_mean{suffix}": returns_t.mean().item(),
+            f"evaluation/return_std{suffix}":  returns_t.std(unbiased=False).item(),
+            f"evaluation/length_mean{suffix}": lengths_t.mean().item(),
+            f"evaluation/length_std{suffix}":  lengths_t.std(unbiased=False).item(),
             f"evaluation/return": returns,
             f"evaluation/length": lengths
         }
@@ -58,7 +59,7 @@ def create_vec_eval_episodes_fn(
     return eval_episodes_fn
 
 
-@torch.no_grad()
+
 def vec_evaluate_episode_rtg(
     env,
     state_dim,
@@ -90,11 +91,7 @@ def vec_evaluate_episode_rtg(
 
     # we keep all the histories on the device
     # note that the latest action and reward will be "padding"
-    states = (
-        torch.from_numpy(state)
-        .reshape(num_envs, state_dim)
-        .to(device=device, dtype=torch.float32)
-    ).reshape(num_envs, -1, state_dim)
+    states = state.view(num_envs, -1, state_dim)
     
     next_states = torch.zeros(0, device=device, dtype=torch.float32)
     if model.stochastic_policy:
@@ -111,11 +108,9 @@ def vec_evaluate_episode_rtg(
     )
 
     # episode_return, episode_length = 0.0, 0
-    episode_return = np.zeros((num_envs, 1)).astype(float)
-    episode_length = np.full(num_envs, np.inf)
-    
-    
-    unfinished = np.ones(num_envs).astype(bool)
+    episode_return = torch.zeros((num_envs, 1), dtype=torch.float32, device=device)
+    episode_length = torch.full((num_envs,), max_ep_len, dtype=torch.long, device=device)  
+    unfinished = torch.ones((num_envs,), dtype=torch.bool, device=device)
 
     for t in range(max_ep_len):
         # add padding
@@ -135,134 +130,133 @@ def vec_evaluate_episode_rtg(
             ],
             dim=1,
         )
+        with torch.no_grad():
+            state_pred, action_dist, reward_pred = model.get_predictions(
+                (states - state_mean) / state_std,
+                actions,
+                rewards,
+                target_return,
+                timesteps,
+                num_envs=num_envs,
+            )
+        state_pred  = state_pred.detach().view(num_envs, -1)
+        reward_pred = reward_pred.detach().view(num_envs)
 
-        state_pred, action_dist, reward_pred = model.get_predictions(
-            (states.to(dtype=torch.float32) - state_mean) / state_std,
-            actions.to(dtype=torch.float32),
-            rewards.to(dtype=torch.float32),
-            target_return.to(dtype=torch.float32),
-            timesteps.to(dtype=torch.long),
-            num_envs=num_envs,
-        )
-        state_pred = state_pred.detach().cpu().numpy().reshape(num_envs, -1)
-        reward_pred = reward_pred.detach().cpu().numpy().reshape(num_envs)
-
-        # the return action is a SquashNormal distribution
+        # sample or pick the action tensor as before…
         if model.stochastic_policy:
             if use_mean:
-                action = action_dist.mean.reshape(num_envs, -1, act_dim) 
+                action = action_dist.mean.view(num_envs, -1, act_dim)
             else:
-                action = action_dist.sample().reshape(num_envs, -1, act_dim)
-                
-            # print("shape3:", action_dist.mean.shape, action.shape)
-            #print(action_dist.log_likelihood(action).shape, "!!!")
-            #exit(0)
-            action_log_probs.append(action_dist.log_likelihood(action.clamp(*model.action_range))[:, -1])
-            
+                action = action_dist.sample().view(num_envs, -1, act_dim)
+
+            # log‐probs for the last step
+            action_log_probs.append(
+                action_dist.log_prob(action.clamp(*model.action_range))[:, -1]
+            )
+
+            # take only the newest action
             action = action[:, -1]
-            
         else:
             action = action_dist[:, -1] + noise_level * torch.randn_like(action_dist[:, -1])
-        
+
+
         action = action.clamp(*model.action_range)
 
-        #print("action:") 
-        
+        # step the env; returns tensors now
+        state, reward, done, info = env.step(action)
 
-        state, reward, done, _ = env.step(action.detach().cpu().numpy())
-        
-        #####
-        #print("t:", t, action_dist.mean.shape, action_dist.mean[:, -1], action_dist.std[:, -1])
-        #print("states:", (states - state_mean) / state_std, "actions:", actions, "rewards:", rewards.view(-1), "target_return:", target_return.view(-1), "timesteps:", timesteps.view(-1))   
-        #####
-        # eval_env.step() will execute the action for all the sub-envs, for those where
-        # the episodes have terminated, the envs will be reset. Hence we use
-        # "unfinished" to track whether the first episode we roll out for each sub-env is
-        # finished. In contrast, "done" only relates to the current episode
-        episode_return[unfinished] += reward[unfinished].reshape(-1, 1)
+        # accumulate return for unfinished envs
+        episode_return[unfinished] += reward[unfinished].view(-1, 1)
 
+        # write the action into history
         actions[:, -1] = action
-        
-        #print(t, "action dimension:", action.shape)
-        
-        next_state = _['terminal_observation'] if ('terminal_observation' in _) else state
-        
-        state = (
-            torch.from_numpy(state).to(device=device).reshape(num_envs, -1, state_dim)
-        )
+
+        # choose terminal vs next observation
+        next_state = info.get("terminal_observation", state)
+
+        # append the new state into states history
+        state = state.view(num_envs, -1, state_dim)
         states = torch.cat([states, state], dim=1)
-        ###########
+
         
-        # print("info:", _)
-        
-        next_state = (
-            torch.from_numpy(next_state).to(device=device).reshape(num_envs, -1, state_dim)
-        )
-        next_states = torch.cat([next_states.float(), next_state.float()], dim=1)
-        ###########
-        reward = torch.from_numpy(reward).to(device=device).reshape(num_envs, 1)
+        # append the chosen next state
+        next_state = next_state.to(device=device, dtype=torch.float32) \
+                               .view(num_envs, -1, state_dim)
+        next_states = torch.cat([next_states, next_state], dim=1)
+
+        # insert the new reward
+        reward = reward.to(device=device, dtype=torch.float32).view(num_envs, 1)
         rewards[:, -1] = reward
 
+        # update the predicted return history
         if mode != "delayed":
             pred_return = target_return[:, -1] - (reward * reward_scale)
         else:
             pred_return = target_return[:, -1]
         target_return = torch.cat(
-            [target_return, pred_return.reshape(num_envs, -1, 1)], dim=1
-        )
-
-        timesteps = torch.cat(
-            [
-                timesteps,
-                torch.ones((num_envs, 1), device=device, dtype=torch.long).reshape(
-                    num_envs, 1
-                )
-                * (t + 1),
-            ],
+            [target_return, pred_return.view(num_envs, -1, 1)],
             dim=1,
         )
 
+        # bump the timestep counter
+        timesteps = torch.cat([
+            timesteps,
+            torch.full((num_envs, 1), t+1, dtype=torch.long, device=device),
+        ], dim=1)
+
+        # if we’re at the very last step, force done=True
         if t == max_ep_len - 1:
-            done = np.ones(done.shape).astype(bool)
+            done = torch.ones_like(unfinished)
 
-        if np.any(done):
-            ind = np.where(done)[0]
-            unfinished[ind] = False
-            episode_length[ind] = np.minimum(episode_length[ind], t + 1)
+        # update which envs just finished
+        done = done.to(device=device).bool()
+        newly_done = done & unfinished
 
-        if not np.any(unfinished):
+        # record the length for those that just finished
+        episode_length = torch.where(
+            newly_done,
+            torch.full_like(episode_length, t+1),
+            episode_length
+        )
+
+        # mark them as finished
+        unfinished = unfinished & (~done)
+
+        if not unfinished.any():
             break
+
     t1 = time.time()
-    if model.stochastic_policy: 
-        action_log_probs = torch.vstack(action_log_probs).T  
+    if model.stochastic_policy:
+        action_log_probs = torch.vstack(action_log_probs).T  # still on device
 
     trajectories = []
     for ii in range(num_envs):
-        ep_len = episode_length[ii].astype(int)
-        terminals = np.zeros(ep_len)
+        ep_len = episode_length[ii].item()
+
+        # terminals stays on device
+        terminals = torch.zeros(ep_len, dtype=torch.uint8, device=device)
         terminals[-1] = 1
+
         traj = {
-            "next_observations": next_states[ii].detach().cpu().numpy()[:ep_len],
-            "observations": states[ii].detach().cpu().numpy()[:ep_len],
-            "actions": actions[ii].detach().cpu().numpy()[:ep_len],
-            "rewards": rewards[ii].detach().cpu().numpy()[:ep_len],
-            "terminals": terminals,
+            "next_observations": next_states[ii, :ep_len].detach(),
+            "observations":      states[ii, :ep_len].detach(),
+            "actions":           actions[ii, :ep_len].detach(),
+            "rewards":           rewards[ii, :ep_len].detach(),
+            "terminals":         terminals,
         }
-        if model.stochastic_policy: traj["action_log_probs"] = action_log_probs[ii].detach().cpu().numpy()[:ep_len]
+
+        if model.stochastic_policy:
+            traj["action_log_probs"] = action_log_probs[ii, :ep_len].detach()
+
         trajectories.append(traj)
+
     t2 = time.time()
     print("collecttraj:", t1 - t0, "deal:", t2 - t1)
-    
-    if video_debug == 0:
-        return (
-            episode_return.reshape(num_envs),
-            episode_length.reshape(num_envs),
-            trajectories,
-        )
-    else:
-        return (
-            episode_return.reshape(num_envs),
-            episode_length.reshape(num_envs),
-            trajectories,
-            video
-        )
+
+    return (
+        episode_return.view(num_envs),
+        episode_length.view(num_envs),
+        trajectories,
+    )
+
+

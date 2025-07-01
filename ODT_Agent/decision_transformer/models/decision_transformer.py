@@ -16,12 +16,13 @@ import torch.nn as nn
 
 import transformers
 import time
-from RL_as_Vitamin_for_Online_Decision_Transformers.decision_transformer.models.model import TrajectoryModel
-from RL_as_Vitamin_for_Online_Decision_Transformers.decision_transformer.models.trajectory_gpt2 import GPT2Model
+from ODT_Agent.decision_transformer.models.model import TrajectoryModel
+from ODT_Agent.decision_transformer.models.trajectory_gpt2 import GPT2Model
 import math
 import numpy as np
 import torch.nn.functional as F
 from torch import distributions as pyd
+from torch.distributions import Normal, Independent
 
 
 class TanhTransform(pyd.transforms.Transform):
@@ -114,14 +115,14 @@ class DiagGaussianActor(nn.Module):
         self.apply(weight_init)
 
     def forward(self, obs):
+        # produce the mean and (bounded) log‐std as before
         mu, log_std = self.mu(obs), self.log_std(obs)
         log_std = torch.tanh(log_std)
-        # log_std is the output of tanh so it will be between [-1, 1]
-        # map it to be between [log_std_min, log_std_max]
         log_std_min, log_std_max = self.log_std_bounds
         log_std = log_std_min + 0.5 * (log_std_max - log_std_min) * (log_std + 1.0)
         std = log_std.exp()
-        return SquashedNormal(mu, std)
+        base = Normal(mu, std)
+        return Independent(base, 1)
 
 
 class DecisionTransformer(TrajectoryModel):
