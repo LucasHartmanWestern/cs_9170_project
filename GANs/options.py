@@ -23,11 +23,6 @@ class Options():
         self.parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
         # original
-        # self.parser.add_argument(
-        #     '--data_name',
-        #     choices=['sine', 'stock', 'energy'],
-        #     default='stock',
-        #     type=str)
         self.parser.add_argument(
             '--z_dim',
             help='z or data dimension (number of features)',
@@ -36,7 +31,7 @@ class Options():
         self.parser.add_argument(
             '--seq_len',
             help='sequence length',
-            default=24,
+            default=64, # originally 24
             type=int)
         self.parser.add_argument(
             '--module',
@@ -46,7 +41,7 @@ class Options():
         self.parser.add_argument(
             '--hidden_dim',
             help='hidden state dimensions (should be optimized)',
-            default=24,
+            default=64, # originally 24
             type=int)
         self.parser.add_argument(
             '--num_layer',
@@ -56,12 +51,12 @@ class Options():
         self.parser.add_argument(
             '--iteration',
             help='Training iterations (should be optimized)',
-            default=50000,
+            default=100, # originally 50,000
             type=int)
         self.parser.add_argument(
             '--batch_size',
             help='the number of samples in mini-batch (should be optimized)',
-            default=128,
+            default=64, # originally 128
             type=int)
         self.parser.add_argument(
             '--metric_iteration',
@@ -75,25 +70,16 @@ class Options():
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
         self.parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
         self.parser.add_argument('--model', type=str, default='TimeGAN', help='chooses which model to use. timegan')
-
         self.parser.add_argument('--outf', default='./output', help='folder to output images and model checkpoints')
         self.parser.add_argument('--name', type=str, default='experiment_name', help='name of the experiment')
-
-        # self.parser.add_argument('--display_server', type=str, default="http://localhost", help='visdom server of the web display')
-        # self.parser.add_argument('--display_port', type=int, default=8097, help='visdom port of the web display')
-        # self.parser.add_argument('--display_id', type=int, default=0, help='window id of the web display')
-        # self.parser.add_argument('--display', action='store_true', help='Use visdom.')
-
         self.parser.add_argument('--manualseed', default=-1, type=int, help='manual seed')
 
         # Train
         self.parser.add_argument('--print_freq', type=int, default=1000, help='frequency of showing training results on console')
         self.parser.add_argument('--load_weights', action='store_true', help='Load the pretrained weights')
         self.parser.add_argument('--resume', default='', help="path to checkpoints (to continue training)")
-
         self.parser.add_argument('--beta1', type=float, default=0.9, help='momentum term of adam')
         self.parser.add_argument('--lr', type=float, default=0.001, help='initial learning rate for adam')
-
         self.parser.add_argument('--w_gamma', type=float, default=1, help='Gamma weight')
         self.parser.add_argument('--w_es', type=float, default=0.1, help='Encoder loss weight')
         self.parser.add_argument('--w_e0', type=float, default=10, help='Encoder loss weight')
