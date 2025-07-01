@@ -13,10 +13,12 @@ def evaluate_model(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int) -> tup
     agent.model.eval()
     with torch.no_grad():
         preds = agent.predict(x)
+        preds = preds.to(y.device)
 
         if not isinstance(preds, torch.Tensor):
             preds = torch.tensor(preds, device=y.device, dtype=y.dtype)
     
+
     # Compute overall MSE
     mse = F.mse_loss(preds, y).item()
     mae = F.l1_loss(preds, y).item()
@@ -69,8 +71,11 @@ def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
     
     activity_id = torch.randint(1, 3, (1,), generator=rng, device=device).float()
 
+
     state_vector = torch.cat([timestamp, age, activity_id, mf_ratio, n_samples], dim=0)
     return state_vector
+
+    
 
 #m/f ratio reward 
 def compute_mini_reward(synthetic_features, mf_ratio):
