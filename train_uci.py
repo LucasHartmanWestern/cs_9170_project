@@ -69,15 +69,15 @@ class Training:
         y_train, y_theta_test = y.loc[train_idx], y.loc[test_idx]
         return X_train, X_theta_test, y_train, y_theta_test
 
-    def train_alpha_agent(self, hidden_layer_sizes=(64, 32), max_iter=10, lr=1e-3, seed=0, **kwargs):
+    def train_alpha_agent(self, X_train, y_train, X_test, y_test, hidden_layer_sizes=(64, 32), max_iter=10, lr=1e-3, seed=0, **kwargs):
 
         model = MLPRegressor(hidden_layer_sizes=hidden_layer_sizes, activation='relu', max_iter=max_iter, learning_rate_init=lr, random_state=seed)
-        model.fit(self.X_train, self.y_train)
+        model.fit(X_train, y_train)
 
-        y_pred = model.predict(self.X_test)
-        baseline_mse = mean_squared_error(self.y_test, y_pred)
-        baseline_mae = mean_absolute_error(self.y_test, y_pred)
-        return baseline_mse, baseline_mae
+        y_pred = model.predict(X_test)
+        baseline_mse = mean_squared_error(y_test, y_pred)
+        baseline_mae = mean_absolute_error(y_test, y_pred)
+        return model, baseline_mse, baseline_mae
 
 
 
@@ -148,12 +148,7 @@ class Training:
         else:
             return err_b      # use beta model’s per‐action cost
 
-    def compute_reward(self,
-            alpha_model, beta_model,
-            X_theta_test, y_theta_test,
-            X_phi,       y_phi,
-            lamb=1.0
-        ):
+    def compute_reward(self, alpha_model, beta_model,X_theta_test, y_theta_test, X_phi, y_phi, lamb=1.0):
         #global term 
         g = self.global_error(beta_model, X_theta_test, y_theta_test)
 
@@ -171,18 +166,17 @@ class Training:
     def __call__(self):
         print('Begin train loop')
         # Training hyperparameters
-        EPISODES       = 20
-        SYNTHETIC_TUPLES  = 200
-        PPO_UPDATES    = EPISODES 
-        ALPHA_DIV      = 0.2
-        LSTM_EPOCHS    = 5
+        EPISODES        = 20
+        TRAJ_LENGTH     = 200
+        MODEL_EPOCHS    = 5
+
         window_size = 5
-        from collections import deque
 
-        # Prepare data and baseline
+        # Prepare data and baseline (Alpha model)
         X_theta_train, X_theta_test, y_theta_train, y_theta_test = self.split_dataset()
-        baseline_mse, baseline_mae = self.train_alpha_agent(epochs=LSTM_EPOCHS)
+        alpha_model, baseline_mse, baseline_mae = self.train_alpha_agent(X_theta_train, y_theta_train, X_theta_test, y_theta_test, epochs=MODEL_EPOCHS)
 
+        beta_model = MLPRegressor(hidden_layer_sizes=(64, 32), activation='relu', max_iter=10, learning_rate_init=1e-3, random_state=seed)
 
         # Environment and agent setup NOTE that sex is forced female in environment
         features = ['AGEP', 'COW', 'SCHL', 'WKHP']
@@ -198,61 +192,65 @@ class Training:
             target=target,
             baseline_mse=baseline_mse,
             male_hi=self.males_hi,
-            max_samples=SYNTHETIC_TUPLES,
+            max_samples=TRAJ_LENGTH,
             window_size=window_size,
             seed=seed
         )
 
         for episode in range(EPISODES):
             # Buffers for PPO
-            ppo_buffer       = []
-            generated_buffer = []
+            trajectory = np.zeros((TRAJ_LENGTH, len(features) + 2))  # +1 for SEX, +1 for target
+            states, actions = [], []
+            next_states, dones = [], []
+
+            X_syn_list, y_syn_list = [], []
 
             # Reset env
             state = env.reset()
+            #Generate a trajectory of length TRAJ_LENGTH
+            for t in range(TRAJ_LENGTH):
+                #Get action
+                action = self.ppo_agent.predict(state)             
+                next_state, _, done, info = env.step(action, (len(trajectory) + 1))
 
-            #Generate synthetic episode
-            for t in range(SYNTHETIC_TUPLES):
-                action = self.ppo_agent.predict(state)               # shape = (len(features),)
-                next_state, _, done, info = env.step(action, (len(generated_buffer) + 1))
-                
-                # store synthetic sample for LSTM (features + sampled_target)
+                states.append(state)
+                actions.append(action)
+                next_states.append(next_state)
+                dones.append(done)
+
+                # combine action with SEX and target, append to trajectory
                 sampled_t = info['sampled_target']
                 action_with_sex = np.concatenate([action, [2.0]])  #Forced female data
-                generated_buffer.append(np.concatenate([action_with_sex, [sampled_t]]))
+                trajectory.append(np.concatenate([action_with_sex, [sampled_t]]))
 
-                # save transition
-                ppo_buffer.append({'state': state, 'action': action, 'reward': 0.0})
+                X_syn_list.append(action_with_sex)
+                y_syn_list.append(sampled_t)
+
                 state = next_state
-                print(f'Generated synthetic tuple {t}/{SYNTHETIC_TUPLES}')
-            syn_arr = np.array(generated_buffer)
+                if done:
+                    break
+                print(f'Generated synthetic tuple {t}/{TRAJ_LENGTH}')
 
-            # Split syn_arr into X_synth and y_synth
-            if syn_arr.shape[0] > 0:
-                X_synth = syn_arr[:, :-1]
-                y_synth = syn_arr[:, -1]
-            else:
-                X_synth = np.empty((0, len(features)))
-                y_synth = np.empty((0,))
+            T = len(X_syn_list)
+            X_syn = np.stack(X_syn_list)    # shape [T, feature_dim]
+            y_syn = np.array(y_syn_list)    # shape [T]
 
-            # combine real biased + synthetic
-            print(f"X_biased shape: {X_theta_train.shape}")
-            print(f"X_synth shape: {X_synth.shape}")
-            X_aug = np.vstack([X_theta_train, X_synth])
-            y_aug = np.concatenate([y_theta_train, y_synth])
+            X_theta_test_t = torch.tensor(X_theta_test, dtype=torch.float32, device=self.device)
+            y_theta_test_t = torch.tensor(y_theta_test, dtype=torch.float32, device=self.device)
+            X_phi_t       = torch.tensor(X_syn, dtype=torch.float32, device=self.device)
+            y_phi_t       = torch.tensor(y_syn, dtype=torch.float32, device=self.device)    
 
-            #print()
-            model = MLPRegressor(hidden_layer_sizes=(64, 32), activation='relu', max_iter=200, random_state=0)
-            model.fit(X_aug, y_aug)
-            y_pred   = model.predict(X_test)
-            test_mse = mean_squared_error(y_test, y_pred)
+            X_hybrid = np.vstack([X_theta_train, X_phi_t ])
+            y_hybrid = np.concatenate([y_theta_train, y_phi_t ])
 
-            episodic_reward = self.compute_episode_quality(test_mse, baseline_mse)
-            self.ppo_agent.learn(state, syn_arr, episodic_reward, next_state, True)
+            beta_model.fit(X_hybrid, y_hybrid)
+            rewards = self.compute_reward(alpha_model, beta_model, X_theta_test_t, y_theta_test_t, X_phi_t, y_phi_t)
 
-            print(f"Episode {episode+1}/{EPISODES} — Episodic quality reward: {episodic_reward:.3f}")
+            for s, a, r, s_next, d in zip(states, actions, rewards, next_states, dones):
+                self.ppo_agent.learn(s, a, r, s_next, d)
+
+            #print(f"Episode {episode+1}/{EPISODES} — Episodic quality reward: {episodic_reward:.3f}")
     
-
 if __name__ == "__main__":
     train = Training()
     train()
