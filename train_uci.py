@@ -170,8 +170,6 @@ class Training:
         TRAJ_LENGTH     = 200
         MODEL_EPOCHS    = 5
 
-        window_size = 5
-
         # Prepare data and baseline (Alpha model)
         X_theta_train, X_theta_test, y_theta_train, y_theta_test = self.split_dataset()
         alpha_model, baseline_mse, baseline_mae = self.train_alpha_agent(X_theta_train, y_theta_train, X_theta_test, y_theta_test, epochs=MODEL_EPOCHS)
@@ -181,19 +179,18 @@ class Training:
         # Environment and agent setup NOTE that sex is forced female in loop
         features = ['AGEP', 'COW', 'SCHL', 'WKHP']
         target = 'PINCP'
-        threshold = 100.0
         seed = self.seed
 
 
         env = Environment(
             train_df=pd.concat([self.X_train, self.y_train.rename("PINCP")], axis=1),
-            threshold=threshold,
+            threshold=0,
             features=features,
             target=target,
             baseline_mse=baseline_mse,
             male_hi=self.males_hi,
             max_samples=TRAJ_LENGTH,
-            window_size=window_size,
+            window_size=5,
             seed=seed
         )
 
