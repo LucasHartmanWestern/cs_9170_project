@@ -9,6 +9,7 @@ import pandas as pd
 from data_processing import get_xy_from_data
 from torch.utils.data import TensorDataset, DataLoader
 
+
 def evaluate_model(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int) -> tuple[float, float]:
     agent.model.eval()
     with torch.no_grad():
@@ -22,7 +23,7 @@ def evaluate_model(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int) -> tup
     mae = F.l1_loss(preds, y).item()
 
     # Compute female-only MSE
-    female_mask = x[:, sex_idx] == 1
+    female_mask = y[:, sex_idx] == 1
     if female_mask.any():
         pred_f = preds[female_mask]
         y_f = y[female_mask]
@@ -30,6 +31,78 @@ def evaluate_model(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int) -> tup
     else:
         female_mse = float('nan')
     return mse, mae, female_mse
+
+
+def evaluate_mape(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int, mean: bool =False) -> tuple[float, float]:
+    agent.model.eval()
+    with torch.no_grad():
+        preds = agent.predict(x)
+
+        if not isinstance(preds, torch.Tensor):
+            preds = torch.tensor(preds, device=y.device, dtype=y.dtype)
+    
+    # Compute overall APE
+    # Avoid division by zero
+    epsilon = 1e-8
+    
+    # Compute absolute percentage error per element
+    ape = torch.abs((y - preds) / (y + epsilon))
+
+
+    # Compute female-only APE
+    female_mask = y[:, sex_idx] == 1
+    if female_mask.any():
+        pred_f = preds[female_mask]
+        y_f = y[female_mask]
+        female_ape = torch.abs((y_f - pred_f) / (y_f + epsilon))
+    else:
+        female_ape = float('nan')
+
+    print(f'')
+
+    if mean:
+        mf_ape = ape.mean().item()
+        f_ape = female_ape.mean().item()
+    else:
+        mf_ape = ape.mean(axis=1)
+        f_ape = female_ape.mean(axis=1)
+        
+    return mf_ape, f_ape
+
+
+def evaluate_mae(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int, mean: bool =False) -> tuple[float, float]:
+    agent.model.eval()
+    with torch.no_grad():
+        preds = agent.predict(x)
+
+        if not isinstance(preds, torch.Tensor):
+            preds = torch.tensor(preds, device=y.device, dtype=y.dtype)
+    
+    # Compute overall ae
+    # Compute mean error per element
+    ae = torch.abs((y - preds))
+
+
+    # Compute female-only AE
+    female_mask = y[:, sex_idx] == 1
+    if female_mask.any():
+        pred_f = preds[female_mask]
+        y_f = y[female_mask]
+        female_ae = torch.abs((y_f - pred_f))
+    else:
+        female_ae = float('nan')
+
+    print(f'')
+
+    if mean:
+        mf_ae = ae.mean().item()
+        f_ae = female_ae.mean().item()
+    else:
+        mf_ae = ae.mean(axis=1)
+        f_ae = female_ae.mean(axis=1)
+        
+    return mf_ae, f_ae
+
 
 
 def plot_losses(losses):
@@ -69,19 +142,19 @@ def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
     
     activity_id = torch.randint(1, 3, (1,), generator=rng, device=device).float()
 
-    state_vector = torch.cat([timestamp, mf_ratio, n_samples, age, activity_id], dim=0)
+    state_vector = torch.cat([timestamp, age, activity_id, mf_ratio, n_samples], dim=0)
     return state_vector
 
 #m/f ratio reward 
-def compute_mini_reward(synthetic_data, mf_ratio):
+def calculate_mini_reward(synthetic_features, mf_ratio):
     # mf_ratio: 0-dim tensor
     #setting a cap for maximum std
-    max_cap = 2
-    std = synthetic_data.std(dim=0, unbiased=False).mean()
+    max_cap = torch.tensor(2.0)
+    std = synthetic_features.std(dim=0, unbiased=False).mean()
     # print(f'std {std}')
-    std_term = min(max_cap,synthetic_data.std(dim=0, unbiased=False).mean())
-    gauss    = max_cap*torch.exp(-((mf_ratio - 0.5)**2) / 0.1)
-    mini_reward = (std_term + gauss).item()
+    std_term = torch.minimum(max_cap,std)
+    gauss    = torch.exp(-((mf_ratio - 0.5)**2) / 0.1)
+    mini_reward = (std_term + gauss)
     # print(f' mini reward {mini_reward:.2f} std = {std:.2f}, gaus {gauss:.2f}')
     return mini_reward
 
@@ -112,7 +185,7 @@ def train_model_baseline(
     x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
     x_test_df,  y_test_df  = get_xy_from_data(df_test,  target_features)
 
-    sex_female_idx = x_train_df.columns.get_loc('Sex - Female')
+    sex_female_idx = y_train_df.columns.get_loc('Sex - Female')
 
     x_train = torch.tensor(x_train_df.values, dtype=torch.float32, device=device)
     y_train = torch.tensor(y_train_df.values, dtype=torch.float32, device=device)
@@ -123,33 +196,13 @@ def train_model_baseline(
 
     results = {}
 
-    def _run_and_eval(agent, x_tr, y_tr, x_v, y_v, x_te, y_te, tag):
-        print(f"\n--- {tag} ---")
-        dataset = TensorDataset(x_tr, y_tr)
-        loader = DataLoader(dataset, batch_size=agent.batch_size, shuffle=shuffle)
-        losses = agent.train(loader)
 
-        if show_loss_plots:
-            plot_losses(losses)
-
-        m_tr, _, fm_tr = evaluate_model(agent, x_tr, y_tr, sex_female_idx)
-        m_v,  _, fm_v  = evaluate_model(agent, x_v, y_v, sex_female_idx)
-        m_te, _, fm_te = evaluate_model(agent, x_te, y_te, sex_female_idx)
-
-        print(f"{tag} Train MSE: {m_tr:.4f} | Female MSE: {fm_tr:.4f}")
-        print(f"{tag} Val   MSE: {m_v:.4f}  | Female MSE: {fm_v:.4f}")
-        print(f"{tag} Test  MSE: {m_te:.4f} | Female MSE: {fm_te:.4f}")
-        return {
-            "train": {"mse": m_tr,  "female_mse": fm_tr},
-            "val":   {"mse": m_v,   "female_mse": fm_v},
-            "test":  {"mse": m_te,  "female_mse": fm_te},
-        }
 
     # Experiment 1: baseline
     print(f"\nTraining {type(agent).__name__} baseline on original data…")
     one_start_time = time.time()
     base_agent = copy.deepcopy(agent)
-    results["baseline"] = _run_and_eval(base_agent, x_train, y_train, x_val, y_val, x_test, y_test, "Baseline")
+    results["baseline"],_ = _run_and_eval(base_agent, sex_female_idx, x_train, y_train, x_val, y_val, x_test, y_test, "Baseline", shuffle=shuffle)
     one_end_time = time.time()
     print(f'Experiment 1 time: {one_end_time - one_start_time}\n')
     # Experiment 2: oversampling minority
@@ -175,7 +228,7 @@ def train_model_baseline(
 
     print(f"\nTraining {type(agent).__name__} with minority oversampling…")
     os_agent = copy.deepcopy(agent)
-    results["oversample"] = _run_and_eval(os_agent, x_os, y_os, x_val, y_val, x_test, y_test, "Oversampled")
+    results["oversample"],_ = _run_and_eval(os_agent, sex_female_idx, sex_female_idx, x_os, y_os, x_val, y_val, x_test, y_test, "Oversampled", shuffle=shuffle)
     two_end_time = time.time()
     print(f'Experiment 2 time: { two_end_time - two_start_time}\n')
     # Experiment 3: undersampling majority
@@ -196,7 +249,7 @@ def train_model_baseline(
     print(f"\nTraining {type(agent).__name__} with majority undersampling…")
     us_agent = copy.deepcopy(agent)
 
-    results["undersample"] = _run_and_eval(us_agent, x_us, y_us, x_val, y_val, x_test, y_test, "Undersampled")
+    results["undersample"],_ = _run_and_eval(us_agent, sex_female_idx, x_us, y_us, x_val, y_val, x_test, y_test, "Undersampled",shuffle=shuffle)
     three_end_time = time.time()
     print(f'Experiment 3 time: { three_end_time - three_start_time}\n')
 
@@ -208,6 +261,29 @@ def train_model_baseline(
 
     return results
 
+
+def _run_and_eval(agent, sex_female_idx, x_tr, y_tr, x_v, y_v, x_te, y_te, tag, shuffle=False):
+    print(f"\n--- {tag} ---")
+    dataset = TensorDataset(x_tr, y_tr)
+    loader = DataLoader(dataset, batch_size=agent.batch_size, shuffle=shuffle)
+    losses = agent.train(loader)
+
+    m_tr, _, fm_tr = evaluate_model(agent, x_tr, y_tr, sex_female_idx)
+    m_v,  _, fm_v  = evaluate_model(agent, x_v, y_v, sex_female_idx)
+    m_te, _, fm_te = evaluate_model(agent, x_te, y_te, sex_female_idx)
+
+    print(f"{tag} Train MSE: {m_tr:.4f} | Female MSE: {fm_tr:.4f}")
+    print(f"{tag} Val   MSE: {m_v:.4f}  | Female MSE: {fm_v:.4f}")
+    print(f"{tag} Test  MSE: {m_te:.4f} | Female MSE: {fm_te:.4f}")
+    return {
+        "train": {"mse": m_tr,  "female_mse": fm_tr},
+        "val":   {"mse": m_v,   "female_mse": fm_v},
+        "test":  {"mse": m_te,  "female_mse": fm_te},
+    }
+
+
+
+
 def train_agents(
         df_train, 
         df_val, 
@@ -216,9 +292,9 @@ def train_agents(
         dqn_agent, 
         ppo_agent, 
         base_agent, 
-        continuous_columns, 
+        action_col, 
         episodes, 
-        synthetic_data_amount, 
+        synthetic_features_amount, 
         accuracy_reward_multiplier,
         save_location,
         eval_val_only=True,
@@ -249,8 +325,10 @@ def train_agents(
     x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
     x_test_df,  y_test_df  = get_xy_from_data(df_test,  target_features)
 
-    sex_female_idx = x_train_df.columns.get_loc('Sex - Female')
-    hr_idx         = x_train_df.columns.get_loc('Heart Rate')
+    # Defining columns index
+    sex_female_idx = y_train_df.columns.get_loc('Sex - Female')
+    sex_female_action = action_col.index('Sex - Female')
+    hr_idx         = y_train_df.columns.get_loc('Heart Rate')
 
     x_train = torch.tensor(x_train_df.values, dtype=torch.float32, device=device)
     y_train = torch.tensor(y_train_df.values, dtype=torch.float32, device=device)
@@ -259,9 +337,13 @@ def train_agents(
     x_test  = torch.tensor(x_test_df.values,  dtype=torch.float32, device=device)
     y_test  = torch.tensor(y_test_df.values,  dtype=torch.float32, device=device)
 
+    #Generate discriminator based on the baseline with oringinal data
+    discriminator = copy.deepcopy(base_agent)
+    print(f"\nTraining {type(discriminator).__name__} discriminator on original data…")
+    results = _run_and_eval(discriminator, sex_female_idx, x_train, y_train, x_val, y_val, x_test, y_test, "Baseline", shuffle=shuffle)
 
     N = x_train.size(0)
-    mf_ratio = train_female_ratio  = x_train[:, sex_female_idx].mean()
+    mf_ratio = x_train[:, sex_female_idx].mean()
     n_samples  = torch.tensor(0.0, dtype=torch.float32, device=device)
     timestamp_idx = x_train_df.columns.get_loc('Timestamp')
     
@@ -272,11 +354,15 @@ def train_agents(
         print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
 
         #Resets
-        synthetic_data = torch.empty(synthetic_data_amount, x_train.shape[1], device=device)
-        synthetic_labels = torch.empty(synthetic_data_amount, y_train.shape[1], device=device)
+        synthetic_features = torch.zeros(synthetic_features_amount, x_train.shape[1], device=device)
+        synthetic_targets  = torch.zeros(synthetic_features_amount, y_train.shape[1], device=device)
         sum_synth_female = 0.0
 
-        for i in range(synthetic_data_amount):
+        states_ep = []
+        next_states_ep = []
+        continuous_action_ep =[]
+
+        for i in range(synthetic_features_amount):
 
             # discrete_action = torch.as_tensor(
             #     dqn_agent.predict(state),
@@ -289,53 +375,81 @@ def train_agents(
                 dtype=torch.float32,
                 device=device
             ).flatten()
+            continuous_action_ep.append(continuous_action)
 
             # row = torch.zeros(x_train.size(1), device=device)
             # row[sex_female_idx] = discrete_action[0]
             # hr_idx = x_train_df.columns.get_loc("Heart Rate")
             # row[hr_idx]         = discrete_action[1]
-            # cont_idx = x_train_df.columns.get_indexer(continuous_columns).tolist()
+            # cont_idx = x_train_df.columns.get_indexer(action_col).tolist()
             # row[cont_idx]       = continuous_action
-            # synthetic_data[i] = row
+            # synthetic_features[i] = row
 
-            # print(f'continues action {continuous_action}')
 
-            row = torch.zeros(x_train.size(1), device=device)
-            row[sex_female_idx] = continuous_action[-6]
-            hr_idx = x_train_df.columns.get_loc("Heart Rate")
-            row[hr_idx]         = continuous_action[-5]
-            cont_idx = x_train_df.columns.get_indexer(continuous_columns[:-6]).tolist()
-            row[cont_idx]       = continuous_action[:-6]
-            synthetic_data[i] = row
+            # synthetic_features[i,sex_female_idx] = F.softmax(continuous_action[-6])
+            # synthetic_features[i,hr_idx]         = continuous_action[-5]
+            # cont_idx = x_train_df.columns.get_indexer(action_col[:-6]).tolist()
+            # synthetic_features[i,cont_idx]       = continuous_action[:-6]
 
-            # build synthetic label row
-            age = state[3].unsqueeze(0)
-            preds = continuous_action[-4:]
-            tgt_vals = torch.cat([
-                preds[:2],   # shape (2,)
-                age,         # shape (1,)
-                preds[2:]    # shape (2,)
-            ], dim=0)
+            # # build synthetic label row
+            # age = state[3].unsqueeze(0)
+            # preds = continuous_action[-4:]
+            # tgt_vals = torch.cat([
+            #     preds[:2],   # shape (2,)
+            #     age,         # shape (1,)
+            #     preds[2:]    # shape (2,)
+            # ], dim=0)
+            # Get state defined fields
+
+            # Constraining categoricals
+            # For sex - Female
+            continuous_action[sex_female_action] = F.softmax(continuous_action[sex_female_action],dim=0)
             
-            synthetic_labels[i] = tgt_vals
+            timestamp = state[0].unsqueeze(0)
+            age = state[1].unsqueeze(0)
+            activity_id = state[2].unsqueeze(0)
 
-            sum_synth_female += row[sex_female_idx].item()
+            #cat feature variables
+            features = torch.cat([
+                timestamp, #timestamp from state
+                activity_id, #activity_id from state
+                continuous_action[:-4], #all sensor data + Resting HR and max HR
+                # discrete_action[2:4] #"Resting HR", "Max HR",
+            ])
+
+            synthetic_features[i] = features
+
+            labels = torch.cat([
+                continuous_action[-4:],   #  Height, Weight, Sex, Heart Rate
+                age,                   # Age from state
+            ], dim=0)          
+            synthetic_targets[i] = labels
+
+
+            sum_synth_female += synthetic_targets[i,sex_female_idx].item() #Get number of female entires
             n_synth = i + 1
-            mf_ratio = (N * train_female_ratio  + sum_synth_female) / (N + n_synth)
+            # mf_ratio = (N * train_female_ratio  + sum_synth_female) / (N + n_synth)
       
-            mini_reward = compute_mini_reward(synthetic_data[: i+1 ], mf_ratio)
+            # mini_reward = compute_mini_reward(synthetic_features[: i+1 ], mf_ratio)
 
-            done        = (i == synthetic_data_amount - 1)
+            done        = (i == synthetic_features_amount - 1)
 
             #Once all synthetic data samples have been generated
             if done:
                 print(f"Episode {episode + 1}/{episodes}: Training {type(base_agent).__name__} ")
+                #Discriminator evaluation
+                # print(f'line 412 checking female {synthetic_features[:,sex_female_idx]}')
+
+                # Calculating male female ration on synthetic data
+                mf_ratio_synthetic = synthetic_features[:, sex_female_idx] 
+                disc_val_ape, disc_val_female_ape = evaluate_mae(discriminator, synthetic_features, synthetic_targets, sex_female_idx)
+                print(f'discriminator male-femal val mse {disc_val_ape.mean()}, female val {disc_val_female_ape.mean()}')
                 
                 base_agent.reset()
 
                 # concatenate real + synthetic
-                combined_data   = torch.cat([x_train, synthetic_data], dim=0)    # (N+n, D)
-                combined_labels = torch.cat([y_train, synthetic_labels], dim=0) # (N+n, 5)
+                combined_data   = torch.cat([x_train, synthetic_features], dim=0)    # (N+n, D)
+                combined_labels = torch.cat([y_train, synthetic_targets], dim=0) # (N+n, 5)
 
                 combined_dataset = TensorDataset(combined_data, combined_labels)
                 loader = DataLoader(
@@ -348,43 +462,65 @@ def train_agents(
 
                 # Train FFNN or LSTM
                 losses = base_agent.train(loader)
-                if show_loss_plots:
-                    plot_losses(losses)
-
                 print(f"Episode {episode + 1}/{episodes}: Evaluating {type(base_agent).__name__} ")
 
-                val_mse, val_mae, val_female_mse = evaluate_model(base_agent, x_val, y_val, sex_female_idx)
-                val_accuracies.append(val_mse)
-                val_female_accuracies.append(val_female_mse)
-                if not eval_val_only:
-                    train_mse, train_mae, train_female_mse = evaluate_model(base_agent, x_train, y_train, sex_female_idx)
-                    test_mse, test_mae, test_female_mse = evaluate_model(base_agent, x_test, y_test, sex_female_idx)
-                    train_accuracies.append(train_mse)
-                    test_accuracies.append(test_mse)
-                    train_female_accuracies.append(train_female_mse)
-                    test_female_accuracies.append(test_female_mse)
+                val_ape, val_female_ape = evaluate_mae(base_agent, x_val, y_val, sex_female_idx, mean=False)
+
+                val_accuracies.append(val_ape.mean().item())
+                val_female_accuracies.append(val_female_ape.mean().item())
+                # if not eval_val_only:
+                #     train_mse, train_mae, train_female_mse = evaluate_model(base_agent, x_train, y_train, sex_female_idx)
+                #     test_mse, test_mae, test_female_mse = evaluate_model(base_agent, x_test, y_test, sex_female_idx)
+                #     train_accuracies.append(train_mse)
+                #     test_accuracies.append(test_mse)
+                #     train_female_accuracies.append(train_female_mse)
+                #     test_female_accuracies.append(test_female_mse)
+
+                
                 # Reward is based on validation performance and mini reward
                 # reward = (accuracy_reward_multiplier * val_mse * -1) + (mini_reward)
 
-                reward = -1*(val_mse+val_female_mse) 
-                
-                print(f'mini reward: {mini_reward}')
+                # reward = -1*(val_mse+val_female_mse)
+                w1 = 1
+                w2 = 0.25
+                w3 = 1
+                w4 = 1
+                # Current model predictor mape performance
+                obj_1 = torch.ones(synthetic_features_amount)*val_ape.mean()
+                # Discriminator or predictor trained with original and evaluated with synthetic data ape
+                obj_2 = disc_val_ape
+                # Minority performance with current predictor trained with combined data ape
+                obj_3 = torch.ones(synthetic_features_amount)*val_female_ape.mean()
+                # Diversify results
+                # NEEDS DISCUSSION! Should we consider the MF only synthetic ratio or the combined dataset ratio?
+                mf_ratio = synthetic_targets[:, sex_female_idx].mean()
+                diverse_reward = calculate_mini_reward(synthetic_features, mf_ratio)
+                obj_4 = torch.ones(synthetic_features_amount)*diverse_reward
 
-                print(f"Episode {episode + 1}/{episodes} | Reward: {reward:.4f}")
-                print(f"Val MSE: {val_mse:.4f} | Val Female MSE: {val_female_mse:.4f}")
+                rewards_ep = -1*(w1*obj_1 + w2*obj_2 + w3*obj_3 - w4*obj_4)
+                print(f'reward mean{rewards_ep.mean():.4f}, by objectives: {obj_1.mean().item():.4f} - {obj_2.mean().item():.4f} - {obj_3.mean().item():.4f}')
+                
+
+                print(f"Episode {episode + 1}/{episodes} | Reward: {rewards_ep.mean():.4f}")
+                print(f"Val MAPE: {val_ape.mean().item():.4f} | Val Female MAPE: {val_female_ape.mean().item():.4f}")
 
                 if not eval_val_only:
                     print(f"Train MSE: {train_mse:.4f} | Train Female MSE: {train_female_mse:.4f}")
                     print(f"Test MSE: {test_mse:.4f} | Test Female MSE: {test_female_mse:.4f}")
 
+                dones_ep = torch.zeros(len(rewards_ep), dtype=torch.bool)
+                dones_ep[-1] = done
+
                 # dqn_agent.learn(state, discrete_action, reward, next_state, done)
-                ppo_agent.learn(state, continuous_action, reward, next_state, done)  
-                rewards.append(reward)
+                ppo_agent.learn(states_ep, continuous_action_ep, rewards_ep, next_states_ep, dones_ep)  
+                rewards.append(rewards_ep.mean().item())
 
             # else:
             #     reward = mini_reward
 
-            next_state = generate_state(x_train, timestamp_idx, mf_ratio, torch.tensor(len(synthetic_data)+1., dtype=torch.float32, device=device), rng, device)
+            next_state = generate_state(x_train, timestamp_idx, mf_ratio, torch.tensor(i + 1, dtype=torch.float32, device=device), rng, device)
+            states_ep.append(state)
+            next_states_ep.append(next_state)
             # dqn_agent.learn(state, discrete_action, reward, next_state, done)
             # ppo_agent.learn(state, continuous_action, reward, next_state, done)
 
