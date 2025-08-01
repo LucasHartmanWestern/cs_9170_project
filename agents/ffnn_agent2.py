@@ -174,7 +174,7 @@ class FFNNAgent:
                 batch_targets  = batch_targets .to(self.device)
 
                 # forward + loss
-                outputs = self.model(batch_features)
+                outputs = self.model(batch_features).squeeze(-1)
                 loss = self.criterion(outputs, batch_targets)
 
                 # backward + step

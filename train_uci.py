@@ -7,9 +7,11 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from env import Environment
 from agents.ppo_agent import PPOAgent
+from agents.ffnn_agent2 import FFNNAgent
 from fairlearn.datasets import fetch_acs_income
 from sklearn.neural_network import MLPRegressor
 import torch.nn.functional as F
+import math
 
 class Training:
     def __init__(self, seed=1234, device='cpu'):
@@ -30,7 +32,20 @@ class Training:
             'c2': 0.01,
             'seed': self.seed
         }
+        ffnn_config = {
+            'input_size': 5,
+            'hidden_sizes': [16, 16],
+            'output_size': 1,
+            'learning_rate': 0.001,
+            'batch_size': 32,
+            'epochs': 10,
+            'type': 'regression',
+            'classes': None,
+            'seed': self.seed
+        }
         self.ppo_agent = PPOAgent(**ppo_config)
+        self.alpha_model = FFNNAgent(**ffnn_config)
+        self.beta_model = FFNNAgent(**ffnn_config)
 
     # Given AGEP  COW  SCHL  WKHP  SEX we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
@@ -67,32 +82,37 @@ class Training:
         # Split all arrays accordingly
         X_train, X_theta_test = X.loc[train_idx], X.loc[test_idx]
         y_train, y_theta_test = y.loc[train_idx], y.loc[test_idx]
-        return X_train, X_theta_test, y_train, y_theta_test
 
-    def train_alpha_agent(self, X_train, y_train, X_test, y_test, hidden_layer_sizes=(64, 32), max_iter=10, lr=1e-3, seed=0, **kwargs):
+        X_train_np = X_train.to_numpy(dtype=np.float32)
+        y_train_np = y_train.to_numpy(dtype=np.float32)
+        X_test_np  = X_theta_test.to_numpy(dtype=np.float32)
+        y_test_np  = y_theta_test.to_numpy(dtype=np.float32)
 
-        model = MLPRegressor(hidden_layer_sizes=hidden_layer_sizes, activation='relu', max_iter=max_iter, learning_rate_init=lr, random_state=seed)
-        model.fit(X_train, y_train)
+        return X_train_np, X_test_np, y_train_np, y_test_np
 
-        y_pred = model.predict(X_test)
-        baseline_mse = mean_squared_error(y_test, y_pred)
-        baseline_mae = mean_absolute_error(y_test, y_pred)
-        return model, baseline_mse, baseline_mae
+    def train_agent(self, model, X_train, y_train):
+
+        # Convert numpy arrays to torch tensors
+        X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+        y_train_tensor = torch.tensor(y_train, dtype=torch.float32)
+
+        # Create TensorDataset and DataLoader
+        train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+        loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+
+        model.train(loader)
+
+        return model
 
 
 
     def evaluate_cost(self, model, X, y, metric="mse", reduction="mean"):
-        model.eval()
         with torch.no_grad():
-            y_pred = model(X)
+            y_pred = model.predict(X).squeeze(-1)   # → [N]
+            y_true = y.squeeze(-1)                 # → [N]
+            diff   = y_pred - y_true
 
-            if metric.lower() == "mse":
-                return F.mse_loss(y_pred, y, reduction=reduction).item()
-            # elif metric.lower() == "mae":
-            #     return F.l1_loss(y_pred, y, reduction=reduction).item()
-            # elif metric.lower() == "me":
-            #     diff = y_pred - y
-            #     return diff.mean().item() if reduction == "mean" else diff.sum().item()
+        return float(diff.pow(2).mean().item())  # MSE
 
     def global_error(self, beta_model, X_theta_test, y_theta_test, metric="mse"):
         return self.evaluate_cost(
@@ -104,22 +124,20 @@ class Training:
             )
 
     def independent_error(self, alpha_model, beta_model, X_phi, y_phi, X_theta_test, y_theta_test):
-
+        self.metric = 'mse'
         alpha_mean = self.evaluate_cost(
             alpha_model, X_theta_test, y_theta_test,
-            metric=self.metric, reduction="mean"
+            metric="mse", reduction="mean"
         )
         beta_mean = self.evaluate_cost(
             beta_model, X_theta_test, y_theta_test,
-            metric=self.metric, reduction="mean"
+            metric="mse", reduction="mean"
         )
 
         # per sample error vectors for both models
-        alpha_model.eval()
-        beta_model.eval()
         with torch.no_grad():
-            pred_a = alpha_model(X_phi)
-            pred_b = beta_model(X_phi)
+            pred_a = alpha_model.predict(X_phi)
+            pred_b = beta_model.predict(X_phi)
             diff_a = pred_a - y_phi
             diff_b = pred_b - y_phi
 
@@ -148,33 +166,30 @@ class Training:
         else:
             return err_b      # use beta model’s per‐action cost
 
-    def compute_reward(self, alpha_model, beta_model,X_theta_test, y_theta_test, X_phi, y_phi, lamb=1.0):
+    def compute_reward(self, alpha_model, beta_model,X_theta_test, y_theta_test, X_phi, y_phi, lamb=0.5):
         #global term 
         g = self.global_error(beta_model, X_theta_test, y_theta_test)
 
         #individualized term
-        ind = self.independent_error(alpha_model, beta_model, X_phi, y_phi)
+        ind = self.independent_error(alpha_model, beta_model, X_phi, y_phi, X_theta_test, y_theta_test)
 
         #combine to create reward vector (one element per action/synthetic_row)
         reward = []
         for d in ind:
-            r = (lamb * g) + ((1 - lamb) * d)
+            r = ((lamb * g) + ((1 - lamb) * d) ) * -1
             reward.append(r)
         return reward
 
     #Called automatically
     def __call__(self):
         print('Begin train loop')
-        # Training hyperparameters
-        EPISODES        = 20
-        TRAJ_LENGTH     = 200
-        MODEL_EPOCHS    = 5
+        # Training loop params
+        EPISODES        = 2
+        TRAJ_LENGTH     = 2
 
         # Prepare data and baseline (Alpha model)
         X_theta_train, X_theta_test, y_theta_train, y_theta_test = self.split_dataset()
-        alpha_model, baseline_mse, baseline_mae = self.train_alpha_agent(X_theta_train, y_theta_train, X_theta_test, y_theta_test, epochs=MODEL_EPOCHS)
-
-        beta_model = MLPRegressor(hidden_layer_sizes=(64, 32), activation='relu', max_iter=10, learning_rate_init=1e-3, random_state=seed)
+        self.alpha_model = self.train_agent(self.alpha_model, X_theta_train, y_theta_train)
 
         # Environment and agent setup NOTE that sex is forced female in loop
         features = ['AGEP', 'COW', 'SCHL', 'WKHP']
@@ -183,20 +198,13 @@ class Training:
 
 
         env = Environment(
-            train_df=pd.concat([self.X_train, self.y_train.rename("PINCP")], axis=1),
-            threshold=0,
-            features=features,
             target=target,
-            baseline_mse=baseline_mse,
-            male_hi=self.males_hi,
-            max_samples=TRAJ_LENGTH,
-            window_size=5,
+            male_hi=self.males_hi,#index for sampling target
+            max_actions=TRAJ_LENGTH,
             seed=seed
         )
 
         for episode in range(EPISODES):
-            # Buffers for PPO
-            trajectory = np.zeros((TRAJ_LENGTH, len(features) + 2))  # +1 for SEX, +1 for target
             states, actions = [], []
             next_states, dones = [], []
 
@@ -208,7 +216,7 @@ class Training:
             for t in range(TRAJ_LENGTH):
                 #Get action
                 action = self.ppo_agent.predict(state)             
-                next_state, _, done, info = env.step(action, (TRAJ_LENGTH + 1))
+                next_state, done, info = env.step(action, (TRAJ_LENGTH + 1))
 
                 states.append(state)
                 actions.append(action)
@@ -239,15 +247,22 @@ class Training:
             X_hybrid = np.vstack([X_theta_train, X_phi_t ])
             y_hybrid = np.concatenate([y_theta_train, y_phi_t ])
 
-            beta_model.fit(X_hybrid, y_hybrid)
-            rewards = self.compute_reward(alpha_model, beta_model, X_theta_test_t, y_theta_test_t, X_phi_t, y_phi_t)
+            self.beta_model = self.train_agent(self.beta_model, X_hybrid, y_hybrid)
 
-            for s, a, r, s_next, d in zip(states, actions, rewards, next_states, dones):
-                self.ppo_agent.learn(s, a, r, s_next, d)
+            rewards = self.compute_reward(self.alpha_model, self.beta_model, X_theta_test_t, y_theta_test_t, X_phi_t, y_phi_t)
 
-            avg_reward = np.mean(rewards)
+
+            for idx, (s, a, r, s_next, d) in enumerate(zip(states, actions, rewards, next_states, dones)):
+                r_normalized = r / 100000
+                if abs(r_normalized - r) > 1e-6:
+                    print(f"[Step {idx}] Normalized reward {r!r} → {r_normalized!r}")
+
+                # learn
+                self.ppo_agent.learn(s, a, r_normalized, s_next, d)
+
+            avg_reward = np.mean(r_normalized)
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.3f}")
     
 if __name__ == "__main__":
-    train = Training()
+    train = Training(seed=42)
     train()
