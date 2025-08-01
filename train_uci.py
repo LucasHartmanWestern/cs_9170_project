@@ -178,7 +178,7 @@ class Training:
 
         beta_model = MLPRegressor(hidden_layer_sizes=(64, 32), activation='relu', max_iter=10, learning_rate_init=1e-3, random_state=seed)
 
-        # Environment and agent setup NOTE that sex is forced female in environment
+        # Environment and agent setup NOTE that sex is forced female in loop
         features = ['AGEP', 'COW', 'SCHL', 'WKHP']
         target = 'PINCP'
         threshold = 100.0
@@ -211,7 +211,7 @@ class Training:
             for t in range(TRAJ_LENGTH):
                 #Get action
                 action = self.ppo_agent.predict(state)             
-                next_state, _, done, info = env.step(action, (len(trajectory) + 1))
+                next_state, _, done, info = env.step(action, (TRAJ_LENGTH + 1))
 
                 states.append(state)
                 actions.append(action)
@@ -220,8 +220,7 @@ class Training:
 
                 # combine action with SEX and target, append to trajectory
                 sampled_t = info['sampled_target']
-                action_with_sex = np.concatenate([action, [2.0]])  #Forced female data
-                trajectory.append(np.concatenate([action_with_sex, [sampled_t]]))
+                action_with_sex = np.concatenate([action, [2.0]])
 
                 X_syn_list.append(action_with_sex)
                 y_syn_list.append(sampled_t)
@@ -249,7 +248,8 @@ class Training:
             for s, a, r, s_next, d in zip(states, actions, rewards, next_states, dones):
                 self.ppo_agent.learn(s, a, r, s_next, d)
 
-            #print(f"Episode {episode+1}/{EPISODES} — Episodic quality reward: {episodic_reward:.3f}")
+            avg_reward = np.mean(rewards)
+            print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.3f}")
     
 if __name__ == "__main__":
     train = Training()
