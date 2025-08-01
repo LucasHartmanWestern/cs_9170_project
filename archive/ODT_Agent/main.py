@@ -437,8 +437,6 @@ class Experiment:
         self.model.eval()
         outputs = {}
         
-        print("video debug:", video_debug, "video_name:", video_name)
-        #exit(0)
         for eval_fn in eval_fns: 
             o = eval_fn(self.model, video_debug, video_name)
             outputs.update(o)
@@ -616,14 +614,7 @@ class Experiment:
         def mse_loss_fn(a_hat, a, attention_mask):
             return ((a_hat - a) ** 2)[attention_mask > 0].mean()
 
-
-
-
         print("\n\nMaking Eval Env.....")
-        env_name = self.variant["env"]
-        target_goal = None
-
-
 
         self.start_time = time.time()
         if self.variant["max_pretrain_iters"]:
@@ -656,10 +647,10 @@ def call_odt(env):
         "save_dir":              "./Temp",
 
         # ─── model & architecture ────────────────────────────────────────
-        "K":                     20,
-        "eval_context_length":   1,
-        "embed_dim":             128,
-        "n_layer":               3,
+        "K":                     1001,
+        "eval_context_length":   1001,
+        "embed_dim":             32,
+        "n_layer":               1,
         "n_head":                1,
         "dropout":               0.1,
         "activation_function":   "relu",
@@ -667,20 +658,20 @@ def call_odt(env):
         "init_temperature":      1.0,
 
         # ─── optimization ────────────────────────────────────────────────
-        "learning_rate":         1e-4,
+        "learning_rate":         3e-4,
         "weight_decay":          1e-4,
         "grad_clip":             1,
         "lr_scheduler":          1,
         "warmup_steps":          25,
 
         # ─── data-loader & loops ─────────────────────────────────────────
-        "batch_size":            2,
+        "batch_size":            64,
         "num_updates_per_pretrain_iter": 1,
         "num_updates_per_online_iter":   1,
         "max_pretrain_iters":    0,
-        "max_online_iters":      2,
+        "max_online_iters":      200,
         "num_online_rollouts":   1,
-        "eval_interval":         10,
+        "eval_interval":         20,
 
         # ─── supervised vs RL mix ───────────────────────────────────────
         # Pretrain: RL_from_start=0 → rl_coeff=0, sup_coeff=1 (pure supervised)
@@ -689,7 +680,7 @@ def call_odt(env):
         "actor_sup_coeff":       0.0,
         "normalized_rl_coeff":   1.0,
         "gamma":                 0.99,
-        "RL_from_start":         0,
+        "RL_from_start":         1,
 
         # ─── RL algorithm choice ─────────────────────────────────────────
         "rl_algo":               "SAC",
@@ -741,7 +732,7 @@ def call_odt(env):
         "temperature_learnable": 1,
 
         # ─── logging & misc ─────────────────────────────────────────────
-        "log_to_tb":             0,
+        "log_to_tb":             1,
         "force_no_minimum":      0,
     }
 

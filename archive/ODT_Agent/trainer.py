@@ -239,6 +239,8 @@ class SequenceTrainer:
                     act_dim=self.act_dim,
                     state_mean=self.state_mean,
                     state_std=self.state_std,
+                    action_mean=self.action_mean,
+                    action_std=self.action_std,
                     reward_scale=self.reward_scale,
                     action_range=self.action_range,
                     logprob_flag=True,

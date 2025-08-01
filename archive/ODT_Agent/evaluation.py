@@ -244,6 +244,7 @@ def vec_evaluate_episode_rtg(
             "rewards":           rewards[ii, :ep_len].detach(),
             "terminals":         terminals,
         }
+        print(f"Trajectory {t} in eval: {traj}")
 
         if model.stochastic_policy:
             traj["action_log_probs"] = action_log_probs[ii, :ep_len].detach()

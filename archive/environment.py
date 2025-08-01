@@ -34,9 +34,10 @@ class Environment:
         self.y_val   = torch.tensor(yval_df.values, dtype=torch.float32, device=self.device)
 
         # dimensions
-        self.D = self.x_train.shape[1]
-        self.L = self.y_train.shape[1]
-        self.T = horizon
+        self.features_dim = self.x_train.shape[1]
+        self.targets_dim = self.y_train.shape[1]
+        #Generate one row of data per action
+        self.T = 1
 
         # parameters
         self.action_dim = action_dim
@@ -53,6 +54,7 @@ class Environment:
         std_y  = ytr_df.values.std(axis=0) + 1e-6
         action_mean = np.concatenate([mean_x, mean_y], axis=0).astype(np.float32)
         action_std  = np.concatenate([std_x,  std_y ], axis=0).astype(np.float32)
+
         self.action_mean = torch.from_numpy(action_mean).to(self.device)
         self.action_std  = torch.from_numpy(action_std).to(self.device)
 
@@ -61,23 +63,18 @@ class Environment:
         self.timestamp_idx = cols.index("Timestamp")
         self.sex_idx       = cols.index("Sex - Female")
 
-        # observation & action shapes
-        if self.oneshot:
-            self.state_shape  = (1,)
-            self.action_shape = (horizon, self.D + self.L)
-        else:
-            self.state_shape  = (5,)
-            self.action_shape = (self.D + self.L,)
+
+        self.state_shape  = (5,)
+        self.action_shape = (self.features_dim + self.targets_dim,)
 
     def reset(self):
-        if self.oneshot:
-            return torch.empty(self.state_shape, dtype=torch.float32, device=self.device)
+        self.synthetic_data   = torch.zeros((self.T, self.features_dim), device=self.device)
+        self.synthetic_labels = torch.zeros((self.T, self.targets_dim), device=self.device)
 
-        self.synthetic_data   = torch.zeros((self.T, self.D), device=self.device)
-        self.synthetic_labels = torch.zeros((self.T, self.L), device=self.device)
         self.i = 0
 
         init_mf = self.x_train[:, self.sex_idx].mean().item()
+
         self.state = generate_state(
             self.x_train,
             self.timestamp_idx,
@@ -89,45 +86,42 @@ class Environment:
         return self.state
 
     def step(self, action):
-        # action is normalized: invert normalization purely in Torch
+        # action is normalized: invert normalization 
         a_norm = torch.tensor(action, dtype=torch.float32, device=self.device)
+        a = a_norm.cpu() * self.action_std + self.action_mean
 
-        a = a_norm.cpu() * self.action_std + self.action_mean  # (D+L,) or (1, D+L)
-
-        if self.oneshot:
-            Xs = a[:, :self.D]
-            Ys = a[:, self.D:]
-            self.base_agent.reset()
-            Xc = torch.cat([self.x_train, Xs], dim=0)
-            Yc = torch.cat([self.y_train, Ys], dim=0)
-
-            ds = TensorDataset(Xc, Yc)
-            loader = DataLoader(ds, batch_size=Xc.size(0), shuffle=False)
-            _ = self.base_agent.train(loader)
-
-            val_mse, _, _ = evaluate_model(
-                self.base_agent, self.x_val, self.y_val, sex_idx=self.sex_idx
-            )
-            reward_value = -self.acc_mul * val_mse
-
-            reward = torch.tensor([reward_value], dtype=torch.float32, device=self.device)
-            done = torch.tensor([True], dtype=torch.bool, device=self.device)
-            state = torch.empty(self.state_shape, dtype=torch.float32, device=self.device)
-            return state, reward, done, {"val_mse": val_mse}
-
-        # multi-step: flatten and split
+        #flatten and split
         a_vec = a.view(-1)
-        row   = a_vec[: self.D]
-        label = a_vec[self.D : self.D + self.L]
+        timestamp = self.state[0].unsqueeze(0)
+        age = self.state[1].unsqueeze(0)
+        activity_id = self.state[2].unsqueeze(0)
 
-        idx = self.i
-        self.synthetic_data[idx]   = row
-        self.synthetic_labels[idx] = label
+        features = torch.cat([
+                timestamp, #timestamp from state
+                activity_id,
+                a_vec[1:-5], #all sensor data
+                a_vec[-3:-2] #"Resting HR", "Max HR",
+        ])
+        self.synthetic_data[self.i] = features
+
+        labels = torch.cat([
+            a_vec[-1],   # Sex,
+            a_vec[1], #Heart Rate
+            age,      # Age from state
+            a_vec[-4],    # Weight
+            a_vec[-5] #Height
+        ], dim=0)
+
+        self.synthetic_labels[self.i] = labels
+
         self.i += 1
         done_flag = (self.i == self.T)
 
         reward_value = 0.0
+
+        #Generation finished
         if done_flag:
+            print(f'Finished Data generation, evaluating baseline agent...')
             self.base_agent.reset()
             Xc = torch.cat([self.x_train, self.synthetic_data], dim=0)
             Yc = torch.cat([self.y_train, self.synthetic_labels], dim=0)
@@ -144,6 +138,7 @@ class Environment:
         reward = torch.tensor([reward_value], dtype=torch.float32, device=self.device)
         done   = torch.tensor([done_flag],    dtype=torch.bool,  device=self.device)
 
+        #Provide new state
         if not done_flag:
             mf = self.synthetic_data[: self.i, self.sex_idx].mean().item()
             self.state = generate_state(

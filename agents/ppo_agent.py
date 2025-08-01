@@ -104,7 +104,7 @@ class PPOAgent:
             
             # Sample action from distribution
             action = dist.sample()
-        
+    
         # Return the synthetic data (action) as a list of floats
         return action.squeeze(0).cpu().tolist()
     
