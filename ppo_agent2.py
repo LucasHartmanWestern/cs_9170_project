@@ -299,7 +299,9 @@ class PPOAgent:
     
             with torch.no_grad():
                 mean, log_std = self.actor(state)
-                std = log_std.exp()
+                eps = 1e-6  # small positive constant
+                std = torch.exp(log_std).clamp(min=eps)
+                # std = log_std.exp()
                 dist = Normal(mean, std)
                 log_prob = dist.log_prob(action).sum(dim=-1)
                 value = self.critic(state).squeeze(-1)

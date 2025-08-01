@@ -1,5 +1,6 @@
 import os
 import json
+import csv
 import copy
 import torch
 import matplotlib.pyplot as plt
@@ -8,29 +9,34 @@ import torch.nn.functional as F
 import pandas as pd
 from data_processing import get_xy_from_data
 from torch.utils.data import TensorDataset, DataLoader
+from torch.distributions import Normal
+from datetime import datetime
 
 
-def evaluate_model(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int) -> tuple[float, float]:
-    agent.model.eval()
-    with torch.no_grad():
-        preds = agent.predict(x)
+def evaluate_model(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int, mean: bool =True) -> tuple[float, float]:
+    # agent.model.eval()
+    # with torch.no_grad():
+    #     preds = agent.predict(x)
 
-        if not isinstance(preds, torch.Tensor):
-            preds = torch.tensor(preds, device=y.device, dtype=y.dtype)
+    #     if not isinstance(preds, torch.Tensor):
+    #         preds = torch.tensor(preds, device=y.device, dtype=y.dtype)
     
-    # Compute overall MSE
-    mse = F.mse_loss(preds, y).item()
-    mae = F.l1_loss(preds, y).item()
+    # # Compute overall MSE
+    # mse = F.mse_loss(preds, y).item()
+    # mae = F.l1_loss(preds, y).item()
 
-    # Compute female-only MSE
-    female_mask = y[:, sex_idx] == 1
-    if female_mask.any():
-        pred_f = preds[female_mask]
-        y_f = y[female_mask]
-        female_mse = F.mse_loss(pred_f, y_f).item()
-    else:
-        female_mse = float('nan')
-    return mse, mae, female_mse
+    # # Compute female-only MSE
+    # female_mask = y[:, sex_idx] == 1
+    # if female_mask.any():
+    #     pred_f = preds[female_mask]
+    #     y_f = y[female_mask]
+    #     female_mse = F.mse_loss(pred_f, y_f).item()
+    # else:
+    #     female_mse = float('nan')
+    # return mse, mae, female_mse
+    mf_e, f_e, label = evaluate_se(agent, x, y, sex_idx, mean)
+    return mf_e, f_e, label
+    
 
 
 def evaluate_mape(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int, mean: bool =False) -> tuple[float, float]:
@@ -58,7 +64,7 @@ def evaluate_mape(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int, mean: b
     else:
         female_ape = float('nan')
 
-    print(f'')
+    printl(f'')
 
     if mean:
         mf_ape = ape.mean().item()
@@ -92,8 +98,6 @@ def evaluate_mae(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int, mean: bo
     else:
         female_ae = float('nan')
 
-    print(f'')
-
     if mean:
         mf_ae = ae.mean().item()
         f_ae = female_ae.mean().item()
@@ -103,6 +107,38 @@ def evaluate_mae(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int, mean: bo
         
     return mf_ae, f_ae
 
+def evaluate_se(agent, x: torch.Tensor, y: torch.Tensor, sex_idx: int, mean: bool =False) -> tuple[float, float]:
+    agent.model.eval()
+    with torch.no_grad():
+        preds = agent.predict(x)
+
+        if not isinstance(preds, torch.Tensor):
+            preds = torch.tensor(preds, device=y.device, dtype=y.dtype)
+    
+    # Compute overall ae
+    # Compute mean error per element
+    se = (y - preds)**2
+
+
+    # Compute female-only AE
+    female_mask = y[:, sex_idx] == 1
+    if female_mask.any():
+        pred_f = preds[female_mask]
+        y_f = y[female_mask]
+        female_se = (y_f - pred_f)**2
+    else:
+        female_ae = float('nan')
+
+    if mean:
+        mf_se = se.mean().item()
+        f_se = female_se.mean().item()
+        label = 'MSE'
+    else:
+        mf_se = se.mean(axis=1)
+        f_se = female_se.mean(axis=1)
+        label = 'SE'
+        
+    return mf_se, f_se, label
 
 
 def plot_losses(losses):
@@ -142,7 +178,7 @@ def generate_state(tensor, timestamp_idx, mf_ratio, n_samples, rng, device):
     
     activity_id = torch.randint(1, 3, (1,), generator=rng, device=device).float()
 
-    state_vector = torch.cat([timestamp, age, activity_id, mf_ratio, n_samples], dim=0)
+    state_vector = torch.cat([timestamp, age, activity_id, mf_ratio, n_samples], dim=0).to(device)
     return state_vector
 
 #m/f ratio reward 
@@ -151,11 +187,11 @@ def calculate_mini_reward(synthetic_features, mf_ratio):
     #setting a cap for maximum std
     max_cap = torch.tensor(2.0)
     std = synthetic_features.std(dim=0, unbiased=False).mean()
-    # print(f'std {std}')
+    # printl(f'std {std}')
     std_term = torch.minimum(max_cap,std)
     gauss    = torch.exp(-((mf_ratio - 0.5)**2) / 0.1)
     mini_reward = (std_term + gauss)
-    # print(f' mini reward {mini_reward:.2f} std = {std:.2f}, gaus {gauss:.2f}')
+    # printl(f' mini reward {mini_reward:.2f} std = {std:.2f}, gaus {gauss:.2f}')
     return mini_reward
 
 
@@ -180,6 +216,10 @@ def train_model_baseline(
     torch.manual_seed(seed)
     rng = torch.Generator().manual_seed(seed)
 
+    # Generating print log
+    date = datetime.now()
+    printl = print_log(date)
+
     # 1) Extract numpy, then convert to torch tensors on device
     x_train_df, y_train_df = get_xy_from_data(df_train, target_features)
     x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
@@ -199,12 +239,12 @@ def train_model_baseline(
 
 
     # Experiment 1: baseline
-    print(f"\nTraining {type(agent).__name__} baseline on original data…")
+    printl(f"\nTraining {type(agent).__name__} baseline on original data…")
     one_start_time = time.time()
     base_agent = copy.deepcopy(agent)
     results["baseline"],_ = _run_and_eval(base_agent, sex_female_idx, x_train, y_train, x_val, y_val, x_test, y_test, "Baseline", shuffle=shuffle)
     one_end_time = time.time()
-    print(f'Experiment 1 time: {one_end_time - one_start_time}\n')
+    printl(f'Experiment 1 time: {one_end_time - one_start_time}\n')
     # Experiment 2: oversampling minority
     two_start_time = time.time()
     df_min = df_train[df_train["Sex - Female"] == 1]
@@ -226,11 +266,11 @@ def train_model_baseline(
     x_os = torch.tensor(x_os_df.values, dtype=torch.float32, device=device)
     y_os = torch.tensor(y_os_df.values, dtype=torch.float32, device=device)
 
-    print(f"\nTraining {type(agent).__name__} with minority oversampling…")
+    printl(f"\nTraining {type(agent).__name__} with minority oversampling…")
     os_agent = copy.deepcopy(agent)
     results["oversample"],_ = _run_and_eval(os_agent, sex_female_idx, sex_female_idx, x_os, y_os, x_val, y_val, x_test, y_test, "Oversampled", shuffle=shuffle)
     two_end_time = time.time()
-    print(f'Experiment 2 time: { two_end_time - two_start_time}\n')
+    printl(f'Experiment 2 time: { two_end_time - two_start_time}\n')
     # Experiment 3: undersampling majority
     three_start_time = time.time()
     min_size = len(df_min)
@@ -246,18 +286,18 @@ def train_model_baseline(
     x_us = torch.tensor(x_us_df.values, dtype=torch.float32, device=device)
     y_us = torch.tensor(y_us_df.values, dtype=torch.float32, device=device)
 
-    print(f"\nTraining {type(agent).__name__} with majority undersampling…")
+    printl(f"\nTraining {type(agent).__name__} with majority undersampling…")
     us_agent = copy.deepcopy(agent)
 
     results["undersample"],_ = _run_and_eval(us_agent, sex_female_idx, x_us, y_us, x_val, y_val, x_test, y_test, "Undersampled",shuffle=shuffle)
     three_end_time = time.time()
-    print(f'Experiment 3 time: { three_end_time - three_start_time}\n')
+    printl(f'Experiment 3 time: { three_end_time - three_start_time}\n')
 
     # Persist
     os.makedirs(save_location, exist_ok=True)
     with open(os.path.join(save_location, "baseline_metrics.json"), "w") as f:
         json.dump(results, f, indent=2)
-    print(f"Saved all metrics to {save_location}/baseline_metrics.json")
+    printl(f"Saved all metrics to {save_location}/baseline_metrics.json")
 
     return results
 
@@ -268,13 +308,17 @@ def _run_and_eval(agent, sex_female_idx, x_tr, y_tr, x_v, y_v, x_te, y_te, tag, 
     loader = DataLoader(dataset, batch_size=agent.batch_size, shuffle=shuffle)
     losses = agent.train(loader)
 
-    m_tr, _, fm_tr = evaluate_model(agent, x_tr, y_tr, sex_female_idx)
-    m_v,  _, fm_v  = evaluate_model(agent, x_v, y_v, sex_female_idx)
-    m_te, _, fm_te = evaluate_model(agent, x_te, y_te, sex_female_idx)
+    # m_tr, _, fm_tr = evaluate_model(agent, x_tr, y_tr, sex_female_idx)
+    # m_v,  _, fm_v  = evaluate_model(agent, x_v, y_v, sex_female_idx)
+    # m_te, _, fm_te = evaluate_model(agent, x_te, y_te, sex_female_idx)
 
-    print(f"{tag} Train MSE: {m_tr:.4f} | Female MSE: {fm_tr:.4f}")
-    print(f"{tag} Val   MSE: {m_v:.4f}  | Female MSE: {fm_v:.4f}")
-    print(f"{tag} Test  MSE: {m_te:.4f} | Female MSE: {fm_te:.4f}")
+    m_tr, fm_tr, _     = evaluate_model(agent, x_tr, y_tr, sex_female_idx)
+    m_v, fm_v, _       = evaluate_model(agent, x_v, y_v, sex_female_idx)
+    m_te, fm_te, label = evaluate_model(agent, x_te, y_te, sex_female_idx)
+
+    print(f"{tag} Train {label}: {m_tr:.2f} | Female {label}: {fm_tr:.2f}")
+    print(f"{tag} Val   {label}: {m_v:.2f}  | Female {label}: {fm_v:.2f}")
+    print(f"{tag} Test  {label}: {m_te:.2f} | Female {label}: {fm_te:.2f}")
     return {
         "train": {"mse": m_tr,  "female_mse": fm_tr},
         "val":   {"mse": m_v,   "female_mse": fm_v},
@@ -320,6 +364,19 @@ def train_agents(
     train_female_accuracies = []
 
     episode_times = []
+    metrics = []
+
+    # Generating print log
+    date = datetime.now()
+    printl = print_log(date)
+
+    # Location to save results
+    save_path = f'{save_location}/training_metrics.csv'
+    if os.path.exists(save_path):
+        os.remove(save_path)
+        print(f"previous {save_path} has been removed.")
+    elif not os.path.exists(save_location):
+        os.makedirs(save_location)
 
     x_train_df, y_train_df = get_xy_from_data(df_train, target_features)
     x_val_df,   y_val_df   = get_xy_from_data(df_val,   target_features)
@@ -339,8 +396,8 @@ def train_agents(
 
     #Generate discriminator based on the baseline with oringinal data
     discriminator = copy.deepcopy(base_agent)
-    print(f"\nTraining {type(discriminator).__name__} discriminator on original data…")
-    results = _run_and_eval(discriminator, sex_female_idx, x_train, y_train, x_val, y_val, x_test, y_test, "Baseline", shuffle=shuffle)
+    printl(f"\nTraining {type(discriminator).__name__} discriminator on original data…")
+    results = _run_and_eval(discriminator, sex_female_idx, x_train, y_train, x_val, y_val, x_test, y_test, "Original Discriminator", shuffle=shuffle)
 
     N = x_train.size(0)
     mf_ratio = x_train[:, sex_female_idx].mean()
@@ -349,9 +406,9 @@ def train_agents(
     
     state = generate_state(x_train, timestamp_idx, mf_ratio, n_samples, rng, device)
 
-    for episode in range(episodes):
+    for episode in range(1, episodes + 1):
         episode_start_time = time.time()
-        print(f"Episode {episode + 1}/{episodes}: Generating Synthetic Data")
+        printl(f"Episode {episode}/{episodes}: Generating Synthetic Data")
 
         #Resets
         synthetic_features = torch.zeros(synthetic_features_amount, x_train.shape[1], device=device)
@@ -370,12 +427,12 @@ def train_agents(
             #     device=device
             # ).flatten()
             
-            continuous_action = torch.as_tensor(
-                ppo_agent.predict(state),
-                dtype=torch.float32,
-                device=device
-            ).flatten()
-            continuous_action_ep.append(continuous_action)
+            # continuous_action = torch.as_tensor(
+            #     ppo_agent.predict(state),
+            #     dtype=torch.float32,
+            #     device=device
+            # ).flatten()
+            # continuous_action_ep.append(continuous_action)
 
             # row = torch.zeros(x_train.size(1), device=device)
             # row[sex_female_idx] = discrete_action[0]
@@ -400,6 +457,14 @@ def train_agents(
             #     preds[2:]    # shape (2,)
             # ], dim=0)
             # Get state defined fields
+
+            with torch.no_grad():
+                mean, log_std = ppo_agent.actor(state)
+                dist = Normal(mean, log_std.exp())
+                continuous_action = dist.sample()
+                log_prob = dist.log_prob(continuous_action).sum()
+                value = ppo_agent.critic(state)
+
 
             # Constraining categoricals
             # For sex - Female
@@ -436,15 +501,9 @@ def train_agents(
 
             #Once all synthetic data samples have been generated
             if done:
-                print(f"Episode {episode + 1}/{episodes}: Training {type(base_agent).__name__} ")
-                #Discriminator evaluation
-                # print(f'line 412 checking female {synthetic_features[:,sex_female_idx]}')
-
-                # Calculating male female ration on synthetic data
-                mf_ratio_synthetic = synthetic_features[:, sex_female_idx] 
-                disc_val_ape, disc_val_female_ape = evaluate_mae(discriminator, synthetic_features, synthetic_targets, sex_female_idx)
-                print(f'discriminator male-femal val mse {disc_val_ape.mean()}, female val {disc_val_female_ape.mean()}')
-                
+                to_print = f"Episode {episode}/{episodes}: Training {type(base_agent).__name__} "
+                printl(to_print)
+            
                 base_agent.reset()
 
                 # concatenate real + synthetic
@@ -462,12 +521,24 @@ def train_agents(
 
                 # Train FFNN or LSTM
                 losses = base_agent.train(loader)
-                print(f"Episode {episode + 1}/{episodes}: Evaluating {type(base_agent).__name__} ")
+                printl(f"Episode {episode}/{episodes}: Evaluating {type(base_agent).__name__} ")
 
-                val_ape, val_female_ape = evaluate_mae(base_agent, x_val, y_val, sex_female_idx, mean=False)
+                val_e, val_female_e, e_label = evaluate_model(base_agent, x_val, y_val, sex_female_idx, mean=True)
 
-                val_accuracies.append(val_ape.mean().item())
-                val_female_accuracies.append(val_female_ape.mean().item())
+                val_accuracies.append(val_e)
+                val_female_accuracies.append(val_female_e)
+
+                #Discriminator evaluation
+                # Calculating male female ration on synthetic data
+                mf_ratio_synthetic = synthetic_targets[:, sex_female_idx].mean()
+
+                disc_val_e, disc_val_female_e, e_label = evaluate_model(discriminator, 
+                                                                    synthetic_features, synthetic_targets,
+                                                                    sex_female_idx, mean=False)
+                
+                printl(f"Episode {episode}/{episodes}: Discriminator on sythetic m-f val " + 
+                      f"M{e_label} {disc_val_e.mean():.2f}, female val M{e_label} {disc_val_female_e.mean():.2f}," +
+                      f" mf-ratio {100*mf_ratio_synthetic:.2f}% female")
                 # if not eval_val_only:
                 #     train_mse, train_mae, train_female_mse = evaluate_model(base_agent, x_train, y_train, sex_female_idx)
                 #     test_mse, test_mae, test_female_mse = evaluate_model(base_agent, x_test, y_test, sex_female_idx)
@@ -485,34 +556,40 @@ def train_agents(
                 w2 = 0.25
                 w3 = 1
                 w4 = 1
+
                 # Current model predictor mape performance
-                obj_1 = torch.ones(synthetic_features_amount)*val_ape.mean()
+                obj_1 = torch.log(torch.ones(synthetic_features_amount)*val_e + 1e-8)
                 # Discriminator or predictor trained with original and evaluated with synthetic data ape
-                obj_2 = disc_val_ape
+                obj_2 = torch.exp(-disc_val_e)
                 # Minority performance with current predictor trained with combined data ape
-                obj_3 = torch.ones(synthetic_features_amount)*val_female_ape.mean()
+                obj_3 = torch.log(torch.ones(synthetic_features_amount)*val_female_e + 1e-8)
                 # Diversify results
                 # NEEDS DISCUSSION! Should we consider the MF only synthetic ratio or the combined dataset ratio?
                 mf_ratio = synthetic_targets[:, sex_female_idx].mean()
                 diverse_reward = calculate_mini_reward(synthetic_features, mf_ratio)
                 obj_4 = torch.ones(synthetic_features_amount)*diverse_reward
 
-                rewards_ep = -1*(w1*obj_1 + w2*obj_2 + w3*obj_3 - w4*obj_4)
-                print(f'reward mean{rewards_ep.mean():.4f}, by objectives: {obj_1.mean().item():.4f} - {obj_2.mean().item():.4f} - {obj_3.mean().item():.4f}')
+                # rewards_ep = w1*obj_1 + w2*obj_2 + w3*obj_3 - w4*obj_4
+                rewards_ep = w1*obj_1 + w3*obj_3
+                printl(f"Episode {episode}/{episodes}: Reward mean {rewards_ep.mean():.2f}," +
+                      f"by objectives: {obj_1.mean().item():.2f} | {obj_2.mean().item():.2f} |" +
+                      f"{obj_3.mean().item():.2f} | {obj_4.mean().item():.2f}")
                 
 
-                print(f"Episode {episode + 1}/{episodes} | Reward: {rewards_ep.mean():.4f}")
-                print(f"Val MAPE: {val_ape.mean().item():.4f} | Val Female MAPE: {val_female_ape.mean().item():.4f}")
+                printl(f"Episode {episode}/{episodes} | Reward: {rewards_ep.mean():.2f}")
+                printl(f"Val {e_label}: {val_e:.2f} | Val Female {e_label}: {val_female_e:.2f}")
 
-                if not eval_val_only:
-                    print(f"Train MSE: {train_mse:.4f} | Train Female MSE: {train_female_mse:.4f}")
-                    print(f"Test MSE: {test_mse:.4f} | Test Female MSE: {test_female_mse:.4f}")
+                # if not eval_val_only:
+                #     printl(f"Train MSE: {train_mse:.2f} | Train Female MSE: {train_female_mse:.2f}")
+                #     printl(f"Test MSE: {test_mse:.2f} | Test Female MSE: {test_female_mse:.2f}")
 
                 dones_ep = torch.zeros(len(rewards_ep), dtype=torch.bool)
                 dones_ep[-1] = done
 
+                ppo_agent.finish_trajectory(final_reward=rewards_ep.mean())
+                ppo_agent.update()
                 # dqn_agent.learn(state, discrete_action, reward, next_state, done)
-                ppo_agent.learn(states_ep, continuous_action_ep, rewards_ep, next_states_ep, dones_ep)  
+                # ppo_agent.learn(states_ep, continuous_action_ep, rewards_ep, next_states_ep, dones_ep)  
                 rewards.append(rewards_ep.mean().item())
 
             # else:
@@ -521,45 +598,85 @@ def train_agents(
             next_state = generate_state(x_train, timestamp_idx, mf_ratio, torch.tensor(i + 1, dtype=torch.float32, device=device), rng, device)
             states_ep.append(state)
             next_states_ep.append(next_state)
+            ppo_agent.store(state, continuous_action, done, value.item(), log_prob)
             # dqn_agent.learn(state, discrete_action, reward, next_state, done)
             # ppo_agent.learn(state, continuous_action, reward, next_state, done)
 
             # rewards.append(reward)
             state = next_state
 
+            
+
+
         # Track and print episode time
         episode_end_time = time.time()
         episode_duration = episode_end_time - episode_start_time
         episode_times.append(episode_duration)
-        print(f"Episode {episode + 1}/{episodes} completed in {episode_duration:.2f} seconds.")
-        print("\n--------------------------------\n")
+        printl(f"Episode {episode}/{episodes} completed in {episode_duration:.2f} seconds.")
+        printl("\n--------------------------------\n")
         
-        if eval_val_only:
-            metrics = {
-                'rewards': rewards,
-                'val_mse': val_accuracies,
-                'episode_times': episode_times
-            }
-        else:
-            metrics = {
-                'rewards': rewards,
-                'train_mse': train_accuracies,
-                'val_mse': val_accuracies,
-                'test_mse': test_accuracies,
-                'train_female_mse': train_female_accuracies,
-                'val_female_mse': val_female_accuracies,
-                'test_female_mse': test_female_accuracies,
-                'episode_times': episode_times
-            }
+        # if eval_val_only:
+        #     metrics = {
+        #         'rewards': rewards_e,
+        #         'val_mse': val_accuracies,
+        #         'episode_times': episode_times
+        #     }
+        # else:
+        #     metrics = {
+        #         'rewards': rewards,
+        #         'train_mse': train_accuracies,
+        #         'val_mse': val_accuracies,
+        #         'test_mse': test_accuracies,
+        #         'train_female_mse': train_female_accuracies,
+        #         'val_female_mse': val_female_accuracies,
+        #         'test_female_mse': test_female_accuracies,
+        #         'episode_times': episode_times
+        #     }
+        metric = {
+                'episode': episode,
+                'rewards': rewards_ep.mean().item(),
+                f'm-f_val_M{e_label}': val_e,
+                f'f_eval_M{e_label}': val_female_e,
+                'episode_times': episode_duration
+        }
+        metrics.append(metric)
+
+        if (episode % 10 == 0) | (episode == episodes):
+            save_to_csv(metrics,save_path)
+            printl(f"Metrics saved to {save_path}")
+            metrics = []
+
+        
+        
 
     overall_end_time = time.time()
     overall_duration = overall_end_time - overall_start_time
-    print(f"All episodes completed in {overall_duration:.2f} seconds.")
+    printl(f"All episodes completed in {overall_duration:.2f} seconds.")
 
-    os.makedirs(save_location, exist_ok=True)
-    save_path = os.path.join(save_location, 'training_metrics.json')
-    with open(save_path, 'w') as f:
-        json.dump(metrics, f)
-    print(f"Metrics saved to {save_path}")
+    # with open(save_path, 'w') as f:
+    #     json.dump(metrics, f)
     return metrics
+
+def print_log(date):
+    path = 'logs/'
+    if not os.path.exists(path):
+        os.makedirs(path)
+    filename = f'{path}/{date}-training_logs.txt'
+    def printl(to_print):
+        with open(filename, 'a') as file:
+                print(to_print, file=file)
+        print(to_print)
+
+    return printl
+
+def save_to_csv(data, filename, append=True):
+    mode = 'a' if append else 'w'
+    file_exists = os.path.isfile(filename)
+    if isinstance(data[0], dict):
+        keys = data[0].keys()  # Extract the headers from the first dictionary
+        with open(filename, mode, newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=keys)
+            if not append or not file_exists:
+                writer.writeheader()  # Write header if not appending or file doesn't exist
+            writer.writerows(data)  # Write data rows
 
