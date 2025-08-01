@@ -32,20 +32,22 @@ class Training:
         }
         self.ppo_agent = PPOAgent(**ppo_config)
 
-    # Given 
-    def bias_and_split_dataset(self, seq_len=5, seed=42):
-        """
-        Fetch UCI Appliances Energy data, apply a low-usage (<100 Wh) bias to the training set,
-        and split into sequence arrays suitable for LSTM training—all using numpy only.
-        """
-        # 1) Fetch raw data
+    # Given AGEP  COW  SCHL  WKHP  SEX we are predicting PINCP
+    #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
+    #Can see plots for this dataset in new_biases.ipynb
+    def split_dataset(self, seq_len=5, seed=42):
+        #Fetch raw data
         data_bunch = fetch_acs_income(as_frame=True)
+
+        #Reduce feature space to AGEP  COW  SCHL  WKHP  SEX
         X = data_bunch.data.iloc[:100000].drop(columns=['OCCP', 'POBP', 'RELP', 'RAC1P', 'MAR', ])
         y = data_bunch.target.iloc[:100000]
+
         df = pd.concat([X, y.rename("INCOME")], axis=1)
 
-        # 2) Train/test split: test set is equal split of male/female earning >150K
+        #Threshold for "High_income"
         self.INCOME = 150_000
+
         # Identify all males and females earning >150K
         high_income_mask = df['INCOME'] > self.INCOME
         self.males_hi   = df[(df['SEX']==1.0) & high_income_mask]
@@ -63,36 +65,16 @@ class Training:
         train_idx = df.index.difference(test_idx)
 
         # Split all arrays accordingly
-        self.X_train, self.X_test = X.loc[train_idx], X.loc[test_idx]
-        self.y_train, self.y_test = y.loc[train_idx], y.loc[test_idx]
-        self.sf_train, self.sf_test = df.loc[train_idx, ['SEX','INCOME']], df.loc[test_idx, ['SEX','INCOME']]
+        X_train, X_theta_test = X.loc[train_idx], X.loc[test_idx]
+        y_train, y_theta_test = y.loc[train_idx], y.loc[test_idx]
+        return X_train, X_theta_test, y_train, y_theta_test
 
-    def train_baseline_agent(self, hidden_layer_sizes=(64, 32), max_iter=10, lr=1e-3, seed=0, **kwargs):
+    def train_alpha_agent(self, hidden_layer_sizes=(64, 32), max_iter=10, lr=1e-3, seed=0, **kwargs):
+
         model = MLPRegressor(hidden_layer_sizes=hidden_layer_sizes, activation='relu', max_iter=max_iter, learning_rate_init=lr, random_state=seed)
         model.fit(self.X_train, self.y_train)
-        y_pred = pd.Series(model.predict(self.X_test), index=self.X_test.index)
 
-        # 5) Define the two slices
-        slices = {
-            'High‑Income Females': (self.sf_test['SEX']==2.0) & (self.y_test > self.INCOME),
-            'High‑Income Males'  : (self.sf_test['SEX']==1.0) & (self.y_test > self.INCOME),
-        }
-
-        # 6) Compute metrics for each slice
-        rows = []
-        for name, mask in slices.items():
-            y_true = self.y_test[mask]
-            y_hat  = y_pred[mask]
-            rows.append({
-                'Group':        name,
-                'Count':        mask.sum(),
-                'MSE':          mean_squared_error(y_true, y_hat),
-                'MAE':          mean_absolute_error(y_true, y_hat),
-                'Mean Error':   (y_hat - y_true).mean()
-            })
-        metrics_df = pd.DataFrame(rows).set_index('Group')
-        print(metrics_df)
-        # Return overall MSE and MAE on the test set
+        y_pred = model.predict(self.X_test)
         baseline_mse = mean_squared_error(self.y_test, y_pred)
         baseline_mae = mean_absolute_error(self.y_test, y_pred)
         return baseline_mse, baseline_mae
@@ -113,7 +95,7 @@ class Training:
             #     return diff.mean().item() if reduction == "mean" else diff.sum().item()
 
     def global_error(self, beta_model, X_theta_test, y_theta_test, metric="mse"):
-        return self.valuate_cost(
+        return self.evaluate_cost(
             beta_model,
             X_theta_test, 
             y_theta_test,
@@ -121,14 +103,14 @@ class Training:
             reduction="mean"
             )
 
-    def independent_error(self, alpha_model, beta_model, X_syn, y_syn):
+    def independent_error(self, alpha_model, beta_model, X_phi, y_phi, X_theta_test, y_theta_test):
 
         alpha_mean = self.evaluate_cost(
-            alpha_model, X_syn, y_syn,
+            alpha_model, X_theta_test, y_theta_test,
             metric=self.metric, reduction="mean"
         )
         beta_mean = self.evaluate_cost(
-            beta_model, X_syn, y_syn,
+            beta_model, X_theta_test, y_theta_test,
             metric=self.metric, reduction="mean"
         )
 
@@ -136,10 +118,10 @@ class Training:
         alpha_model.eval()
         beta_model.eval()
         with torch.no_grad():
-            pred_a = alpha_model(X_syn)
-            pred_b = beta_model(X_syn)
-            diff_a = pred_a - y_syn
-            diff_b = pred_b - y_syn
+            pred_a = alpha_model(X_phi)
+            pred_b = beta_model(X_phi)
+            diff_a = pred_a - y_phi
+            diff_b = pred_b - y_phi
 
             if self.metric == "mse":
                 err_a = diff_a.pow(2)
@@ -168,42 +150,39 @@ class Training:
 
     def compute_reward(self,
             alpha_model, beta_model,
-            X_real_test, y_real_test,
-            X_syn,       y_syn,
+            X_theta_test, y_theta_test,
+            X_phi,       y_phi,
             lamb=1.0
         ):
         #global term 
-        g = self.global_error(beta_model, X_real_test, y_real_test)
+        g = self.global_error(beta_model, X_theta_test, y_theta_test)
 
-        #individualized term, Note make sure syn data is not seen by the beta model in training
-        ind = self.independent_error(alpha_model, beta_model, X_syn, y_syn)
+        #individualized term
+        ind = self.independent_error(alpha_model, beta_model, X_phi, y_phi)
 
-        #combine to create reward vector (one element per action)
-        reward = [lamb * g + (1 - lamb) * d for d in ind]
-
+        #combine to create reward vector (one element per action/synthetic_row)
+        reward = []
+        for d in ind:
+            r = (lamb * g) + ((1 - lamb) * d)
+            reward.append(r)
         return reward
 
+    #Called automatically
     def __call__(self):
-        """
-        Main training loop
-        """
         print('Begin train loop')
         # Training hyperparameters
         EPISODES       = 20
         SYNTHETIC_TUPLES  = 200
-        PPO_UPDATES    = EPISODES  # one PPO update per episode
+        PPO_UPDATES    = EPISODES 
         ALPHA_DIV      = 0.2
         LSTM_EPOCHS    = 5
         window_size = 5
         from collections import deque
 
         # Prepare data and baseline
-        self.bias_and_split_dataset()
-        baseline_mse, baseline_mae = self.train_baseline_agent(epochs=LSTM_EPOCHS)
+        X_theta_train, X_theta_test, y_theta_train, y_theta_test = self.split_dataset()
+        baseline_mse, baseline_mae = self.train_alpha_agent(epochs=LSTM_EPOCHS)
 
-        # Prepare real data for augmentation
-        X_biased, y_biased = self.X_train, self.y_train
-        X_test, y_test = self.X_test, self.y_test
 
         # Environment and agent setup NOTE that sex is forced female in environment
         features = ['AGEP', 'COW', 'SCHL', 'WKHP']
@@ -227,13 +206,12 @@ class Training:
         for episode in range(EPISODES):
             # Buffers for PPO
             ppo_buffer       = []
-            diversity_rs     = []
             generated_buffer = []
 
             # Reset env
             state = env.reset()
 
-            # 1) Generate synthetic episode
+            #Generate synthetic episode
             for t in range(SYNTHETIC_TUPLES):
                 action = self.ppo_agent.predict(state)               # shape = (len(features),)
                 next_state, _, done, info = env.step(action, (len(generated_buffer) + 1))
@@ -258,10 +236,10 @@ class Training:
                 y_synth = np.empty((0,))
 
             # combine real biased + synthetic
-            print(f"X_biased shape: {X_biased.shape}")
+            print(f"X_biased shape: {X_theta_train.shape}")
             print(f"X_synth shape: {X_synth.shape}")
-            X_aug = np.vstack([X_biased, X_synth])
-            y_aug = np.concatenate([y_biased, y_synth])
+            X_aug = np.vstack([X_theta_train, X_synth])
+            y_aug = np.concatenate([y_theta_train, y_synth])
 
             #print()
             model = MLPRegressor(hidden_layer_sizes=(64, 32), activation='relu', max_iter=200, random_state=0)

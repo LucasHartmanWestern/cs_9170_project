@@ -18,20 +18,7 @@ class Environment:
                  max_samples: int,
                  window_size: int,
                  seed: int = 42):
-        """
-        Parameters
-        ----------
-        train_df : pd.DataFrame
-            Real training data. Used for initial buffer and sampling
-        features : list of str
-            Column names for feature variables.
-        target : str
-            Column name for the target variable.
-        baseline_mse : float
-            MSE of baseline LSTM on biased real data.
-        seed : int
-            Random seed.
-        """
+                 
         self.train_df      = train_df.reset_index(drop=True)
         self.threshold     = threshold
         self.features      = features
@@ -71,23 +58,6 @@ class Environment:
         # 3) Return the state vector
         return np.array([target_income, frac_done], dtype=np.float32)
 
-    # def compute_heterogenity_reward(self, obs_features, generated_buffer, max_dist=None):
-    #     """
-    #     Per-step heterogeneity shaping (currently unused).
-    #     """
-    #     obs = np.asarray(obs_features, dtype=np.float32)
-    #     if len(generated_buffer) == 0:
-    #         return 1.0
-    #     buf = np.asarray(generated_buffer, dtype=np.float32)
-    #     dists = np.linalg.norm(buf - obs, axis=1)
-    #     d_min = np.min(dists)
-    #     if max_dist is None:
-    #         max_dist = np.max(dists)
-    #         if max_dist <= 0:
-    #             max_dist = 1.0
-    #     hetero = np.clip(d_min / max_dist, 0.0, 1.0)
-    #     return float(hetero)
-
     def reset(self):
         # Select high-income indices
         idxs = np.where(self.train_df[self.target] >= self.threshold)[0]
@@ -113,11 +83,6 @@ class Environment:
         return state_vec
 
     def step(self, action: np.ndarray, buffer_length):
-        # Heterogeneity reward (commented out)
-        # h_r = self.compute_heterogenity_reward(action, list(self.generated_buffer))
-        # self.heterogenity_rewards.append(h_r)
-
-        h_r = 0.0
 
         # Record generated sample (features + target)
         new_obs = np.concatenate([action, [self.current_target]])
