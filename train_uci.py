@@ -233,7 +233,7 @@ class Training:
                 state = next_state
                 if done:
                     break
-                print(f'Generated synthetic tuple {t}/{TRAJ_LENGTH}')
+                print(f'Generated synthetic tuple {t + 1}/{TRAJ_LENGTH}')
 
             T = len(X_syn_list)
             X_syn = np.stack(X_syn_list)    # shape [T, feature_dim]
