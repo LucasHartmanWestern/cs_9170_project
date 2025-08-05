@@ -32,7 +32,7 @@ class Training:
             'c2': 0.01,
             'seed': self.seed
         }
-        ffnn_config = {
+        self.ffnn_config = {
             'input_size': 5,
             'hidden_sizes': [16, 16],
             'output_size': 1,
@@ -44,8 +44,8 @@ class Training:
             'seed': self.seed
         }
         self.ppo_agent = PPOAgent(**ppo_config)
-        self.alpha_model = FFNNAgent(**ffnn_config)
-        self.beta_model = FFNNAgent(**ffnn_config)
+        self.alpha_model = FFNNAgent(**self.ffnn_config)
+        self.beta_model = FFNNAgent(**self.ffnn_config)
 
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
@@ -283,15 +283,15 @@ class Training:
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
 
             rewards = self.compute_reward(self.alpha_model, self.beta_model, x_theta_test_t, y_theta_test_t, x_phi_t, y_phi_t)
-            # print(f'line 284 rewards {rewards}')
 
             for idx, (s, a, r, s_next, d) in enumerate(zip(states, actions, rewards, next_states, dones)):
-                # r_normalized = r / 100000
-                # if abs(r_normalized - r) > 1e-6:
-                #     print(f"[Step {idx}] Normalized reward {r!r} → {r_normalized!r}")
-
                 # learn
                 self.ppo_agent.learn(s, a, r, s_next, d)
+
+            #self.ppo_agent.learn_trajectory(states, actions, rewards, next_states, dones)
+
+            #Resets beta model
+            self.beta_model = FFNNAgent(**self.ffnn_config)
 
             avg_reward = torch.mean(rewards)
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.3f}")

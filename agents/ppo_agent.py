@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
-
+from torch.utils.data import DataLoader, TensorDataset
 
 # torch.backends.cudnn.deterministic        = True
 # torch.backends.cudnn.benchmark            = False
@@ -220,7 +220,6 @@ class PPOAgent:
                 generator=self.rng
             )
 
-
             # PPO update for multiple epochs
             for _ in range(self.update_epochs):
                 # Process in minibatches
@@ -263,6 +262,68 @@ class PPOAgent:
             
             # Clear memory after update
             self.memory = []
+
+    def learn_trajectory(self, states, actions, rewards, next_states, dones):
+        states = torch.as_tensor(torch.stack([torch.as_tensor(s, dtype=torch.float32, device=self.device) for s in states]), device=self.device)
+        actions = torch.as_tensor(torch.stack([torch.as_tensor(a, dtype=torch.float32, device=self.device) for a in actions]), device=self.device)
+        rewards = torch.as_tensor(rewards, dtype=torch.float32, device=self.device)
+        dones   = torch.as_tensor(dones, dtype=torch.float32, device=self.device)
+
+
+        #Discount returns
+        returns = []
+        G = 0
+        for r, d in zip(reversed(rewards), reversed(dones)):
+            G = r + self.gamma * G * (1 - d)
+            returns.insert(0, G)
+        returns = torch.as_tensor(returns, dtype=torch.float32, device=self.device)
+
+
+        #Value estimates and advantages
+        with torch.no_grad():
+            values = self.critic(states).squeeze(-1)
+        advantages = returns - values
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        #Old log probs
+        with torch.no_grad():
+            means, log_stds = self.actor(states)
+            stds = log_stds.exp()
+            dist = Normal(means, stds)
+            old_log_probs = dist.log_prob(actions).sum(dim=1)
+
+        #Dataloader
+        dataset = TensorDataset(states, actions, old_log_probs, returns, advantages)
+        loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, generator=self.rng)
+
+        #PPO update loop
+        for _ in range(self.update_epochs):
+            for b_states, b_actions, b_old_log_probs, b_returns, b_advantages in loader:
+                means, log_stds = self.actor(b_states)
+                stds = log_stds.exp()
+                dist = Normal(means, stds)
+
+                log_probs = dist.log_prob(b_actions).sum(dim=-1)
+                entropy = dist.entropy().mean()
+
+                #Ratio for clipping
+                ratio = torch.exp(log_probs - b_old_log_probs)
+
+                #Surrogate objectives
+                surr1 = ratio * b_advantages
+                surr2 = torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * b_advantages
+                actor_loss = -torch.min(surr1, surr2).mean()
+
+                #Critic loss
+                value_preds = self.critic(b_states).squeeze(-1)
+                critic_loss = F.mse_loss(value_preds, b_returns)
+
+                #Total loss
+                loss = actor_loss + self.c1 * critic_loss - self.c2 * entropy
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+        return
 
     def save(self, path):
         """
