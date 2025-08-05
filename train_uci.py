@@ -104,8 +104,6 @@ class Training:
 
         return model
 
-
-
     def evaluate_cost(self, model, X, y, metric="mse", reduction="mean"):
         with torch.no_grad():
             y_pred = model.predict(X).squeeze(-1)   # → [N]
@@ -196,7 +194,6 @@ class Training:
         target = 'PINCP'
         seed = self.seed
 
-
         env = Environment(
             target=target,
             male_hi=self.males_hi,#index for sampling target
@@ -236,8 +233,8 @@ class Training:
                 print(f'Generated synthetic tuple {t + 1}/{TRAJ_LENGTH}')
 
             T = len(X_syn_list)
-            X_syn = np.stack(X_syn_list)    # shape [T, feature_dim]
-            y_syn = np.array(y_syn_list)    # shape [T]
+            X_syn = np.stack(X_syn_list)
+            y_syn = np.array(y_syn_list)
 
             X_theta_test_t = torch.tensor(X_theta_test, dtype=torch.float32, device=self.device)
             y_theta_test_t = torch.tensor(y_theta_test, dtype=torch.float32, device=self.device)
@@ -250,7 +247,6 @@ class Training:
             self.beta_model = self.train_agent(self.beta_model, X_hybrid, y_hybrid)
 
             rewards = self.compute_reward(self.alpha_model, self.beta_model, X_theta_test_t, y_theta_test_t, X_phi_t, y_phi_t)
-
 
             for idx, (s, a, r, s_next, d) in enumerate(zip(states, actions, rewards, next_states, dones)):
                 r_normalized = r / 100000
