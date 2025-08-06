@@ -12,6 +12,7 @@ class Environment:
         self.target        = target
         self.male_hi       = np.array(male_hi, dtype=np.float32)
         self.max_actions   = max_actions
+        self.seed = seed
 
         np.random.seed(seed)
 
@@ -38,8 +39,10 @@ class Environment:
         return np.array([target_income, frac_done], dtype=np.float32)
 
     def reset(self):
+        np.random.seed(self.seed)
         # Initial state
         state_vec = self.generate_state()
+
         return state_vec
 
     def step(self, action: np.ndarray, buffer_length):

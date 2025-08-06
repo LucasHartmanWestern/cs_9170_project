@@ -12,6 +12,7 @@ from fairlearn.datasets import fetch_acs_income
 from sklearn.neural_network import MLPRegressor
 import torch.nn.functional as F
 import math
+import copy
 
 class Training:
     def __init__(self, seed=1234, device='cpu'):
@@ -38,18 +39,26 @@ class Training:
             'output_size': 1,
             'learning_rate': 0.001,
             'batch_size': 32,
-            'epochs': 10,
+            'epochs': 30,
             'type': 'regression',
             'classes': None,
             'seed': self.seed
         }
         self.ppo_agent = PPOAgent(**ppo_config)
         self.alpha_model = FFNNAgent(**self.ffnn_config)
-        self.beta_model = FFNNAgent(**self.ffnn_config)
+        self.beta_base_model = FFNNAgent(**self.ffnn_config)
+        self.restart_beta()
 
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
     #Can see plots for this dataset in new_biases.ipynb
+
+    def restart_beta(self):
+        self.beta_model = None
+        self.beta_model = copy.deepcopy(self.beta_base_model)
+        # print(f'line 59 checking same weights mean are set {self.beta_model.model.state_dict()}')
+        # print(f'line 59 checking same weights mean are set {self.beta_model.optimizer}')
+    
     def split_dataset(self, seq_len=5, seed=42):
         #Fetch raw data
         data_bunch = fetch_acs_income(as_frame=True)
@@ -175,17 +184,6 @@ class Training:
         return torch.abs(pred-target)
 
     def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi, lambda_=0.5):
-        # #global term 
-        # g = self.global_error(beta_model, x_theta_test, y_theta_test)
-
-        # #individualized term
-        # ind = self.independent_error(alpha_model, beta_model, x_phi, y_phi, x_theta_test, y_theta_test)
-
-        # #combine to create reward vector (one element per action/synthetic_row)
-        # # reward = []
-        # # for d in ind:
-        # #     r = ((lamb * g) + ((1 - lamb) * d) ) * -1
-        # #     reward.append(r)
         with torch.no_grad():
             y_hat_theta_beta = beta_model.predict(x_theta_test).squeeze(-1)   # → [N]
             y_hat_theta_alpha= alpha_model.predict(x_theta_test).squeeze(-1)   # → [N]
@@ -207,18 +205,18 @@ class Training:
                 print('Changed to work with beta cost')
                 y_hat_phi_beta = beta_model.predict(x_phi).squeeze(-1)   # → [N]
                 objective_individual = self.error_vector(y_phi, y_hat_phi_beta)
-        # print(f'line 210 obj individual {objective_individual}')
+        print(f'line 219 obj global {objective_global} individual {objective_individual.mean()}')
 
        
-        reward = -1*(lambda_*objective_global + (1.0-lambda_)*objective_individual)
+        reward = 1*(lambda_*objective_global + (1.0-lambda_)*objective_individual)
         return reward
 
     #Called automatically
     def __call__(self):
         print('Begin train loop')
         # Training loop params
-        EPISODES        = 20
-        TRAJ_LENGTH     = 10
+        EPISODES        = 100
+        TRAJ_LENGTH     = 100
 
         # Prepare data and baseline (Alpha model)
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset()
@@ -284,14 +282,14 @@ class Training:
 
             rewards = self.compute_reward(self.alpha_model, self.beta_model, x_theta_test_t, y_theta_test_t, x_phi_t, y_phi_t)
 
-            for idx, (s, a, r, s_next, d) in enumerate(zip(states, actions, rewards, next_states, dones)):
-                # learn
-                self.ppo_agent.learn(s, a, r, s_next, d)
+            # for idx, (s, a, r, s_next, d) in enumerate(zip(states, actions, rewards, next_states, dones)):
+            #     # learn
+            #     self.ppo_agent.learn(s, a, r, s_next, d)
 
-            #self.ppo_agent.learn_trajectory(states, actions, rewards, next_states, dones)
+            self.ppo_agent.learn_trajectory(states, actions, rewards, next_states, dones)
 
             #Resets beta model
-            self.beta_model = FFNNAgent(**self.ffnn_config)
+            self.restart_beta()
 
             avg_reward = torch.mean(rewards)
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.3f}")

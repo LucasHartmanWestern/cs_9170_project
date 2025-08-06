@@ -59,7 +59,7 @@ class FFNNAgent:
             seed: Random seed for reproducibility
         """
 
-
+        super(FFNNAgent, self).__init__()
         self.device = device 
         self.seed   = seed
         torch.manual_seed(seed)
