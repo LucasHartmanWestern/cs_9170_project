@@ -255,10 +255,10 @@ class Training:
         print('Begin train loop')
         # Training loop params
 
-        EPISODES        = 200
+        EPISODES        = 75
         TRAJ_LENGTH     = 1000
         REAL_DATA_SIZE  = 3000
-        BIAS_PCT        = 0.75
+        BIAS_PCT        = 0.9
         #SAVE_DATA      
         # Prepare data
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT)
@@ -284,6 +284,9 @@ class Training:
             seed=seed
         )
 
+        last_x_syn = None
+        last_y_syn = None
+
         for episode in range(EPISODES):
             states, actions = [], []
             next_states, dones = [], []
@@ -292,9 +295,9 @@ class Training:
 
             # Reset env
             state = env.reset()
-            #Generate a trajectory of length TRAJ_LENGTH
+            # Generate a trajectory of length TRAJ_LENGTH
             for t in range(TRAJ_LENGTH):
-                #Get action
+                # Get action
                 action = self.ppo_agent.predict(state)
 
                 next_state, done, info = env.step(action, (t + 1))
@@ -304,9 +307,9 @@ class Training:
                 next_states.append(next_state)
                 dones.append(done)
 
-                #Always = 1 (Underrepresented class)
+                # Always = 1 (Underrepresented class)
                 sampled_t = info['sampled_target']
-                #action_with_sex = np.concatenate([action, [2.0]])
+                # action_with_sex = np.concatenate([action, [2.0]])
 
                 x_syn_list.append(action)
                 y_syn_list.append(sampled_t)
@@ -316,10 +319,13 @@ class Training:
                     print(f'Generated synthetic tuple {t + 1}/{TRAJ_LENGTH}')
                     break
 
-
             T = len(x_syn_list)
             x_syn = np.stack(x_syn_list)    # shape [T, feature_dim]
             y_syn = np.array(y_syn_list)    # shape [T]
+
+            # Save the last trajectory for later use
+            last_x_syn = x_syn
+            last_y_syn = y_syn
 
             x_theta_test_t = torch.tensor(x_theta_test, dtype=torch.long, device=self.device)
             y_theta_test_t = torch.tensor(y_theta_test, dtype=torch.long, device=self.device)
@@ -339,11 +345,20 @@ class Training:
 
             self.ppo_agent.learn_trajectory(states, actions, rewards, next_states, dones)
 
-            #Resets beta model
+            # Resets beta model
             self.restart_beta()
 
             avg_reward = torch.mean(rewards)
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.3f}")
+
+        # After training, save the last generated synthetic trajectory to a file
+        if last_x_syn is not None and last_y_syn is not None:
+            # Format as DataFrame
+            df_syn = pd.DataFrame(last_x_syn, columns=[f"pca_{i}" for i in range(last_x_syn.shape[1])])
+            df_syn["target"] = last_y_syn
+
+            df_syn.to_csv("synthetic_trajectory.csv", index=False)
+            print(f"Saved last synthetic trajectory to synthetic_trajectory.csv")
     
 if __name__ == "__main__":
     train = Training(seed=42)
