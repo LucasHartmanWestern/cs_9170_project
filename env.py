@@ -29,13 +29,13 @@ class Environment:
 
     def generate_state(self, curr_length=0):
         #Draw a target_income from the male high‑income distribution
-        target_income = self.sample_target()
+        #target_income = self.sample_target()
 
         #Compute distance to end of trajectory
         frac_done = curr_length / self.max_actions
         
-        #Return the state vector
-        return np.array([target_income, frac_done], dtype=np.float32)
+        #Return the state vector, forced target to be minority
+        return np.array([1, frac_done], dtype=np.float32)
 
     def reset(self):
         # Initial state

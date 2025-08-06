@@ -12,16 +12,29 @@ from fairlearn.datasets import fetch_acs_income
 from sklearn.neural_network import MLPRegressor
 import torch.nn.functional as F
 import math
+from sklearn.metrics import f1_score as _sk_f1
+import pandas as pd
+import numpy as np
+from ucimlrepo import fetch_ucirepo
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score
+from sklearn.utils import resample
+from agents.ffnn_agent2 import FFNNAgent
+from torch.utils.data import TensorDataset, DataLoader
+import torch
 
 class Training:
     def __init__(self, seed=1234, device='cpu'):
         self.device = device
         self.seed = seed
+        self.pca_components = 2
 
         torch.manual_seed(seed)
         ppo_config = {
             'state_size': 2,  
-            'action_size': 4,   
+            'action_size': self.pca_components,   
             'hidden_size': 64,
             'lr': 3e-4, 
             'gamma': 0.9,
@@ -33,68 +46,115 @@ class Training:
             'seed': self.seed
         }
         self.ffnn_config = {
-            'input_size': 5,
+            'input_size': self.pca_components,
             'hidden_sizes': [32, 16],
             'output_size': 1,
             'learning_rate': 0.001,
             'batch_size': 64,
             'epochs': 10,
-            'type': 'regression',
-            'classes': None,
-            'seed': self.seed
+            'type': 'classification',
+            'classes': [0, 1],
+            'seed': 123
         }
         self.ppo_agent = PPOAgent(**ppo_config)
         self.alpha_model = FFNNAgent(**self.ffnn_config)
         self.beta_model = FFNNAgent(**self.ffnn_config)
 
+
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
     #Can see plots for this dataset in new_biases.ipynb
     def split_dataset(self, seq_len=5, seed=42):
-        #Fetch raw data
-        data_bunch = fetch_acs_income(as_frame=True)
+        # 1. Fetch dataset
+        adult = fetch_ucirepo(id=2)
+        X_df = adult.data.features  # DataFrame of shape (n_samples, n_features)
+        y_df = adult.data.targets   # DataFrame of shape (n_samples, 1)
 
-        #Reduce feature space to AGEP  COW  SCHL  WKHP  SEx
-        x = data_bunch.data.iloc[:5000].drop(columns=['OCCP', 'POBP', 'RELP', 'RAC1P', 'MAR', ])
-        y = data_bunch.target.iloc[:5000]
+        # Convert X and y to numpy arrays
+        X = X_df.values
+        y = np.ravel(y_df.values)
 
-        df = pd.concat([x, y.rename("INCOME")], axis=1)
+        # Map string labels to 0/1 (adjust exact strings if needed)
+        y = np.where(y == '>50K', 1, 0)
 
-        #Threshold for "High_income"
-        self.INCOME = 150_000
+        # Identify categorical and numerical columns by dtype
+        cat_cols = [i for i, dt in enumerate(X_df.dtypes) if dt.name in ['category', 'object', 'bool']]
+        num_cols = [i for i, dt in enumerate(X_df.dtypes) if np.issubdtype(dt, np.number)]
 
-        # Identify all males and females earning >150K
-        high_income_mask = df['INCOME'] > self.INCOME
-        self.males_hi   = df[(df['SEX']==1.0) & high_income_mask]
-        females_hi = df[(df['SEX']==2.0) & high_income_mask]
+        # 2. One-hot encode categoricals, standardize numericals
+        encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+        X_cat = encoder.fit_transform(X[:, cat_cols]) if cat_cols else np.empty((X.shape[0], 0))
 
-        # Find minimum count for balanced split
-        n_hi = min(len(self.males_hi), len(females_hi))
+        scaler = StandardScaler()
+        X_num = scaler.fit_transform(X[:, num_cols]) if num_cols else np.empty((X.shape[0], 0))
 
-        # Randomly sample n_hi from each group for test set
-        males_hi_test   = self.males_hi.sample(n=n_hi, random_state=0)
-        females_hi_test = females_hi.sample(n=n_hi, random_state=0)
-        test_idx = males_hi_test.index.union(females_hi_test.index)
+        # stack back together
+        X_all = np.hstack([X_num, X_cat])
+        y_all = y
 
-        # The rest is train set
-        train_idx = df.index.difference(test_idx)
+        # For balancing, create a single array with features and target as last column
+        df_all = np.hstack([X_all, y_all.reshape(-1, 1)])
 
-        # Split all arrays accordingly
-        x_train, x_theta_test = x.loc[train_idx], x.loc[test_idx]
-        y_train, y_theta_test = y.loc[train_idx], y.loc[test_idx]
+        target_col = -1
+        majority_mask = df_all[:, target_col] == 0
+        minority_mask = df_all[:, target_col] == 1
 
-        x_train_np = x_train.to_numpy(dtype=np.float32)
-        y_train_np = y_train.to_numpy(dtype=np.float32)
-        x_test_np  = x_theta_test.to_numpy(dtype=np.float32)
-        y_test_np  = y_theta_test.to_numpy(dtype=np.float32)
+        df_majority = df_all[majority_mask]
+        df_minority = df_all[minority_mask]
 
-        return x_train_np, x_test_np, y_train_np, y_test_np
+        # Upsample minority class
+        n_majority = df_majority.shape[0]
+        n_minority = df_minority.shape[0]
+
+        indices = np.random.choice(n_minority, size=n_majority, replace=True)
+        df_minority_upsampled = df_minority[indices]
+
+        # Concatenate and shuffle
+        df_balanced = np.vstack([df_majority, df_minority_upsampled])
+        np.random.shuffle(df_balanced)
+
+        X_bal = df_balanced[:, :-1]
+        y_bal = df_balanced[:, -1]
+
+        # 1. Set bias percentage (adjustable)
+        remove_pct = 0.90  # 75% by default, change as needed
+
+        # 2. Bias the dataset: remove a percentage of Class 1 examples from the balanced set
+        df_balanced_pd = pd.DataFrame(X_bal, columns=[f'feat_{i}' for i in range(X_bal.shape[1])])
+        df_balanced_pd['target'] = y_bal
+
+        # Separate class 0 and class 1
+        df_class_0 = df_balanced_pd[df_balanced_pd['target'] == 0]
+        df_class_1 = df_balanced_pd[df_balanced_pd['target'] == 1]
+
+        # Remove a fraction of class 1
+        df_class_1_biased = df_class_1.sample(frac=1 - remove_pct, random_state=123)
+        df_biased = pd.concat([df_class_0, df_class_1_biased], axis=0).sample(frac=1, random_state=123).reset_index(drop=True)
+
+        X_biased = df_biased.drop('target', axis=1).values
+        y_biased = df_biased['target'].values
+
+        # 3. PCA analysis (just like before)
+        pca = PCA(n_components=2)
+        X_biased_pca = pca.fit_transform(X_biased)
+
+        # 4. Train-test split after biasing and PCA
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_biased_pca, y_biased, test_size=0.2, random_state=self.seed, stratify=y_biased
+        )
+        # Ensure all outputs are numpy arrays
+        X_train = np.array(X_train)
+        X_test = np.array(X_test)
+        y_train = np.array(y_train)
+        y_test = np.array(y_test)
+
+        return X_train, X_test, y_train, y_test
 
     def train_predictor_model(self, model, x_train, y_train):
 
         # Convert numpy arrays to torch tensors
-        x_train_tensor = torch.tensor(x_train, dtype=torch.float32)
-        y_train_tensor = torch.tensor(y_train, dtype=torch.float32)
+        x_train_tensor = torch.tensor(x_train, dtype=torch.float32, device=self.device)
+        y_train_tensor = torch.tensor(y_train, dtype=torch.long,   device=self.device)
 
         # Create TensorDataset and DataLoader
         train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
@@ -105,90 +165,40 @@ class Training:
         return model
 
 
-
-    def evaluate_cost(self, model, x, y, metric="mse", reduction="mean"):
-        with torch.no_grad():
-            y_pred = model.predict(x).squeeze(-1)   # → [N]
-            y_true = y.squeeze(-1)                 # → [N]
-            diff   = y_pred - y_true
-
-        return float(diff.pow(2).mean().item())  # MSE
-
-    def global_error(self, beta_model, x_theta_test, y_theta_test, metric="mse"):
-        return self.evaluate_cost(
-            beta_model,
-            x_theta_test, 
-            y_theta_test,
-            metric=metric,
-            reduction="mean"
-            )
-
-    def independent_error(self, alpha_model, beta_model, x_phi, y_phi, x_theta_test, y_theta_test):
-        self.metric = 'mse'
-        alpha_mean = self.evaluate_cost(
-            alpha_model, x_theta_test, y_theta_test,
-            metric="mse", reduction="mean"
-        )
-        beta_mean = self.evaluate_cost(
-            beta_model, x_theta_test, y_theta_test,
-            metric="mse", reduction="mean"
-        )
-
-        # per sample error vectors for both models
-        with torch.no_grad():
-            pred_a = alpha_model.predict(x_phi)
-            pred_b = beta_model.predict(x_phi)
-            diff_a = pred_a - y_phi
-            diff_b = pred_b - y_phi
-
-            if self.metric == "mse":
-                err_a = diff_a.pow(2)
-                err_b = diff_b.pow(2)
-            elif self.metric == "mae":
-                err_a = diff_a.abs()
-                err_b = diff_b.abs()
-            elif self.metric == "me":
-                err_a = diff_a
-                err_b = diff_b
-            else:
-                raise ValueError(f"Unknown metric '{self.metric}'.")
-
-            # if multi‐dimensional, collapse to one scalar per sample
-            if err_a.dim() > 1:
-                err_a = err_a.mean(dim=1)
-                err_b = err_b.mean(dim=1)
-
-            err_a = err_a.cpu().tolist()
-            err_b = err_b.cpu().tolist()
-
-        if beta_mean >= alpha_mean:
-            return err_a      # use alpha model’s per‐action cost
-        else:
-            return err_b      # use beta model’s per‐action cost
-
     def mean_error(self, target, pred):
         # return torch.mean((pred - target) ** 2)
-        return torch.mean(torch.abs(pred-target))
+        return torch.tensor(_sk_f1(target.detach().cpu().numpy().ravel(), torch.round(pred).detach().cpu().numpy().ravel()))
 
     def error_vector(self, target, pred):
-        # return (pred - target) ** 2
-        return torch.abs(pred-target)
+        y_true = target.detach().cpu().numpy().ravel()
+        y_pred = torch.round(pred).detach().cpu().numpy().ravel()
+
+        # Compute F1 for each sample
+        vec = np.array([
+            _sk_f1([t], [p], zero_division=0)
+            for t, p in zip(y_true, y_pred)
+        ], dtype=np.float32)
+
+        # Back to torch, on same device as pred
+        return torch.tensor(vec, device=pred.device).view_as(target)
 
     def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi, lambda_=0.5):
-        # #global term 
-        # g = self.global_error(beta_model, x_theta_test, y_theta_test)
-
-        # #individualized term
-        # ind = self.independent_error(alpha_model, beta_model, x_phi, y_phi, x_theta_test, y_theta_test)
-
-        # #combine to create reward vector (one element per action/synthetic_row)
-        # # reward = []
-        # # for d in ind:
-        # #     r = ((lamb * g) + ((1 - lamb) * d) ) * -1
-        # #     reward.append(r)
         with torch.no_grad():
-            y_hat_theta_beta = beta_model.predict(x_theta_test).squeeze(-1)   # → [N]
-            y_hat_theta_alpha= alpha_model.predict(x_theta_test).squeeze(-1)   # → [N]
+            # θ–test predictions from β
+            beta_out = beta_model.predict(x_theta_test)   # <-- this is a list
+            y_hat_theta_beta = torch.tensor(
+                beta_out,
+                dtype=torch.float32,
+                device=self.device
+            ).squeeze(-1)
+
+            # same for α
+            alpha_out = alpha_model.predict(x_theta_test)
+            y_hat_theta_alpha = torch.tensor(
+                alpha_out,
+                dtype=torch.float32,
+                device=self.device
+            ).squeeze(-1)
 
         # Calculating objective 1, global error using Beta model on theta test set
         objective_global = self.mean_error(y_theta_test, y_hat_theta_beta)
@@ -201,27 +211,30 @@ class Training:
         with torch.no_grad():
             if alpha_cost < beta_cost:
                 print(f'Working with alpha cost')
-                y_hat_phi_alpha = alpha_model.predict(x_phi).squeeze(-1)   # → [N]
-                objective_individual = self.error_vector(y_phi, y_hat_phi_alpha)
+                pred = alpha_model.predict(x_phi)
+                y_hat_phi = torch.tensor(pred, dtype=torch.float32, device=self.device).squeeze(-1)
+                objective_individual = self.error_vector(y_phi, y_hat_phi)
             else:
                 print('Changed to work with beta cost')
-                y_hat_phi_beta = beta_model.predict(x_phi).squeeze(-1)   # → [N]
-                objective_individual = self.error_vector(y_phi, y_hat_phi_beta)
+                pred = beta_model.predict(x_phi)
+                y_hat_phi = torch.tensor(pred, dtype=torch.float32, device=self.device).squeeze(-1)
+                objective_individual = self.error_vector(y_phi, y_hat_phi)
         # print(f'line 210 obj individual {objective_individual}')
 
        
-        reward = -1*(lambda_*objective_global + (1.0-lambda_)*objective_individual)
+        reward = 1*(lambda_*objective_global + (1.0-lambda_)*objective_individual)
         return reward
 
     #Called automatically
     def __call__(self):
         print('Begin train loop')
         # Training loop params
-        EPISODES        = 50
-        TRAJ_LENGTH     = 300
+        EPISODES        = 20
+        TRAJ_LENGTH     = 10
 
         # Prepare data and baseline (Alpha model)
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset()
+        print(f"Size of train set: {len(x_theta_train)}")
         self.alpha_model = self.train_predictor_model(self.alpha_model, x_theta_train, y_theta_train)
 
         # Environment and agent setup NOTE that sex is forced female in loop
@@ -231,7 +244,7 @@ class Training:
 
         env = Environment(
             target=target,
-            male_hi=self.males_hi,#index for sampling target
+            male_hi=0,#index for sampling target
             max_actions=TRAJ_LENGTH,
             seed=seed
         )
@@ -247,7 +260,8 @@ class Training:
             #Generate a trajectory of length TRAJ_LENGTH
             for t in range(TRAJ_LENGTH):
                 #Get action
-                action = self.ppo_agent.predict(state)             
+                action = self.ppo_agent.predict(state)
+
                 next_state, done, info = env.step(action, (t + 1))
 
                 states.append(state)
@@ -257,9 +271,9 @@ class Training:
 
                 # combine action with SEX and target, append to trajectory
                 sampled_t = info['sampled_target']
-                action_with_sex = np.concatenate([action, [2.0]])
+                #action_with_sex = np.concatenate([action, [2.0]])
 
-                x_syn_list.append(action_with_sex)
+                x_syn_list.append(action)
                 y_syn_list.append(sampled_t)
 
                 state = next_state
@@ -272,10 +286,10 @@ class Training:
             x_syn = np.stack(x_syn_list)    # shape [T, feature_dim]
             y_syn = np.array(y_syn_list)    # shape [T]
 
-            x_theta_test_t = torch.tensor(x_theta_test, dtype=torch.float32, device=self.device)
-            y_theta_test_t = torch.tensor(y_theta_test, dtype=torch.float32, device=self.device)
-            x_phi_t       = torch.tensor(x_syn, dtype=torch.float32, device=self.device)
-            y_phi_t       = torch.tensor(y_syn, dtype=torch.float32, device=self.device)    
+            x_theta_test_t = torch.tensor(x_theta_test, dtype=torch.long, device=self.device)
+            y_theta_test_t = torch.tensor(y_theta_test, dtype=torch.long, device=self.device)
+            x_phi_t       = torch.tensor(x_syn, dtype=torch.long, device=self.device)
+            y_phi_t       = torch.tensor(y_syn, dtype=torch.long, device=self.device)    
 
             x_hybrid = np.vstack([x_theta_train, x_phi_t ])
             y_hybrid = np.concatenate([y_theta_train, y_phi_t ])
