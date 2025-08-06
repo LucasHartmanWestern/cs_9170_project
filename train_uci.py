@@ -26,12 +26,14 @@ from torch.utils.data import TensorDataset, DataLoader
 import torch
 
 class Training:
-    def __init__(self, seed=1234, device='cpu'):
+    def __init__(self, seed=42, device='cpu'):
         self.device = device
         self.seed = seed
         self.pca_components = 2
 
-        torch.manual_seed(seed)
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+
         ppo_config = {
             'state_size': 2,  
             'action_size': self.pca_components,   
@@ -54,11 +56,12 @@ class Training:
             'epochs': 10,
             'type': 'classification',
             'classes': [0, 1],
-            'seed': 123
+            'seed': self.seed
         }
         self.ppo_agent = PPOAgent(**ppo_config)
         self.alpha_model = FFNNAgent(**self.ffnn_config)
         self.beta_model = FFNNAgent(**self.ffnn_config)
+        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
 
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
@@ -126,8 +129,8 @@ class Training:
         df_class_1 = df_balanced_pd[df_balanced_pd['target'] == 1]
 
         # Remove a fraction of class 1
-        df_class_1_biased = df_class_1.sample(frac=1 - remove_pct, random_state=123)
-        df_biased = pd.concat([df_class_0, df_class_1_biased], axis=0).sample(frac=1, random_state=123).reset_index(drop=True)
+        df_class_1_biased = df_class_1.sample(frac=1 - remove_pct, random_state=self.seed)
+        df_biased = pd.concat([df_class_0, df_class_1_biased], axis=0).sample(frac=1, random_state=self.seed).reset_index(drop=True)
 
         X_biased = df_biased.drop('target', axis=1).values
         y_biased = df_biased['target'].values
@@ -167,7 +170,7 @@ class Training:
 
         # Create TensorDataset and DataLoader
         train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-        loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+        loader = DataLoader(train_dataset, batch_size=64, shuffle=True, generator=self.dl_generator)
 
         model.train(loader)
 
@@ -247,7 +250,7 @@ class Training:
     def __call__(self):
         print('Begin train loop')
         # Training loop params
-        EPISODES        = 5
+        EPISODES        = 200
         TRAJ_LENGTH     = 500
         REAL_DATA_SIZE  = 3000
 
