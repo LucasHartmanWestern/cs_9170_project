@@ -58,9 +58,7 @@ class Training:
             'batch_size': 32,
             'epochs': 30,
             'type': 'classification',
-            'classes': [0, 1],
-            'type': 'regression',
-            'classes': None,
+            'classes': [0, 1],#1 is >50k
             'seed': self.seed
         }
         self.ppo_agent = PPOAgent(**ppo_config)
@@ -72,8 +70,7 @@ class Training:
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
     #Can see plots for this dataset in new_biases.ipynb
-
-    def split_dataset(self, train_size=None):
+    def split_dataset(self, train_size=None, bias_pct=0.75):
         #Fetch dataset
         adult = fetch_ucirepo(id=2)
         X_df = adult.data.features  
@@ -131,9 +128,6 @@ class Training:
         X_bal = df_balanced[:, :-1]
         y_bal = df_balanced[:, -1]
 
-        #Set bias percentage
-        remove_pct = 0.75
-
         # Bias the dataset: remove a percentage of Class 1 examples from the balanced set
         df_balanced_pd = pd.DataFrame(X_bal, columns=[f'feat_{i}' for i in range(X_bal.shape[1])])
         df_balanced_pd['target'] = y_bal
@@ -143,7 +137,7 @@ class Training:
         df_class_1 = df_balanced_pd[df_balanced_pd['target'] == 1]
 
         # Remove a fraction of class 1
-        df_class_1_biased = df_class_1.sample(frac=1 - remove_pct, random_state=self.seed)
+        df_class_1_biased = df_class_1.sample(frac=1 - bias_pct, random_state=self.seed)
         df_biased = pd.concat([df_class_0, df_class_1_biased], axis=0).sample(frac=1, random_state=self.seed).reset_index(drop=True)
 
         X_biased = df_biased.drop('target', axis=1).values
@@ -262,13 +256,13 @@ class Training:
         # Training loop params
 
         EPISODES        = 200
-        TRAJ_LENGTH     = 500
+        TRAJ_LENGTH     = 1000
         REAL_DATA_SIZE  = 3000
-        EPISODES        = 100
-        TRAJ_LENGTH     = 100
+        BIAS_PCT        = 0.75
+        #SAVE_DATA      
+        # Prepare data
+        x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT)
 
-        # Prepare data and baseline (Alpha model)
-        x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE)
 
         print(f"Size of train set: {len(x_theta_train)}")
         total_data = len(x_theta_train) + TRAJ_LENGTH
