@@ -217,7 +217,7 @@ class Training:
 
         return accuracy_vector
 
-        
+      
     def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi):
         with torch.no_grad():
             # θ–test predictions from β
@@ -245,12 +245,15 @@ class Training:
                 device=self.device
             ).squeeze(-1)
 
-        # # Calculating objective 1, global error using Beta model on theta test set
+
+        #How well Beta performed on the real test set
+        # Calculating objective 1, global error using Beta model on theta test set
         objective_global = self.mean_error(y_theta_test, y_hat_theta_beta)
         # Calculating objective 1, global error using Beta model on theta test set
         objective_1 = self.mean_error(y_theta_test[idx], y_hat_theta_beta_min)
 
-        # Calculating objective 2, vector error using Alpha and Beta models on phi set
+        #How well the best performing model could predict synthetic data, learns that minority has the most absurd feature values?
+        #Calculating objective 2, vector error using Alpha and Beta models on phi set
         beta_cost = self.mean_error(y_theta_test, y_hat_theta_beta)
         alpha_cost= self.mean_error(y_theta_test, y_hat_theta_alpha)
 
