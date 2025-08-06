@@ -34,6 +34,7 @@ class Training:
         self.device = device
         self.seed = seed
         self.pca_components = 2
+        self.lambda_ = 0.5
 
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
@@ -45,7 +46,7 @@ class Training:
             'lr': 3e-4, 
             'gamma': 0.9,
             'clip_epsilon': 0.2,
-            'update_epochs': 5,
+            'update_epochs': 10,
             'batch_size': 64,
             'c1': 0.5,
             'c2': 0.01,
@@ -57,7 +58,7 @@ class Training:
             'output_size': 1,
             'learning_rate': 0.001,
             'batch_size': 32,
-            'epochs': 5,
+            'epochs': 20,
             'type': 'classification',
             'classes': [0, 1],#1 is >50k
             'seed': self.seed
@@ -188,7 +189,7 @@ class Training:
         # return torch.mean((pred - target) ** 2)
         y_true = target.detach().cpu().numpy().ravel()
         y_pred = torch.round(pred).detach().cpu().numpy().ravel()
-        f1 = _sk_f1(y_true, y_pred)
+        f1 = _sk_f1(y_true, y_pred, average='weighted')
         #print(f"Mean error f1: {f1}")
         return torch.tensor(f1)
 
@@ -216,13 +217,22 @@ class Training:
 
         return accuracy_vector
 
-        
-    def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi, lambda_=0.99):
+      
+    def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi):
         with torch.no_grad():
             # θ–test predictions from β
-            beta_out = beta_model.predict(x_theta_test)   # <-- this is a list
+            beta_out = beta_model.predict(x_theta_test)  
             y_hat_theta_beta = torch.tensor(
                 beta_out,
+                dtype=torch.float32,
+                device=self.device
+            ).squeeze(-1)
+
+            # beta on minority
+            idx = y_theta_test == 1
+            beta_out_min = beta_model.predict(x_theta_test[idx,:])  
+            y_hat_theta_beta_min = torch.tensor(
+                beta_out_min,
                 dtype=torch.float32,
                 device=self.device
             ).squeeze(-1)
@@ -235,9 +245,12 @@ class Training:
                 device=self.device
             ).squeeze(-1)
 
+
         #How well Beta performed on the real test set
         # Calculating objective 1, global error using Beta model on theta test set
         objective_global = self.mean_error(y_theta_test, y_hat_theta_beta)
+        # Calculating objective 1, global error using Beta model on theta test set
+        objective_1 = self.mean_error(y_theta_test[idx], y_hat_theta_beta_min)
 
         #How well the best performing model could predict synthetic data, learns that minority has the most absurd feature values?
         #Calculating objective 2, vector error using Alpha and Beta models on phi set
@@ -246,7 +259,7 @@ class Training:
 
 
         with torch.no_grad():
-            if alpha_cost < beta_cost:
+            if False: #alpha_cost < beta_cost:
                 print(f'Working with alpha cost')
                 pred = alpha_model.predict(x_phi)
                 y_hat_phi = torch.tensor(pred, dtype=torch.float32, device=self.device).squeeze(-1)
@@ -256,9 +269,9 @@ class Training:
                 pred = beta_model.predict(x_phi)
                 y_hat_phi = torch.tensor(pred, dtype=torch.float32, device=self.device).squeeze(-1)
                 objective_individual = self.error_vector(y_phi, y_hat_phi)
-        print(f'obj global {objective_global:.4f} individual {objective_individual.mean():.4f}')
-        reward = 1*(lambda_*objective_global + (1.0-lambda_)*objective_individual)
-        return reward
+        # print(f'obj global {objective_global:.4f} individual {objective_individual.mean():.4f}')
+        reward = 1*(self.lambda_*objective_1 + (1.0-self.lambda_)*objective_individual)
+        return reward, objective_1, objective_individual, objective_global
 
     #Called automatically
     def __call__(self):
@@ -268,9 +281,11 @@ class Training:
 
 
         EPISODES        = 100 #200
-        TRAJ_LENGTH     = 1000 #1000
+        TRAJ_LENGTH     = 3000 #1000
         REAL_DATA_SIZE  = 3000
         BIAS_PCT        = 0.9
+        self.lambda_    = 0.8
+        
         #SAVE_DATA      
         # Prepare data
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT)
@@ -347,7 +362,7 @@ class Training:
 
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
 
-            rewards = self.compute_reward(self.alpha_model, self.beta_model, x_theta_test, y_theta_test, x_phi_t, y_phi_t)
+            rewards, obj_1, obj_2, global_ = self.compute_reward(self.alpha_model, self.beta_model, x_theta_test, y_theta_test, x_phi_t, y_phi_t)
 
             # for idx, (s, a, r, s_next, d) in enumerate(zip(states, actions, rewards, next_states, dones)):
             #     # learn
@@ -359,7 +374,9 @@ class Training:
             self.restart_beta()
 
             avg_reward = torch.mean(rewards)
-            print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.3f}")
+            print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.4f}" +\
+                 f"- Obj 1 {obj_1:.4f}, Obj 2 {obj_2.mean():.4f},"+\
+                 f" Global  {global_:.4f}, lambda {self.lambda_:.4f}")
 
         print(f'Total time {time.time()-start_time}')
 
