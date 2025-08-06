@@ -71,15 +71,16 @@ class Training:
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
     #Can see plots for this dataset in new_biases.ipynb
+
     def restart_beta(self):
         self.beta_model = None
-        self.beta_model = copy.deepcopy(self.beta_base_model)
-    
+        self.beta_model = copy.deepcopy(self.beta_base_model)     
+
     def split_dataset(self, train_size=None, bias_pct=0.75):
-        #Fetch dataset
+        # Fetch dataset
         adult = fetch_ucirepo(id=2)
         X_df = adult.data.features  
-        y_df = adult.data.targets      
+        y_df = adult.data.targets   
 
         X = X_df.values
         y = np.ravel(y_df.values)
@@ -141,32 +142,32 @@ class Training:
         X_biased = df_biased.drop('target', axis=1).values
         y_biased = df_biased['target'].values
 
-        #PCA analysis 
-        pca = PCA(n_components=self.pca_components)
-        X_biased_pca = pca.fit_transform(X_biased)
-
-        #Train-test split after biasing and PCA
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_biased_pca, y_biased, test_size=0.2, random_state=self.seed, stratify=y_biased
+        # Train-test split after biasing, before PCA
+        X_train, X_test_theta, y_train, y_test_theta = train_test_split(
+            X_biased, y_biased, test_size=0.2, random_state=self.seed, stratify=y_biased
         )
 
         # If train_size is specified, subsample the train set to the requested size
         # Bias in class distribution is maintained.
-        if train_size is not None:
-            if train_size < len(X_train):
-                # Stratified subsample to preserve the biased class distribution
-                X_train_sub, _, y_train_sub, _ = train_test_split(
-                    X_train, y_train, train_size=train_size, random_state=self.seed, stratify=y_train
-                )
-                X_train = X_train_sub
-                y_train = y_train_sub
+        if train_size is not None and train_size < len(X_train):
+            print('Reducing size of dataset')
+            # Stratified subsample to preserve the biased class distribution
+            X_train, _, y_train, _ = train_test_split(
+                X_train, y_train, train_size=train_size, random_state=self.seed, stratify=y_train
+            )
 
-        X_train = torch.tensor(X_train, dtype=torch.float32, device=self.device)
-        X_test  = torch.tensor(X_test, dtype=torch.float32, device=self.device)
-        y_train = torch.tensor(y_train, dtype=torch.long,   device=self.device)
-        y_test  = torch.tensor(y_test, dtype=torch.long,   device=self.device)
+        # PCA analysis: fit on train, transform both train and test
+        pca = PCA(n_components=self.pca_components)
+        X_train_pca = pca.fit_transform(X_train)
+        X_test_pca = pca.transform(X_test_theta)
 
-        return X_train, X_test, y_train, y_test
+        X_train_theta = torch.tensor(X_train_pca, dtype=torch.float32, device=self.device)
+        X_test_theta = torch.tensor(X_test_pca, dtype=torch.float32, device=self.device)
+        y_train_theta = torch.tensor(y_train, dtype=torch.long, device=self.device)
+        y_test_theta = torch.tensor(y_test_theta, dtype=torch.long, device=self.device)
+        print(f"Size of X_train_theta: {X_train_theta.shape}")
+
+        return X_train_theta, X_test_theta, y_train_theta, y_test_theta
 
     def train_predictor_model(self, model, x_train, y_train):
 
@@ -263,10 +264,11 @@ class Training:
         # Training loop params
         start_time = time.time()
 
+
         EPISODES        = 100 #200
         TRAJ_LENGTH     = 1000 #1000
         REAL_DATA_SIZE  = 3000
-        BIAS_PCT        = 0.75
+        BIAS_PCT        = 0.9
         #SAVE_DATA      
         # Prepare data
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT)
@@ -292,6 +294,9 @@ class Training:
             seed=seed
         )
 
+        last_x_syn = None
+        last_y_syn = None
+
         for episode in range(EPISODES):
             states, actions = [], []
             next_states, dones = [], []
@@ -300,9 +305,9 @@ class Training:
 
             # Reset env
             state = env.reset()
-            #Generate a trajectory of length TRAJ_LENGTH
+            # Generate a trajectory of length TRAJ_LENGTH
             for t in range(TRAJ_LENGTH):
-                #Get action
+                # Get action
                 action = self.ppo_agent.predict(state)
 
                 next_state, done, info = env.step(action, (t + 1))
@@ -312,9 +317,9 @@ class Training:
                 next_states.append(next_state)
                 dones.append(done)
 
-                #Always = 1 (Underrepresented class)
+                # Always = 1 (Underrepresented class)
                 sampled_t = info['sampled_target']
-                #action_with_sex = np.concatenate([action, [2.0]])
+                # action_with_sex = np.concatenate([action, [2.0]])
 
                 x_syn_list.append(action)
                 y_syn_list.append(sampled_t)
@@ -324,15 +329,18 @@ class Training:
                     print(f'Generated synthetic tuple {t + 1}/{TRAJ_LENGTH}')
                     break
 
-
             T = len(x_syn_list)
             x_syn = np.stack(x_syn_list)    # shape [T, feature_dim]
             y_syn = np.array(y_syn_list)    # shape [T]
             x_phi_t        = torch.tensor(x_syn, dtype=torch.float32, device=self.device)
-            y_phi_t        = torch.tensor(y_syn, dtype=torch.long, device=self.device)    
-
+            y_phi_t        = torch.tensor(y_syn, dtype=torch.long, device=self.device)
+            
+           # Save the last trajectory for later use
+            last_x_syn = x_syn
+            last_y_syn = y_syn   
             x_hybrid = torch.concatenate([x_theta_train, x_phi_t ])
             y_hybrid = torch.concatenate([y_theta_train, y_phi_t ])
+
 
 
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
@@ -345,12 +353,22 @@ class Training:
 
             self.ppo_agent.learn_trajectory(states, actions, rewards, next_states, dones)
 
-            #Resets beta model
+            # Resets beta model
             self.restart_beta()
 
             avg_reward = torch.mean(rewards)
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.3f}")
+
         print(f'Total time {time.time()-start_time}')
+
+        # After training, save the last generated synthetic trajectory to a file
+        if last_x_syn is not None and last_y_syn is not None:
+            # Format as DataFrame
+            df_syn = pd.DataFrame(last_x_syn, columns=[f"pca_{i}" for i in range(last_x_syn.shape[1])])
+            df_syn["target"] = last_y_syn
+
+            df_syn.to_csv("synthetic_trajectory.csv", index=False)
+            print(f"Saved last synthetic trajectory to synthetic_trajectory.csv")
     
 if __name__ == "__main__":
     train = Training(seed=42)
