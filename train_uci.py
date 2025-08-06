@@ -57,7 +57,7 @@ class Training:
             'output_size': 1,
             'learning_rate': 0.001,
             'batch_size': 32,
-            'epochs': 30,
+            'epochs': 5,
             'type': 'classification',
             'classes': [0, 1],#1 is >50k
             'seed': self.seed
@@ -217,7 +217,7 @@ class Training:
         return accuracy_vector
 
         
-    def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi, lambda_=0.5):
+    def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi, lambda_=0.99):
         with torch.no_grad():
             # θ–test predictions from β
             beta_out = beta_model.predict(x_theta_test)   # <-- this is a list
@@ -235,10 +235,12 @@ class Training:
                 device=self.device
             ).squeeze(-1)
 
+        #How well Beta performed on the real test set
         # Calculating objective 1, global error using Beta model on theta test set
         objective_global = self.mean_error(y_theta_test, y_hat_theta_beta)
 
-        # Calculating objective 2, vector error using Alpha and Beta models on phi set
+        #How well the best performing model could predict synthetic data, learns that minority has the most absurd feature values?
+        #Calculating objective 2, vector error using Alpha and Beta models on phi set
         beta_cost = self.mean_error(y_theta_test, y_hat_theta_beta)
         alpha_cost= self.mean_error(y_theta_test, y_hat_theta_alpha)
 
