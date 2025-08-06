@@ -24,22 +24,27 @@ class Training:
             'state_size': 2,  
             'action_size': 4,   
             'hidden_size': 64,
-            'lr': 1e-2, 
-            'gamma': 0.8,
+            'lr': 3e-4, 
+            'gamma': 0.9,
             'clip_epsilon': 0.2,
-            'update_epochs': 10,
-            'batch_size': 32,
+            'update_epochs': 5,
+            'batch_size': 64,
             'c1': 0.5,
             'c2': 0.01,
             'seed': self.seed
         }
         self.ffnn_config = {
             'input_size': 5,
-            'hidden_sizes': [16, 16],
+            'hidden_sizes': [32, 16],
             'output_size': 1,
             'learning_rate': 0.001,
+<<<<<<< HEAD
             'batch_size': 32,
             'epochs': 30,
+=======
+            'batch_size': 64,
+            'epochs': 10,
+>>>>>>> c8a6cccd29162f2b372c83d2e66784920f4fee33
             'type': 'regression',
             'classes': None,
             'seed': self.seed
@@ -64,8 +69,8 @@ class Training:
         data_bunch = fetch_acs_income(as_frame=True)
 
         #Reduce feature space to AGEP  COW  SCHL  WKHP  SEx
-        x = data_bunch.data.iloc[:100000].drop(columns=['OCCP', 'POBP', 'RELP', 'RAC1P', 'MAR', ])
-        y = data_bunch.target.iloc[:100000]
+        x = data_bunch.data.iloc[:5000].drop(columns=['OCCP', 'POBP', 'RELP', 'RAC1P', 'MAR', ])
+        y = data_bunch.target.iloc[:5000]
 
         df = pd.concat([x, y.rename("INCOME")], axis=1)
 
@@ -215,8 +220,13 @@ class Training:
     def __call__(self):
         print('Begin train loop')
         # Training loop params
+<<<<<<< HEAD
         EPISODES        = 100
         TRAJ_LENGTH     = 100
+=======
+        EPISODES        = 50
+        TRAJ_LENGTH     = 300
+>>>>>>> c8a6cccd29162f2b372c83d2e66784920f4fee33
 
         # Prepare data and baseline (Alpha model)
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset()
@@ -246,7 +256,7 @@ class Training:
             for t in range(TRAJ_LENGTH):
                 #Get action
                 action = self.ppo_agent.predict(state)             
-                next_state, done, info = env.step(action, (TRAJ_LENGTH + 1))
+                next_state, done, info = env.step(action, (t + 1))
 
                 states.append(state)
                 actions.append(action)

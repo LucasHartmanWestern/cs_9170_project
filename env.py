@@ -45,11 +45,11 @@ class Environment:
 
         return state_vec
 
-    def step(self, action: np.ndarray, buffer_length):
+    def step(self, action: np.ndarray, curr_length):
         # Generate next state
-        state_vec = self.generate_state(buffer_length)
+        state_vec = self.generate_state(curr_length)
 
-        done = False
+        done = curr_length >= self.max_actions
         info = {'sampled_target': state_vec[0]}
         return state_vec, done, info
 

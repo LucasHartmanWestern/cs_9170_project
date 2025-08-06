@@ -278,7 +278,6 @@ class PPOAgent:
             returns.insert(0, G)
         returns = torch.as_tensor(returns, dtype=torch.float32, device=self.device)
 
-
         #Value estimates and advantages
         with torch.no_grad():
             values = self.critic(states).squeeze(-1)
