@@ -12,6 +12,7 @@ from fairlearn.datasets import fetch_acs_income
 from sklearn.neural_network import MLPRegressor
 import torch.nn.functional as F
 import math
+
 from sklearn.metrics import f1_score as _sk_f1
 import pandas as pd
 import numpy as np
@@ -24,6 +25,8 @@ from sklearn.utils import resample
 from agents.ffnn_agent2 import FFNNAgent
 from torch.utils.data import TensorDataset, DataLoader
 import torch
+import copy
+
 
 class Training:
     def __init__(self, seed=42, device='cpu'):
@@ -52,16 +55,17 @@ class Training:
             'hidden_sizes': [32, 16],
             'output_size': 1,
             'learning_rate': 0.001,
-            'batch_size': 64,
-            'epochs': 10,
+            'batch_size': 32,
+            'epochs': 30,
             'type': 'classification',
             'classes': [0, 1],#1 is >50k
             'seed': self.seed
         }
         self.ppo_agent = PPOAgent(**ppo_config)
         self.alpha_model = FFNNAgent(**self.ffnn_config)
-        self.beta_model = FFNNAgent(**self.ffnn_config)
         self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+        self.beta_base_model = FFNNAgent(**self.ffnn_config)
+        self.restart_beta()
 
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
@@ -71,6 +75,13 @@ class Training:
         adult = fetch_ucirepo(id=2)
         X_df = adult.data.features  
         y_df = adult.data.targets   
+
+    def restart_beta(self):
+        self.beta_model = None
+        self.beta_model = copy.deepcopy(self.beta_base_model)
+        # print(f'line 59 checking same weights mean are set {self.beta_model.model.state_dict()}')
+        # print(f'line 59 checking same weights mean are set {self.beta_model.optimizer}')
+    
 
         X = X_df.values
         y = np.ravel(y_df.values)
@@ -198,7 +209,6 @@ class Training:
         f1_tensor = torch.tensor(f1_scores, device=pred.device).view_as(target)
         #print(f'Error Vector: {f1_tensor}')
         return f1_tensor
-
     def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi, lambda_=0.5):
         with torch.no_grad():
             # θ–test predictions from β
@@ -236,10 +246,7 @@ class Training:
                 pred = beta_model.predict(x_phi)
                 y_hat_phi = torch.tensor(pred, dtype=torch.float32, device=self.device).squeeze(-1)
                 objective_individual = self.error_vector(y_phi, y_hat_phi)
-        # print(f'line 210 obj individual {objective_individual}')
-
-       
-        #Maximized for f1 score
+        print(f'line 219 obj global {objective_global} individual {objective_individual.mean()}')
         reward = 1*(lambda_*objective_global + (1.0-lambda_)*objective_individual)
         return reward
 
@@ -247,6 +254,7 @@ class Training:
     def __call__(self):
         print('Begin train loop')
         # Training loop params
+
         EPISODES        = 200
         TRAJ_LENGTH     = 1000
         REAL_DATA_SIZE  = 3000
@@ -254,6 +262,7 @@ class Training:
         #SAVE_DATA      
         # Prepare data
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT)
+
 
         print(f"Size of train set: {len(x_theta_train)}")
         total_data = len(x_theta_train) + TRAJ_LENGTH
@@ -331,7 +340,7 @@ class Training:
             self.ppo_agent.learn_trajectory(states, actions, rewards, next_states, dones)
 
             #Resets beta model
-            self.beta_model = FFNNAgent(**self.ffnn_config)
+            self.restart_beta()
 
             avg_reward = torch.mean(rewards)
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.3f}")
