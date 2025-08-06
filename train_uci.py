@@ -189,7 +189,7 @@ class Training:
         # return torch.mean((pred - target) ** 2)
         y_true = target.detach().cpu().numpy().ravel()
         y_pred = torch.round(pred).detach().cpu().numpy().ravel()
-        f1 = _sk_f1(y_true, y_pred, average='weighted')
+        f1 = _sk_f1(y_true, y_pred)
         #print(f"Mean error f1: {f1}")
         return torch.tensor(f1)
 
@@ -212,6 +212,7 @@ class Training:
         #print(f'Error Vector: {f1_tensor}')
         # return f1_tensor
 
+        pred = torch.round(pred)
         accuracy_vector = (target == pred).float()
         # accuracy_tensor = torch.from_numpy(accuracy_vector).to(self.device)
 
@@ -355,8 +356,8 @@ class Training:
            # Save the last trajectory for later use
             last_x_syn = x_syn
             last_y_syn = y_syn   
-            x_hybrid = torch.concatenate([x_theta_train, x_phi_t ])
-            y_hybrid = torch.concatenate([y_theta_train, y_phi_t ])
+            x_hybrid = torch.cat([x_theta_train, x_phi_t ])
+            y_hybrid = torch.cat([y_theta_train, y_phi_t ])
 
 
 
