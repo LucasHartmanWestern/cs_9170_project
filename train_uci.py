@@ -20,12 +20,13 @@ from ucimlrepo import fetch_ucirepo
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, accuracy_score
 from sklearn.utils import resample
 from agents.ffnn_agent2 import FFNNAgent
 from torch.utils.data import TensorDataset, DataLoader
 import torch
 import copy
+import time
 
 
 class Training:
@@ -70,18 +71,15 @@ class Training:
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
     #Can see plots for this dataset in new_biases.ipynb
+    def restart_beta(self):
+        self.beta_model = None
+        self.beta_model = copy.deepcopy(self.beta_base_model)
+    
     def split_dataset(self, train_size=None, bias_pct=0.75):
         #Fetch dataset
         adult = fetch_ucirepo(id=2)
         X_df = adult.data.features  
-        y_df = adult.data.targets   
-
-    def restart_beta(self):
-        self.beta_model = None
-        self.beta_model = copy.deepcopy(self.beta_base_model)
-        # print(f'line 59 checking same weights mean are set {self.beta_model.model.state_dict()}')
-        # print(f'line 59 checking same weights mean are set {self.beta_model.optimizer}')
-    
+        y_df = adult.data.targets      
 
         X = X_df.values
         y = np.ravel(y_df.values)
@@ -163,21 +161,21 @@ class Training:
                 X_train = X_train_sub
                 y_train = y_train_sub
 
-        X_train = np.array(X_train)
-        X_test = np.array(X_test)
-        y_train = np.array(y_train)
-        y_test = np.array(y_test)
+        X_train = torch.tensor(X_train, dtype=torch.float32, device=self.device)
+        X_test  = torch.tensor(X_test, dtype=torch.float32, device=self.device)
+        y_train = torch.tensor(y_train, dtype=torch.long,   device=self.device)
+        y_test  = torch.tensor(y_test, dtype=torch.long,   device=self.device)
 
         return X_train, X_test, y_train, y_test
 
     def train_predictor_model(self, model, x_train, y_train):
 
-        # Convert numpy arrays to torch tensors
-        x_train_tensor = torch.tensor(x_train, dtype=torch.float32, device=self.device)
-        y_train_tensor = torch.tensor(y_train, dtype=torch.long,   device=self.device)
+        # # Convert numpy arrays to torch tensors
+        # x_train_tensor = torch.tensor(x_train, dtype=torch.float32, device=self.device)
+        # y_train_tensor = torch.tensor(y_train, dtype=torch.long,   device=self.device)
 
         # Create TensorDataset and DataLoader
-        train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
+        train_dataset = TensorDataset(x_train, y_train)
         loader = DataLoader(train_dataset, batch_size=64, shuffle=True, generator=self.dl_generator)
 
         model.train(loader)
@@ -194,21 +192,30 @@ class Training:
         return torch.tensor(f1)
 
     def error_vector(self, target, pred):
+        # y_true = target.detach().cpu().numpy().ravel()
+        # y_pred = torch.round(pred).detach().cpu().numpy().ravel()
 
-        y_true = target.detach().cpu().numpy().ravel()
-        y_pred = torch.round(pred).detach().cpu().numpy().ravel()
+        # # Compute the F1 score for each sample individually
+        # f1_scores = []
+        # for true_label, pred_label in zip(y_true, y_pred):
+        #     score = _sk_f1([true_label], [pred_label], zero_division=0)
+        #     f1_scores.append(score)
+        # f1_scores = np.array(f1_scores, dtype=np.float32)
+        # f1_score_vector = _sk_f1(y_true, y_pred, zero_division=0, average=None)
 
-        # Compute the F1 score for each sample individually
-        f1_scores = []
-        for true_label, pred_label in zip(y_true, y_pred):
-            score = _sk_f1([true_label], [pred_label], zero_division=0)
-            f1_scores.append(score)
-        f1_scores = np.array(f1_scores, dtype=np.float32)
 
         # tensor of F1 scores
-        f1_tensor = torch.tensor(f1_scores, device=pred.device).view_as(target)
+        # f1_tensor = torch.tensor(f1_score_vector, device=self.device)
+        # f1_tensor = f1_tensortorch.float32
         #print(f'Error Vector: {f1_tensor}')
-        return f1_tensor
+        # return f1_tensor
+
+        accuracy_vector = (target == pred).float()
+        # accuracy_tensor = torch.from_numpy(accuracy_vector).to(self.device)
+
+        return accuracy_vector
+
+        
     def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi, lambda_=0.5):
         with torch.no_grad():
             # θ–test predictions from β
@@ -246,7 +253,7 @@ class Training:
                 pred = beta_model.predict(x_phi)
                 y_hat_phi = torch.tensor(pred, dtype=torch.float32, device=self.device).squeeze(-1)
                 objective_individual = self.error_vector(y_phi, y_hat_phi)
-        print(f'line 219 obj global {objective_global} individual {objective_individual.mean()}')
+        print(f'obj global {objective_global:.4f} individual {objective_individual.mean():.4f}')
         reward = 1*(lambda_*objective_global + (1.0-lambda_)*objective_individual)
         return reward
 
@@ -254,9 +261,10 @@ class Training:
     def __call__(self):
         print('Begin train loop')
         # Training loop params
+        start_time = time.time()
 
-        EPISODES        = 200
-        TRAJ_LENGTH     = 1000
+        EPISODES        = 100 #200
+        TRAJ_LENGTH     = 1000 #1000
         REAL_DATA_SIZE  = 3000
         BIAS_PCT        = 0.75
         #SAVE_DATA      
@@ -320,18 +328,16 @@ class Training:
             T = len(x_syn_list)
             x_syn = np.stack(x_syn_list)    # shape [T, feature_dim]
             y_syn = np.array(y_syn_list)    # shape [T]
+            x_phi_t        = torch.tensor(x_syn, dtype=torch.float32, device=self.device)
+            y_phi_t        = torch.tensor(y_syn, dtype=torch.long, device=self.device)    
 
-            x_theta_test_t = torch.tensor(x_theta_test, dtype=torch.long, device=self.device)
-            y_theta_test_t = torch.tensor(y_theta_test, dtype=torch.long, device=self.device)
-            x_phi_t       = torch.tensor(x_syn, dtype=torch.long, device=self.device)
-            y_phi_t       = torch.tensor(y_syn, dtype=torch.long, device=self.device)    
+            x_hybrid = torch.concatenate([x_theta_train, x_phi_t ])
+            y_hybrid = torch.concatenate([y_theta_train, y_phi_t ])
 
-            x_hybrid = np.vstack([x_theta_train, x_phi_t ])
-            y_hybrid = np.concatenate([y_theta_train, y_phi_t ])
 
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
 
-            rewards = self.compute_reward(self.alpha_model, self.beta_model, x_theta_test_t, y_theta_test_t, x_phi_t, y_phi_t)
+            rewards = self.compute_reward(self.alpha_model, self.beta_model, x_theta_test, y_theta_test, x_phi_t, y_phi_t)
 
             # for idx, (s, a, r, s_next, d) in enumerate(zip(states, actions, rewards, next_states, dones)):
             #     # learn
@@ -344,6 +350,7 @@ class Training:
 
             avg_reward = torch.mean(rewards)
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.3f}")
+        print(f'Total time {time.time()-start_time}')
     
 if __name__ == "__main__":
     train = Training(seed=42)
