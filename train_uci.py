@@ -70,18 +70,18 @@ class Training:
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
     #Can see plots for this dataset in new_biases.ipynb
-    def split_dataset(self, train_size=None, bias_pct=0.75):
-        #Fetch dataset
-        adult = fetch_ucirepo(id=2)
-        X_df = adult.data.features  
-        y_df = adult.data.targets   
 
     def restart_beta(self):
         self.beta_model = None
         self.beta_model = copy.deepcopy(self.beta_base_model)
         # print(f'line 59 checking same weights mean are set {self.beta_model.model.state_dict()}')
         # print(f'line 59 checking same weights mean are set {self.beta_model.optimizer}')
-    
+
+    def split_dataset(self, train_size=None, bias_pct=0.75):
+        #Fetch dataset
+        adult = fetch_ucirepo(id=2)
+        X_df = adult.data.features  
+        y_df = adult.data.targets   
 
         X = X_df.values
         y = np.ravel(y_df.values)
