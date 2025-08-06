@@ -60,28 +60,26 @@ class Training:
         self.alpha_model = FFNNAgent(**self.ffnn_config)
         self.beta_model = FFNNAgent(**self.ffnn_config)
 
-
     # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
     #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
     #Can see plots for this dataset in new_biases.ipynb
-    def split_dataset(self, seq_len=5, seed=42):
-        # 1. Fetch dataset
+    def split_dataset(self, train_size=None):
+        #Fetch dataset
         adult = fetch_ucirepo(id=2)
-        X_df = adult.data.features  # DataFrame of shape (n_samples, n_features)
-        y_df = adult.data.targets   # DataFrame of shape (n_samples, 1)
+        X_df = adult.data.features  
+        y_df = adult.data.targets   
 
-        # Convert X and y to numpy arrays
         X = X_df.values
         y = np.ravel(y_df.values)
 
-        # Map string labels to 0/1 (adjust exact strings if needed)
-        y = np.where(y == '>50K', 1, 0)
+        # Map labels to 0/1
+        y = np.where(np.isin(y, ['>50K', '>50K.']), 1, 0)
 
-        # Identify categorical and numerical columns by dtype
+        # Identify categorical and numerical columns
         cat_cols = [i for i, dt in enumerate(X_df.dtypes) if dt.name in ['category', 'object', 'bool']]
         num_cols = [i for i, dt in enumerate(X_df.dtypes) if np.issubdtype(dt, np.number)]
 
-        # 2. One-hot encode categoricals, standardize numericals
+        # One-hot encode categoricals, standardize numericals
         encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
         X_cat = encoder.fit_transform(X[:, cat_cols]) if cat_cols else np.empty((X.shape[0], 0))
 
@@ -92,7 +90,7 @@ class Training:
         X_all = np.hstack([X_num, X_cat])
         y_all = y
 
-        # For balancing, create a single array with features and target as last column
+        # For balancing, target is last column
         df_all = np.hstack([X_all, y_all.reshape(-1, 1)])
 
         target_col = -1
@@ -116,10 +114,10 @@ class Training:
         X_bal = df_balanced[:, :-1]
         y_bal = df_balanced[:, -1]
 
-        # 1. Set bias percentage (adjustable)
-        remove_pct = 0.90  # 75% by default, change as needed
+        #Set bias percentage
+        remove_pct = 0.75
 
-        # 2. Bias the dataset: remove a percentage of Class 1 examples from the balanced set
+        # Bias the dataset: remove a percentage of Class 1 examples from the balanced set
         df_balanced_pd = pd.DataFrame(X_bal, columns=[f'feat_{i}' for i in range(X_bal.shape[1])])
         df_balanced_pd['target'] = y_bal
 
@@ -134,15 +132,26 @@ class Training:
         X_biased = df_biased.drop('target', axis=1).values
         y_biased = df_biased['target'].values
 
-        # 3. PCA analysis (just like before)
-        pca = PCA(n_components=2)
+        #PCA analysis 
+        pca = PCA(n_components=self.pca_components)
         X_biased_pca = pca.fit_transform(X_biased)
 
-        # 4. Train-test split after biasing and PCA
+        #Train-test split after biasing and PCA
         X_train, X_test, y_train, y_test = train_test_split(
             X_biased_pca, y_biased, test_size=0.2, random_state=self.seed, stratify=y_biased
         )
-        # Ensure all outputs are numpy arrays
+
+        # If train_size is specified, subsample the train set to the requested size
+        # Bias in class distribution is maintained.
+        if train_size is not None:
+            if train_size < len(X_train):
+                # Stratified subsample to preserve the biased class distribution
+                X_train_sub, _, y_train_sub, _ = train_test_split(
+                    X_train, y_train, train_size=train_size, random_state=self.seed, stratify=y_train
+                )
+                X_train = X_train_sub
+                y_train = y_train_sub
+
         X_train = np.array(X_train)
         X_test = np.array(X_test)
         y_train = np.array(y_train)
@@ -167,20 +176,28 @@ class Training:
 
     def mean_error(self, target, pred):
         # return torch.mean((pred - target) ** 2)
-        return torch.tensor(_sk_f1(target.detach().cpu().numpy().ravel(), torch.round(pred).detach().cpu().numpy().ravel()))
+        y_true = target.detach().cpu().numpy().ravel()
+        y_pred = torch.round(pred).detach().cpu().numpy().ravel()
+        f1 = _sk_f1(y_true, y_pred)
+        #print(f"Mean error f1: {f1}")
+        return torch.tensor(f1)
 
     def error_vector(self, target, pred):
+
         y_true = target.detach().cpu().numpy().ravel()
         y_pred = torch.round(pred).detach().cpu().numpy().ravel()
 
-        # Compute F1 for each sample
-        vec = np.array([
-            _sk_f1([t], [p], zero_division=0)
-            for t, p in zip(y_true, y_pred)
-        ], dtype=np.float32)
+        # Compute the F1 score for each sample individually
+        f1_scores = []
+        for true_label, pred_label in zip(y_true, y_pred):
+            score = _sk_f1([true_label], [pred_label], zero_division=0)
+            f1_scores.append(score)
+        f1_scores = np.array(f1_scores, dtype=np.float32)
 
-        # Back to torch, on same device as pred
-        return torch.tensor(vec, device=pred.device).view_as(target)
+        # tensor of F1 scores
+        f1_tensor = torch.tensor(f1_scores, device=pred.device).view_as(target)
+        #print(f'Error Vector: {f1_tensor}')
+        return f1_tensor
 
     def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi, lambda_=0.5):
         with torch.no_grad():
@@ -222,6 +239,7 @@ class Training:
         # print(f'line 210 obj individual {objective_individual}')
 
        
+        #Maximized for f1 score
         reward = 1*(lambda_*objective_global + (1.0-lambda_)*objective_individual)
         return reward
 
@@ -229,22 +247,29 @@ class Training:
     def __call__(self):
         print('Begin train loop')
         # Training loop params
-        EPISODES        = 20
-        TRAJ_LENGTH     = 10
+        EPISODES        = 5
+        TRAJ_LENGTH     = 500
+        REAL_DATA_SIZE  = 3000
 
         # Prepare data and baseline (Alpha model)
-        x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset()
+        x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE)
+
         print(f"Size of train set: {len(x_theta_train)}")
+        total_data = len(x_theta_train) + TRAJ_LENGTH
+        real_percentage = (len(x_theta_train) / total_data) * 100
+        synthetic_percentage = (TRAJ_LENGTH / total_data) * 100
+        print(f"Real data: {real_percentage:.2f}% of total, Synthetic data: {synthetic_percentage:.2f}% of total")
+
         self.alpha_model = self.train_predictor_model(self.alpha_model, x_theta_train, y_theta_train)
 
         # Environment and agent setup NOTE that sex is forced female in loop
-        features = ['AGEP', 'COW', 'SCHL', 'WKHP']
-        target = 'PINCP'
+        #features = ['AGEP', 'COW', 'SCHL', 'WKHP']
+        #target = 'PINCP'
         seed = self.seed
 
         env = Environment(
-            target=target,
-            male_hi=0,#index for sampling target
+            target=1,#Does nothing right now
+            male_hi=0,#Does nothing right now
             max_actions=TRAJ_LENGTH,
             seed=seed
         )
@@ -269,7 +294,7 @@ class Training:
                 next_states.append(next_state)
                 dones.append(done)
 
-                # combine action with SEX and target, append to trajectory
+                #Always = 1 (Underrepresented class)
                 sampled_t = info['sampled_target']
                 #action_with_sex = np.concatenate([action, [2.0]])
 
