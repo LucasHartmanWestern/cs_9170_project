@@ -78,7 +78,7 @@ class Training:
         # print(f'line 59 checking same weights mean are set {self.beta_model.optimizer}')
 
     def split_dataset(self, train_size=None, bias_pct=0.75):
-        #Fetch dataset
+        # Fetch dataset
         adult = fetch_ucirepo(id=2)
         X_df = adult.data.features  
         y_df = adult.data.targets   
@@ -143,32 +143,32 @@ class Training:
         X_biased = df_biased.drop('target', axis=1).values
         y_biased = df_biased['target'].values
 
-        #PCA analysis 
-        pca = PCA(n_components=self.pca_components)
-        X_biased_pca = pca.fit_transform(X_biased)
-
-        #Train-test split after biasing and PCA
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_biased_pca, y_biased, test_size=0.2, random_state=self.seed, stratify=y_biased
+        # Train-test split after biasing, before PCA
+        X_train, X_test_theta, y_train, y_test_theta = train_test_split(
+            X_biased, y_biased, test_size=0.2, random_state=self.seed, stratify=y_biased
         )
 
         # If train_size is specified, subsample the train set to the requested size
         # Bias in class distribution is maintained.
-        if train_size is not None:
-            if train_size < len(X_train):
-                # Stratified subsample to preserve the biased class distribution
-                X_train_sub, _, y_train_sub, _ = train_test_split(
-                    X_train, y_train, train_size=train_size, random_state=self.seed, stratify=y_train
-                )
-                X_train = X_train_sub
-                y_train = y_train_sub
+        if train_size is not None and train_size < len(X_train):
+            print('Reducing size of dataset')
+            # Stratified subsample to preserve the biased class distribution
+            X_train, _, y_train, _ = train_test_split(
+                X_train, y_train, train_size=train_size, random_state=self.seed, stratify=y_train
+            )
 
-        X_train = np.array(X_train)
-        X_test = np.array(X_test)
-        y_train = np.array(y_train)
-        y_test = np.array(y_test)
+        # PCA analysis: fit on train, transform both train and test
+        pca = PCA(n_components=self.pca_components)
+        X_train_pca = pca.fit_transform(X_train)
+        X_test_pca = pca.transform(X_test_theta)
 
-        return X_train, X_test, y_train, y_test
+        X_train_theta = np.array(X_train_pca)
+        X_test_theta = np.array(X_test_pca)
+        y_train_theta = np.array(y_train)
+        y_test_theta = np.array(y_test_theta)
+        print(f"Size of X_train_theta: {X_train_theta.shape}")
+
+        return X_train_theta, X_test_theta, y_train_theta, y_test_theta
 
     def train_predictor_model(self, model, x_train, y_train):
 
