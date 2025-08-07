@@ -1,6 +1,8 @@
 # --- Imports ---
 import numpy as np
 import pandas as pd
+import os
+import shutil
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -185,38 +187,51 @@ class Training:
         return model
 
 
+    # def mean_error(self, target, pred):
+    #     # return torch.mean((pred - target) ** 2)
+    #     y_true = target.detach().cpu().numpy().ravel()
+    #     y_pred = torch.round(pred).detach().cpu().numpy().ravel()
+    #     f1 = _sk_f1(y_true, y_pred)
+    #     #print(f"Mean error f1: {f1}")
+    #     return torch.tensor(f1)
+
+    # def error_vector(self, target, pred):
+    #     # y_true = target.detach().cpu().numpy().ravel()
+    #     # y_pred = torch.round(pred).detach().cpu().numpy().ravel()
+
+    #     # # Compute the F1 score for each sample individually
+    #     # f1_scores = []
+    #     # for true_label, pred_label in zip(y_true, y_pred):
+    #     #     score = _sk_f1([true_label], [pred_label], zero_division=0)
+    #     #     f1_scores.append(score)
+    #     # f1_scores = np.array(f1_scores, dtype=np.float32)
+    #     # f1_score_vector = _sk_f1(y_true, y_pred, zero_division=0, average=None)
+
+
+    #     # tensor of F1 scores
+    #     # f1_tensor = torch.tensor(f1_score_vector, device=self.device)
+    #     # f1_tensor = f1_tensortorch.float32
+    #     #print(f'Error Vector: {f1_tensor}')
+    #     # return f1_tensor
+
+    #     pred = torch.round(pred)
+    #     accuracy_vector = (target == pred).float()
+    #     # accuracy_tensor = torch.from_numpy(accuracy_vector).to(self.device)
+
+    #     return accuracy_vector
+
     def mean_error(self, target, pred):
-        # return torch.mean((pred - target) ** 2)
+        return torch.mean((pred - target) ** 2)
+
+
+    def error_vector(self, target, pred):
+        return (pred - target) ** 2
+
+    def f1_error(self, target, pred):
         y_true = target.detach().cpu().numpy().ravel()
         y_pred = torch.round(pred).detach().cpu().numpy().ravel()
         f1 = _sk_f1(y_true, y_pred)
-        #print(f"Mean error f1: {f1}")
         return torch.tensor(f1)
-
-    def error_vector(self, target, pred):
-        # y_true = target.detach().cpu().numpy().ravel()
-        # y_pred = torch.round(pred).detach().cpu().numpy().ravel()
-
-        # # Compute the F1 score for each sample individually
-        # f1_scores = []
-        # for true_label, pred_label in zip(y_true, y_pred):
-        #     score = _sk_f1([true_label], [pred_label], zero_division=0)
-        #     f1_scores.append(score)
-        # f1_scores = np.array(f1_scores, dtype=np.float32)
-        # f1_score_vector = _sk_f1(y_true, y_pred, zero_division=0, average=None)
-
-
-        # tensor of F1 scores
-        # f1_tensor = torch.tensor(f1_score_vector, device=self.device)
-        # f1_tensor = f1_tensortorch.float32
-        #print(f'Error Vector: {f1_tensor}')
-        # return f1_tensor
-
-        pred = torch.round(pred)
-        accuracy_vector = (target == pred).float()
-        # accuracy_tensor = torch.from_numpy(accuracy_vector).to(self.device)
-
-        return accuracy_vector
 
       
     def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi):
@@ -249,7 +264,7 @@ class Training:
 
         #How well Beta performed on the real test set
         # Calculating objective 1, global error using Beta model on theta test set
-        objective_global = self.mean_error(y_theta_test, y_hat_theta_beta)
+        objective_global = self.f1_error(y_theta_test, y_hat_theta_beta)
         # Calculating objective 1, global error using Beta model on theta test set
         objective_1 = self.mean_error(y_theta_test[idx], y_hat_theta_beta_min)
 
@@ -281,11 +296,13 @@ class Training:
         start_time = time.time()
 
 
-        EPISODES        = 100 #200
+        EPISODES        = 1000 #200
         TRAJ_LENGTH     = 3000 #1000
         REAL_DATA_SIZE  = 3000
         BIAS_PCT        = 0.9
         self.lambda_    = 0.8
+        self.save_by_episode = 100
+        data_exp_folder = 'data_exp/exp_001/'
         
         #SAVE_DATA      
         # Prepare data
@@ -314,6 +331,13 @@ class Training:
 
         last_x_syn = None
         last_y_syn = None
+
+        col_labels = [f"pca_{i}" for i in range(self.pca_components)]
+        # Delete the folder if it exists
+        if os.path.exists(data_exp_folder):
+            shutil.rmtree(data_exp_folder)
+        # Create the folder
+        os.makedirs(data_exp_folder)
 
         for episode in range(EPISODES):
             states, actions = [], []
@@ -350,8 +374,8 @@ class Training:
             T = len(x_syn_list)
             x_syn = np.stack(x_syn_list)    # shape [T, feature_dim]
             y_syn = np.array(y_syn_list)    # shape [T]
-            x_phi_t        = torch.tensor(x_syn, dtype=torch.float32, device=self.device)
-            y_phi_t        = torch.tensor(y_syn, dtype=torch.long, device=self.device)
+            x_phi_t = torch.tensor(x_syn, dtype=torch.float32, device=self.device)
+            y_phi_t = torch.tensor(y_syn, dtype=torch.long, device=self.device)
             
            # Save the last trajectory for later use
             last_x_syn = x_syn
@@ -363,11 +387,9 @@ class Training:
 
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
 
-            rewards, obj_1, obj_2, global_ = self.compute_reward(self.alpha_model, self.beta_model, x_theta_test, y_theta_test, x_phi_t, y_phi_t)
+            rewards, obj_1, obj_2, global_ = self.compute_reward(self.alpha_model, self.beta_model,\
+                                                                 x_theta_test, y_theta_test, x_phi_t, y_phi_t)
 
-            # for idx, (s, a, r, s_next, d) in enumerate(zip(states, actions, rewards, next_states, dones)):
-            #     # learn
-            #     self.ppo_agent.learn(s, a, r, s_next, d)
 
             self.ppo_agent.learn_trajectory(states, actions, rewards, next_states, dones)
 
@@ -377,18 +399,26 @@ class Training:
             avg_reward = torch.mean(rewards)
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.4f}" +\
                  f"- Obj 1 {obj_1:.4f}, Obj 2 {obj_2.mean():.4f},"+\
-                 f" Global  {global_:.4f}, lambda {self.lambda_:.4f}")
+                 f" f1 score  {global_:.4f}, lambda {self.lambda_:.2f}")
+
+
+            if ((episode +1) % self.save_by_episode)==0:
+                # Format as DataFrame
+                df_syn = pd.DataFrame(last_x_syn, columns=col_labels)
+                df_syn["target"] = last_y_syn
+                df_syn.to_csv(f"{data_exp_folder}synthetic_trajectory_ep{episode+1}.csv", index=False)
+                print(f"Saved synthetic trajectory at episode {episode + 1} to synthetic_trajectory.csv")
+                
 
         print(f'Total time {time.time()-start_time}')
 
         # After training, save the last generated synthetic trajectory to a file
         if last_x_syn is not None and last_y_syn is not None:
             # Format as DataFrame
-            df_syn = pd.DataFrame(last_x_syn, columns=[f"pca_{i}" for i in range(last_x_syn.shape[1])])
+            df_syn = pd.DataFrame(last_x_syn, columns=col_labels)
             df_syn["target"] = last_y_syn
-
-            df_syn.to_csv("synthetic_trajectory.csv", index=False)
-            print(f"Saved last synthetic trajectory to synthetic_trajectory.csv")
+            df_syn.to_csv(f"{data_exp_folder}synthetic_trajectory_final.csv", index=False)
+            print(f"Saved synthetic trajectory at episode {episode} to {data_exp_folder}synthetic_trajectory.csv")
     
 if __name__ == "__main__":
     train = Training(seed=42)
