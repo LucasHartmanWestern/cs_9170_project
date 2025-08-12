@@ -1,6 +1,8 @@
 # --- Imports ---
 import numpy as np
 import pandas as pd
+import os
+import shutil
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from env import Environment
@@ -187,24 +189,18 @@ class Training:
 
 
     def mean_error(self, target, pred):
-        # Ensure both tensors are on the same device and type
-        pred_rounded = torch.round(pred).to(dtype=target.dtype, device=target.device)
-        target = target.to(dtype=pred_rounded.dtype, device=pred_rounded.device)
+        return torch.mean((pred - target) ** 2)
 
-        tp = ((pred_rounded == 1) & (target == 1)).sum().float()
-        fp = ((pred_rounded == 1) & (target == 0)).sum().float()
-        fn = ((pred_rounded == 0) & (target == 1)).sum().float()
-
-        precision = tp / (tp + fp + 1e-8)
-        recall = tp / (tp + fn + 1e-8)
-        f1 = 2 * precision * recall / (precision + recall + 1e-8)
-        return f1
 
     def error_vector(self, target, pred):
-        # Ensure both tensors are on the same device and type
-        pred_rounded = torch.round(pred).to(dtype=target.dtype, device=target.device)
-        accuracy_vector = (target == pred_rounded).float()
-        return accuracy_vector
+        return (pred - target) ** 2
+
+    def f1_error(self, target, pred):
+        y_true = target.detach().cpu().numpy().ravel()
+        y_pred = torch.round(pred).detach().cpu().numpy().ravel()
+        f1 = _sk_f1(y_true, y_pred)
+        return torch.tensor(f1)
+
 
       
     def compute_reward(self, alpha_model, beta_model, x_theta_test, y_theta_test, x_phi, y_phi):
@@ -221,7 +217,7 @@ class Training:
 
         # How well Beta performed on the real test set
         # Calculating objective 1, global error using Beta model on theta test set
-        objective_global = self.mean_error(y_theta_test, y_hat_theta_beta)
+        objective_global = self.f1_error(y_theta_test, y_hat_theta_beta)
         # Calculating objective 1, global error using Beta model on theta test set
         objective_1 = self.mean_error(y_theta_test[idx], y_hat_theta_beta_min)
 
@@ -268,6 +264,10 @@ class Training:
             },
             save_dir="training_runs"
         )
+
+        self.save_by_episode = 100
+        data_exp_folder = 'data_exp/exp_001/'
+
         #SAVE_DATA      
         # Prepare data
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT)
@@ -292,6 +292,13 @@ class Training:
 
         last_x_syn = None
         last_y_syn = None
+
+        col_labels = [f"pca_{i}" for i in range(self.pca_components)]
+        # Delete the folder if it exists
+        if os.path.exists(data_exp_folder):
+            shutil.rmtree(data_exp_folder)
+        # Create the folder
+        os.makedirs(data_exp_folder)
 
         for episode in range(EPISODES):
             # Pre-allocate arrays for performance (now as torch tensors)
@@ -341,7 +348,8 @@ class Training:
 
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
 
-            rewards, obj_1, obj_2, global_ = self.compute_reward(self.alpha_model, self.beta_model, x_theta_test, y_theta_test, x_phi_t, y_phi_t)
+            rewards, obj_1, obj_2, global_ = self.compute_reward(self.alpha_model, self.beta_model,\
+                                                                 x_theta_test, y_theta_test, x_phi_t, y_phi_t)
 
 
             states      = states[:T]
@@ -375,14 +383,23 @@ class Training:
             )
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.4f}" +\
                  f"- Obj 1 {obj_1:.4f}, Obj 2 {obj_2.mean():.4f},"+\
-                 f" Global  {global_:.4f}, lambda {self.lambda_:.4f}")
+                 f" f1 score  {global_:.4f}, lambda {self.lambda_:.2f}")
+
+
+            if ((episode +1) % self.save_by_episode)==0:
+                # Format as DataFrame
+                df_syn = pd.DataFrame(last_x_syn, columns=col_labels)
+                df_syn["target"] = last_y_syn
+                df_syn.to_csv(f"{data_exp_folder}synthetic_trajectory_ep{episode+1}.csv", index=False)
+                print(f"Saved synthetic trajectory at episode {episode + 1} to synthetic_trajectory.csv")
+                
 
         print(f'Total time {time.time()-start_time}')
 
         # After training, save the last generated synthetic trajectory to a file
         if last_x_syn is not None and last_y_syn is not None:
             # Format as DataFrame
-            df_syn = pd.DataFrame(last_x_syn, columns=[f"pca_{i}" for i in range(last_x_syn.shape[1])])
+            df_syn = pd.DataFrame(last_x_syn, columns=col_labels)
             df_syn["target"] = last_y_syn
 
             df_syn.to_csv("synthetic_trajectory.csv", index=False)
