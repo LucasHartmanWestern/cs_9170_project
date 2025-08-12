@@ -76,7 +76,7 @@ class PPOAgent:
             state: The current state
             
         Returns:
-            Synthetic data sample (a list of floats)
+            Synthetic data sample (a torch.Tensor)
         """
 
         if torch.is_tensor(state):
@@ -105,8 +105,8 @@ class PPOAgent:
             # Sample action from distribution
             action = dist.sample()
     
-        # Return the synthetic data (action) as a list of floats
-        return action.squeeze(0).cpu().tolist()
+        # Return the synthetic data (action) as a torch.Tensor
+        return action.squeeze(0).cpu()
     
     def learn(self, state, action, reward, next_state, done):
         """

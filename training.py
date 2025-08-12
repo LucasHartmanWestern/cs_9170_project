@@ -2,37 +2,28 @@
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.metrics import mean_squared_error, mean_absolute_error
 from env import Environment
 from agents.ppo_agent import PPOAgent
 from agents.ffnn_agent2 import FFNNAgent
-from fairlearn.datasets import fetch_acs_income
-from sklearn.neural_network import MLPRegressor
-import torch.nn.functional as F
-import math
-
-from sklearn.metrics import f1_score as _sk_f1
-import pandas as pd
-import numpy as np
-from ucimlrepo import fetch_ucirepo
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score as _sk_f1, accuracy_score
 from sklearn.utils import resample
-from agents.ffnn_agent2 import FFNNAgent
-from torch.utils.data import TensorDataset, DataLoader
-import torch
 import copy
 import time
-
+from episode_tracker import EpisodeTracker
 
 class Training:
     def __init__(self, seed=42, device='cpu'):
-        self.device = device
         self.seed = seed
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if self.device.type == 'cuda':
+            torch.cuda.manual_seed_all(self.seed)
+            torch.backends.cudnn.benchmark = True
+            torch.set_float32_matmul_precision('high')
+
         self.pca_components = 2
         self.lambda_ = 0.5
 
@@ -50,6 +41,7 @@ class Training:
             'batch_size': 64,
             'c1': 0.5,
             'c2': 0.01,
+            'device': self.device,
             'seed': self.seed
         }
         self.ffnn_config = {
@@ -60,12 +52,14 @@ class Training:
             'batch_size': 32,
             'epochs': 20,
             'type': 'classification',
-            'classes': [0, 1],#1 is >50k
+            'classes': [0, 1],#1 is >50k,
+            'device': self.device,
             'seed': self.seed
         }
+
         self.ppo_agent = PPOAgent(**ppo_config)
         self.alpha_model = FFNNAgent(**self.ffnn_config)
-        self.dl_generator = torch.Generator(device=self.device).manual_seed(self.seed)
+        self.dl_generator = torch.Generator(device='cpu').manual_seed(self.seed)
         self.beta_base_model = FFNNAgent(**self.ffnn_config)
         self.restart_beta()
 
@@ -75,13 +69,20 @@ class Training:
 
     def restart_beta(self):
         self.beta_model = None
-        self.beta_model = copy.deepcopy(self.beta_base_model)     
+        self.beta_model = copy.deepcopy(self.beta_base_model)
 
     def split_dataset(self, train_size=None, bias_pct=0.75):
         # Fetch dataset
-        adult = fetch_ucirepo(id=2)
-        X_df = adult.data.features  
-        y_df = adult.data.targets   
+        data_path = "census+income/adult.data"
+
+        column_names = [
+            "age", "workclass", "fnlwgt", "education", "education-num", "marital-status",
+            "occupation", "relationship", "race", "sex", "capital-gain", "capital-loss",
+            "hours-per-week", "native-country", "income"
+        ]
+        X_df = pd.read_csv(data_path, header=None, names=column_names, na_values="?", skipinitialspace=True)
+        y_df = X_df[["income"]]
+        X_df = X_df.drop(columns=["income"])
 
         X = X_df.values
         y = np.ravel(y_df.values)
@@ -186,92 +187,61 @@ class Training:
 
 
     def mean_error(self, target, pred):
-        # return torch.mean((pred - target) ** 2)
-        y_true = target.detach().cpu().numpy().ravel()
-        y_pred = torch.round(pred).detach().cpu().numpy().ravel()
-        f1 = _sk_f1(y_true, y_pred)
-        #print(f"Mean error f1: {f1}")
-        return torch.tensor(f1)
+        # Ensure both tensors are on the same device and type
+        pred_rounded = torch.round(pred).to(dtype=target.dtype, device=target.device)
+        target = target.to(dtype=pred_rounded.dtype, device=pred_rounded.device)
+
+        tp = ((pred_rounded == 1) & (target == 1)).sum().float()
+        fp = ((pred_rounded == 1) & (target == 0)).sum().float()
+        fn = ((pred_rounded == 0) & (target == 1)).sum().float()
+
+        precision = tp / (tp + fp + 1e-8)
+        recall = tp / (tp + fn + 1e-8)
+        f1 = 2 * precision * recall / (precision + recall + 1e-8)
+        return f1
 
     def error_vector(self, target, pred):
-        # y_true = target.detach().cpu().numpy().ravel()
-        # y_pred = torch.round(pred).detach().cpu().numpy().ravel()
-
-        # # Compute the F1 score for each sample individually
-        # f1_scores = []
-        # for true_label, pred_label in zip(y_true, y_pred):
-        #     score = _sk_f1([true_label], [pred_label], zero_division=0)
-        #     f1_scores.append(score)
-        # f1_scores = np.array(f1_scores, dtype=np.float32)
-        # f1_score_vector = _sk_f1(y_true, y_pred, zero_division=0, average=None)
-
-
-        # tensor of F1 scores
-        # f1_tensor = torch.tensor(f1_score_vector, device=self.device)
-        # f1_tensor = f1_tensortorch.float32
-        #print(f'Error Vector: {f1_tensor}')
-        # return f1_tensor
-
-        pred = torch.round(pred)
-        accuracy_vector = (target == pred).float()
-        # accuracy_tensor = torch.from_numpy(accuracy_vector).to(self.device)
-
+        # Ensure both tensors are on the same device and type
+        pred_rounded = torch.round(pred).to(dtype=target.dtype, device=target.device)
+        accuracy_vector = (target == pred_rounded).float()
         return accuracy_vector
 
       
-    def compute_reward(self, alpha_model, beta_model,x_theta_test, y_theta_test, x_phi, y_phi):
+    def compute_reward(self, alpha_model, beta_model, x_theta_test, y_theta_test, x_phi, y_phi):
         with torch.no_grad():
             # θ–test predictions from β
-            beta_out = beta_model.predict(x_theta_test)  
-            y_hat_theta_beta = torch.tensor(
-                beta_out,
-                dtype=torch.float32,
-                device=self.device
-            ).squeeze(-1)
+            y_hat_theta_beta = beta_model.predict(x_theta_test)
 
             # beta on minority
             idx = y_theta_test == 1
-            beta_out_min = beta_model.predict(x_theta_test[idx,:])  
-            y_hat_theta_beta_min = torch.tensor(
-                beta_out_min,
-                dtype=torch.float32,
-                device=self.device
-            ).squeeze(-1)
+            y_hat_theta_beta_min = beta_model.predict(x_theta_test[idx, :])
 
             # same for α
-            alpha_out = alpha_model.predict(x_theta_test)
-            y_hat_theta_alpha = torch.tensor(
-                alpha_out,
-                dtype=torch.float32,
-                device=self.device
-            ).squeeze(-1)
+            y_hat_theta_alpha = alpha_model.predict(x_theta_test)
 
-
-        #How well Beta performed on the real test set
+        # How well Beta performed on the real test set
         # Calculating objective 1, global error using Beta model on theta test set
         objective_global = self.mean_error(y_theta_test, y_hat_theta_beta)
         # Calculating objective 1, global error using Beta model on theta test set
         objective_1 = self.mean_error(y_theta_test[idx], y_hat_theta_beta_min)
 
-        #How well the best performing model could predict synthetic data, learns that minority has the most absurd feature values?
-        #Calculating objective 2, vector error using Alpha and Beta models on phi set
+        # How well the best performing model could predict synthetic data, learns that minority has the most absurd feature values?
+        # Calculating objective 2, vector error using Alpha and Beta models on phi set
         beta_cost = self.mean_error(y_theta_test, y_hat_theta_beta)
-        alpha_cost= self.mean_error(y_theta_test, y_hat_theta_alpha)
-
+        alpha_cost = self.mean_error(y_theta_test, y_hat_theta_alpha)
 
         with torch.no_grad():
-            if False: #alpha_cost < beta_cost:
+            if False:  # alpha_cost < beta_cost:
                 print(f'Working with alpha cost')
-                pred = alpha_model.predict(x_phi)
-                y_hat_phi = torch.tensor(pred, dtype=torch.float32, device=self.device).squeeze(-1)
+                y_hat_phi = alpha_model.predict(x_phi)
                 objective_individual = self.error_vector(y_phi, y_hat_phi)
             else:
                 print('Changed to work with beta cost')
-                pred = beta_model.predict(x_phi)
-                y_hat_phi = torch.tensor(pred, dtype=torch.float32, device=self.device).squeeze(-1)
+                y_hat_phi = beta_model.predict(x_phi)
                 objective_individual = self.error_vector(y_phi, y_hat_phi)
+
         # print(f'obj global {objective_global:.4f} individual {objective_individual.mean():.4f}')
-        reward = 1*(self.lambda_*objective_1 + (1.0-self.lambda_)*objective_individual)
+        reward = 1 * (self.lambda_ * objective_1 + (1.0 - self.lambda_) * objective_individual)
         return reward, objective_1, objective_individual, objective_global
 
     #Called automatically
@@ -280,17 +250,27 @@ class Training:
         # Training loop params
         start_time = time.time()
 
-
-        EPISODES        = 100 #200
+        EPISODES        = 2 #200
         TRAJ_LENGTH     = 3000 #1000
         REAL_DATA_SIZE  = 3000
         BIAS_PCT        = 0.9
         self.lambda_    = 0.8
-        
+
+        self.tracker = EpisodeTracker(
+            {
+                "EPISODES": EPISODES,
+                "TRAJ_LENGTH": TRAJ_LENGTH,
+                "REAL_DATA_SIZE": REAL_DATA_SIZE,
+                "BIAS_PCT": BIAS_PCT,
+                "lambda_": self.lambda_,
+                "seed": self.seed,
+                "pca_components": self.pca_components,
+            },
+            save_dir="training_runs"
+        )
         #SAVE_DATA      
         # Prepare data
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT)
-
 
         print(f"Size of train set: {len(x_theta_train)}")
         total_data = len(x_theta_train) + TRAJ_LENGTH
@@ -301,14 +281,12 @@ class Training:
         self.alpha_model = self.train_predictor_model(self.alpha_model, x_theta_train, y_theta_train)
 
         # Environment and agent setup NOTE that sex is forced female in loop
-        #features = ['AGEP', 'COW', 'SCHL', 'WKHP']
-        #target = 'PINCP'
         seed = self.seed
 
         env = Environment(
             target=1,#Does nothing right now
-            male_hi=0,#Does nothing right now
             max_actions=TRAJ_LENGTH,
+            device=self.device,
             seed=seed
         )
 
@@ -316,10 +294,15 @@ class Training:
         last_y_syn = None
 
         for episode in range(EPISODES):
-            states, actions = [], []
-            next_states, dones = [], []
+            # Pre-allocate arrays for performance (now as torch tensors)
+            states = [None] * TRAJ_LENGTH
+            actions = [None] * TRAJ_LENGTH
+            next_states = [None] * TRAJ_LENGTH
+            dones = [None] * TRAJ_LENGTH
 
-            x_syn_list, y_syn_list = [], []
+            # Pre-allocate synthetic data as torch tensors
+            x_syn_tensor = torch.zeros((TRAJ_LENGTH, x_theta_train.shape[1]), dtype=torch.float32, device=self.device)
+            y_syn_tensor = torch.zeros(TRAJ_LENGTH, dtype=torch.long, device=self.device)
 
             # Reset env
             state = env.reset()
@@ -330,51 +313,66 @@ class Training:
 
                 next_state, done, info = env.step(action, (t + 1))
 
-                states.append(state)
-                actions.append(action)
-                next_states.append(next_state)
-                dones.append(done)
+                states[t] = state
+                actions[t] = action
+                next_states[t] = next_state
+                dones[t] = done
 
-                # Always = 1 (Underrepresented class)
-                sampled_t = info['sampled_target']
-                # action_with_sex = np.concatenate([action, [2.0]])
-
-                x_syn_list.append(action)
-                y_syn_list.append(sampled_t)
+                x_syn_tensor[t] = action
+                y_syn_tensor[t] = info['sampled_target'] # Always = 1 (Underrepresented class)
 
                 state = next_state
                 if done:
                     print(f'Generated synthetic tuple {t + 1}/{TRAJ_LENGTH}')
                     break
 
-            T = len(x_syn_list)
-            x_syn = np.stack(x_syn_list)    # shape [T, feature_dim]
-            y_syn = np.array(y_syn_list)    # shape [T]
-            x_phi_t        = torch.tensor(x_syn, dtype=torch.float32, device=self.device)
-            y_phi_t        = torch.tensor(y_syn, dtype=torch.long, device=self.device)
-            
-           # Save the last trajectory for later use
-            last_x_syn = x_syn
-            last_y_syn = y_syn   
+            # Only keep the filled part if early break
+            T = t + 1 if done else TRAJ_LENGTH
+            x_syn = x_syn_tensor[:T].clone().detach()
+            y_syn = y_syn_tensor[:T].clone().detach()
+            x_phi_t = x_syn
+            y_phi_t = y_syn
+
+            # Save the last trajectory for later use (move to cpu/numpy for DataFrame)
+            last_x_syn = x_syn.cpu().numpy()
+            last_y_syn = y_syn.cpu().numpy()
             x_hybrid = torch.cat([x_theta_train, x_phi_t ])
             y_hybrid = torch.cat([y_theta_train, y_phi_t ])
-
-
 
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
 
             rewards, obj_1, obj_2, global_ = self.compute_reward(self.alpha_model, self.beta_model, x_theta_test, y_theta_test, x_phi_t, y_phi_t)
 
-            # for idx, (s, a, r, s_next, d) in enumerate(zip(states, actions, rewards, next_states, dones)):
-            #     # learn
-            #     self.ppo_agent.learn(s, a, r, s_next, d)
 
+            states      = states[:T]
+            actions     = actions[:T]
+            next_states = next_states[:T]
+            dones       = dones[:T]
+            rewards     = rewards[:T]
             self.ppo_agent.learn_trajectory(states, actions, rewards, next_states, dones)
 
             # Resets beta model
             self.restart_beta()
 
             avg_reward = torch.mean(rewards)
+            self.tracker.log_episode(
+                episode+1,
+                avg_reward,
+                obj_1,                # minority F1
+                obj_2.mean(),         # mean individual metric
+                global_,              # global F1
+                self.lambda_
+            )
+            self.tracker.maybe_save_synthetic(
+                episode_num=episode+1,
+                x_syn=x_phi_t,                 # torch.Tensor or np.ndarray
+                y_syn=y_phi_t,
+                avg_reward=float(avg_reward),
+                obj1=float(obj_1),
+                obj2_mean=float(obj_2.mean()),
+                global_f1=float(global_),
+                feature_names=[f"pca_{i}" for i in range(x_phi_t.shape[1])]
+            )
             print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.4f}" +\
                  f"- Obj 1 {obj_1:.4f}, Obj 2 {obj_2.mean():.4f},"+\
                  f" Global  {global_:.4f}, lambda {self.lambda_:.4f}")
@@ -388,8 +386,10 @@ class Training:
             df_syn["target"] = last_y_syn
 
             df_syn.to_csv("synthetic_trajectory.csv", index=False)
+            
             print(f"Saved last synthetic trajectory to synthetic_trajectory.csv")
-    
+            print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
+
 if __name__ == "__main__":
     train = Training(seed=42)
     train()

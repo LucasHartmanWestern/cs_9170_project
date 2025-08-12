@@ -1,0 +1,3 @@
+episode,average_reward,obj1_minority_f1,obj2_mean,global_f1,lambda,wall_seconds
+1,0.908615,0.955603,0.720667,0.230789,0.8000,8.57
+2,0.852049,0.863061,0.808000,0.184094,0.8000,14.60

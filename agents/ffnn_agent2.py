@@ -128,7 +128,7 @@ class FFNNAgent:
             features: Input features (numpy array or torch tensor)
 
         Returns:
-            List of predictions (floats for regression, class labels for classification)
+            Tensor of predictions (floats for regression, class indices for classification)
         """
 
         if not torch.is_tensor(features):
@@ -142,12 +142,8 @@ class FFNNAgent:
             outputs = self.model(features) # shape (batch_size, output_size)
 
             if self.type == "classification":
-                preds = torch.argmax(outputs, dim=1).cpu()
-                if self.classes is not None:
-                    # Map to class labels
-                    return [self.classes[idx] for idx in preds.tolist()]
-                else:
-                    return preds
+                preds = torch.argmax(outputs, dim=1)
+                return preds.cpu()
             else:
                 return outputs.cpu()
     def train(self, loader: torch.utils.data.DataLoader) -> list[float]:
