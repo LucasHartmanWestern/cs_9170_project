@@ -189,17 +189,30 @@ class Training:
 
 
     def mean_error(self, target, pred):
+        # Ensure both tensors are on the same device and cast to float for MSE
+        target = target.to(self.device).float()
+        pred = pred.to(self.device).float()
         return torch.mean((pred - target) ** 2)
 
 
     def error_vector(self, target, pred):
+        target = target.to(self.device).float()
+        pred = pred.to(self.device).float()
         return (pred - target) ** 2
 
     def f1_error(self, target, pred):
-        y_true = target.detach().cpu().numpy().ravel()
-        y_pred = torch.round(pred).detach().cpu().numpy().ravel()
-        f1 = _sk_f1(y_true, y_pred)
-        return torch.tensor(f1)
+        target = target.to(self.device).float()
+        pred = pred.to(self.device).float()
+        y_pred = torch.round(pred)
+        y_true = target
+        # True positives, false positives, false negatives
+        tp = ((y_pred == 1) & (y_true == 1)).sum()
+        fp = ((y_pred == 1) & (y_true == 0)).sum()
+        fn = ((y_pred == 0) & (y_true == 1)).sum()
+        precision = tp / (tp + fp + 1e-8)
+        recall = tp / (tp + fn + 1e-8)
+        f1 = 2 * precision * recall / (precision + recall + 1e-8)
+        return f1
 
 
       
