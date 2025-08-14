@@ -1,24 +1,39 @@
 # --- Imports ---
-import numpy as np
-import pandas as pd
+
+# Standard library
 import os
 import shutil
+import copy
+import time
+
+# Third-party: numpy, pandas, sklearn, torch
+import numpy as np
+import pandas as pd
 import torch
+
 from torch.utils.data import DataLoader, TensorDataset
-from env import Environment
-from agents.ppo_agent import PPOAgent
-from agents.ffnn_agent2 import FFNNAgent
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.metrics import f1_score as _sk_f1, accuracy_score
 from sklearn.utils import resample
-import copy
-import time
+
+# Local modules
+from env import Environment
+from agents.reinforce_agent import ReinforceAgent
+from agents.ppo_agent import PPOAgent
+from agents.ffnn_agent2 import FFNNAgent
 from episode_tracker import EpisodeTracker
+
+EPISODES        = 1000 
+TRAJ_LENGTH     = 1000
+REAL_DATA_SIZE  = 3000
+BIAS_PCT        = 0.8
 
 class Training:
     def __init__(self, seed=42, device='cpu'):
+
         self.seed = seed
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         if self.device.type == 'cuda':
@@ -27,7 +42,7 @@ class Training:
             torch.set_float32_matmul_precision('high')
 
         self.pca_components = 2
-        self.lambda_ = 0.5
+        self.lambda_    = 0.8
 
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
@@ -58,20 +73,26 @@ class Training:
             'device': self.device,
             'seed': self.seed
         }
-
-        self.ppo_agent = PPOAgent(**ppo_config)
-        self.alpha_model = FFNNAgent(**self.ffnn_config)
+        reinforce_config = {
+            'state_size': 2,
+            'action_size': self.pca_components,
+            'hidden_sizes': [64, 64],
+            'total_episodes': EPISODES,
+            'lr': 3e-4,
+            'gamma': 0.99,
+            'entropy_start': 1e-2,
+            'entropy_end': 0,
+            'seed': self.seed,
+            'device': self.device
+        }
         self.dl_generator = torch.Generator(device='cpu').manual_seed(self.seed)
-        self.beta_base_model = FFNNAgent(**self.ffnn_config)
-        self.restart_beta()
 
-    # Given AGEP  COW  SCHL  WKHP  SEx we are predicting PINCP
-    #Link to data documentation: https://github.com/fairlearn/fairlearn/blob/main/docs/user_guide/datasets/acs_income.rst
-    #Can see plots for this dataset in new_biases.ipynb
 
-    def restart_beta(self):
-        self.beta_model = None
-        self.beta_model = copy.deepcopy(self.beta_base_model)
+        #self.agent = PPOAgent(**ppo_config)
+        self.agent = ReinforceAgent(**reinforce_config)
+        self.alpha_model = FFNNAgent(**self.ffnn_config)
+        self.beta_model = FFNNAgent(**self.ffnn_config)
+
 
     def split_dataset(self, train_size=None, bias_pct=0.75):
         # Fetch dataset
@@ -154,7 +175,6 @@ class Training:
         # If train_size is specified, subsample the train set to the requested size
         # Bias in class distribution is maintained.
         if train_size is not None and train_size < len(X_train):
-            print('Reducing size of dataset')
             # Stratified subsample to preserve the biased class distribution
             X_train, _, y_train, _ = train_test_split(
                 X_train, y_train, train_size=train_size, random_state=self.seed, stratify=y_train
@@ -169,22 +189,13 @@ class Training:
         X_test_theta = torch.tensor(X_test_pca, dtype=torch.float32, device=self.device)
         y_train_theta = torch.tensor(y_train, dtype=torch.long, device=self.device)
         y_test_theta = torch.tensor(y_test_theta, dtype=torch.long, device=self.device)
-        print(f"Size of X_train_theta: {X_train_theta.shape}")
 
         return X_train_theta, X_test_theta, y_train_theta, y_test_theta
 
     def train_predictor_model(self, model, x_train, y_train):
-
-        # # Convert numpy arrays to torch tensors
-        # x_train_tensor = torch.tensor(x_train, dtype=torch.float32, device=self.device)
-        # y_train_tensor = torch.tensor(y_train, dtype=torch.long,   device=self.device)
-
-        # Create TensorDataset and DataLoader
         train_dataset = TensorDataset(x_train, y_train)
         loader = DataLoader(train_dataset, batch_size=64, shuffle=True, generator=self.dl_generator)
-
         model.train(loader)
-
         return model
 
 
@@ -213,8 +224,6 @@ class Training:
         recall = tp / (tp + fn + 1e-8)
         f1 = 2 * precision * recall / (precision + recall + 1e-8)
         return f1
-
-
       
     def compute_reward(self, alpha_model, beta_model, x_theta_test, y_theta_test, x_phi, y_phi):
         with torch.no_grad():
@@ -255,15 +264,8 @@ class Training:
 
     #Called automatically
     def __call__(self):
-        print('Begin train loop')
         # Training loop params
         start_time = time.time()
-
-        EPISODES        = 2 #200
-        TRAJ_LENGTH     = 3000 #1000
-        REAL_DATA_SIZE  = 3000
-        BIAS_PCT        = 0.9
-        self.lambda_    = 0.8
 
         self.tracker = EpisodeTracker(
             {
@@ -276,12 +278,7 @@ class Training:
                 "pca_components": self.pca_components,
             },
             save_dir="training_runs"
-        )
-
-        self.save_by_episode = 100
-        data_exp_folder = 'data_exp/exp_001/'
-
-        #SAVE_DATA      
+        )      
         # Prepare data
         x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT)
 
@@ -307,18 +304,13 @@ class Training:
         last_y_syn = None
 
         col_labels = [f"pca_{i}" for i in range(self.pca_components)]
-        # Delete the folder if it exists
-        if os.path.exists(data_exp_folder):
-            shutil.rmtree(data_exp_folder)
-        # Create the folder
-        os.makedirs(data_exp_folder)
 
         for episode in range(EPISODES):
             # Pre-allocate arrays for performance (now as torch tensors)
-            states = [None] * TRAJ_LENGTH
-            actions = [None] * TRAJ_LENGTH
-            next_states = [None] * TRAJ_LENGTH
-            dones = [None] * TRAJ_LENGTH
+            states = torch.zeros((TRAJ_LENGTH, x_theta_train.shape[1]), dtype=torch.float32, device=self.device)
+            actions = torch.zeros((TRAJ_LENGTH, x_theta_train.shape[1]), dtype=torch.float32, device=self.device)
+            next_states = torch.zeros((TRAJ_LENGTH, x_theta_train.shape[1]), dtype=torch.float32, device=self.device)
+            dones = torch.zeros(TRAJ_LENGTH, dtype=torch.bool, device=self.device)
 
             # Pre-allocate synthetic data as torch tensors
             x_syn_tensor = torch.zeros((TRAJ_LENGTH, x_theta_train.shape[1]), dtype=torch.float32, device=self.device)
@@ -326,10 +318,11 @@ class Training:
 
             # Reset env
             state = env.reset()
+            self.beta_model.reset()
             # Generate a trajectory of length TRAJ_LENGTH
             for t in range(TRAJ_LENGTH):
                 # Get action
-                action = self.ppo_agent.predict(state)
+                action = self.agent.predict(state)
 
                 next_state, done, info = env.step(action, (t + 1))
 
@@ -343,7 +336,7 @@ class Training:
 
                 state = next_state
                 if done:
-                    print(f'Generated synthetic tuple {t + 1}/{TRAJ_LENGTH}')
+                    #print(f'Generated synthetic tuple {t + 1}/{TRAJ_LENGTH}')
                     break
 
             # Only keep the filled part if early break
@@ -352,10 +345,6 @@ class Training:
             y_syn = y_syn_tensor[:T].clone().detach()
             x_phi_t = x_syn
             y_phi_t = y_syn
-
-            # Save the last trajectory for later use (move to cpu/numpy for DataFrame)
-            last_x_syn = x_syn.cpu().numpy()
-            last_y_syn = y_syn.cpu().numpy()
             x_hybrid = torch.cat([x_theta_train, x_phi_t ])
             y_hybrid = torch.cat([y_theta_train, y_phi_t ])
 
@@ -363,17 +352,14 @@ class Training:
 
             rewards, obj_1, obj_2, global_ = self.compute_reward(self.alpha_model, self.beta_model,\
                                                                  x_theta_test, y_theta_test, x_phi_t, y_phi_t)
-
-
             states      = states[:T]
             actions     = actions[:T]
             next_states = next_states[:T]
             dones       = dones[:T]
             rewards     = rewards[:T]
-            self.ppo_agent.learn_trajectory(states, actions, rewards, next_states, dones)
+            self.agent.learn_trajectory(states, actions, rewards, next_states, dones, episode)
 
-            # Resets beta model
-            self.restart_beta()
+
 
             avg_reward = torch.mean(rewards)
             self.tracker.log_episode(
@@ -394,31 +380,9 @@ class Training:
                 global_f1=float(global_),
                 feature_names=[f"pca_{i}" for i in range(x_phi_t.shape[1])]
             )
-            print(f"Episode {episode+1}/{EPISODES} — Average reward: {avg_reward:.4f}" +\
-                 f"- Obj 1 {obj_1:.4f}, Obj 2 {obj_2.mean():.4f},"+\
-                 f" f1 score  {global_:.4f}, lambda {self.lambda_:.2f}")
-
-
-            if ((episode +1) % self.save_by_episode)==0:
-                # Format as DataFrame
-                df_syn = pd.DataFrame(last_x_syn, columns=col_labels)
-                df_syn["target"] = last_y_syn
-                df_syn.to_csv(f"{data_exp_folder}synthetic_trajectory_ep{episode+1}.csv", index=False)
-                print(f"Saved synthetic trajectory at episode {episode + 1} to synthetic_trajectory.csv")
                 
-
         print(f'Total time {time.time()-start_time}')
-
-        # After training, save the last generated synthetic trajectory to a file
-        if last_x_syn is not None and last_y_syn is not None:
-            # Format as DataFrame
-            df_syn = pd.DataFrame(last_x_syn, columns=col_labels)
-            df_syn["target"] = last_y_syn
-
-            df_syn.to_csv("synthetic_trajectory.csv", index=False)
-            
-            print(f"Saved last synthetic trajectory to synthetic_trajectory.csv")
-            print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
+        print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
 
 if __name__ == "__main__":
     train = Training(seed=42)

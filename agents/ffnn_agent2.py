@@ -43,22 +43,6 @@ class FFNNAgent:
     def __init__(self, input_size, hidden_sizes=[64, 64], output_size=1, 
                  learning_rate=0.001, batch_size=32, epochs=100, type="regression", 
                  classes=None, device='cpu', seed=42):
-        """
-        Initialize the Feed-Forward Neural Network agent.
-        
-        Args:
-            input_size: Number of input features
-            hidden_sizes: List of hidden layer sizess
-            output_size: Number of output values
-            learning_rate: Learning rate for optimizer
-            batch_size: Batch size for training
-            epochs: Number of training epochs
-            type: Type of task - "regression" or "classification"
-            classes: List of class labels for classification tasks
-            device: Device to run the model on (cpu or cuda)
-            seed: Random seed for reproducibility
-        """
-
         super(FFNNAgent, self).__init__()
         self.device = device 
         self.seed   = seed
@@ -99,21 +83,31 @@ class FFNNAgent:
             if self.type == "regression"
             else nn.CrossEntropyLoss()
         )
+        with torch.no_grad():
+            # Keep snapshot on the same device;
+            self._init_state = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
+        # Keep optimizer settings to build fresh optimizer each reset
+        self._optim_cfg = dict(
+            lr=self.learning_rate,
+            betas=self.optimizer.defaults.get('betas', (0.9, 0.999)),
+            eps=self.optimizer.defaults.get('eps', 1e-8),
+            weight_decay=self.optimizer.defaults.get('weight_decay', 0.0),
+            amsgrad=self.optimizer.defaults.get('amsgrad', False),
+        )
     
     def reset(self):
         """
-        Reset the model and optimizer to their initial state.
+        Restore model weights to the exact initial snapshot and
+        re-create a fresh optimizer (no momentum carryover).
         """
-        torch.manual_seed(self.seed)
-        torch.cuda.manual_seed_all(self.seed)
+        with torch.no_grad():
+            self.model.load_state_dict(self._init_state, strict=True)
 
-        self.dl_generator = torch.Generator().manual_seed(self.seed)
+        # Fresh optimizer so Adam/SGD momentum/EMA buffers are reset too
+        self.optimizer = optim.Adam(self.model.parameters(), **self._optim_cfg)
 
-        self.model = FFNNModel(self.input_size, self.hidden_sizes, self.output_size).to(self.device)
-
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-
-        # Re-initialize criterion based on the task type
+        # Criterion doesn’t need re-instantiation unless you actually change task type,
+        # but keep it if you prefer explicitness:
         if self.type == "regression":
             self.criterion = nn.MSELoss()
         elif self.type == "classification":
@@ -143,9 +137,9 @@ class FFNNAgent:
 
             if self.type == "classification":
                 preds = torch.argmax(outputs, dim=1)
-                return preds.cpu()
+                return preds
             else:
-                return outputs.cpu()
+                return outputs
     def train(self, loader: torch.utils.data.DataLoader) -> list[float]:
         """
         Train the model on the provided DataLoader.

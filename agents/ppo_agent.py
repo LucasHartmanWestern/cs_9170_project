@@ -79,16 +79,12 @@ class PPOAgent:
             Synthetic data sample (a torch.Tensor)
         """
 
-        if torch.is_tensor(state):
-            # already a Tensor—clone+detach to avoid in-place/grad issues
-            state = state.clone().detach().float().to(self.device)
-        else:
-            # numpy array or list
-            state = torch.tensor(state, dtype=torch.float32, device=self.device)
-        
+        # already a Tensor—clone+detach to avoid in-place/grad issues
+        state = state.clone().detach().float().to(self.device)
+
         # Ensure state is properly shaped for the network
         if len(state.shape) == 1:
-            state = state.unsqueeze(0)  # Add batch dimension if needed
+            state = state.unsqueeze(0)
         
         # Set networks to evaluation mode
         self.actor.eval()
@@ -105,224 +101,83 @@ class PPOAgent:
             # Sample action from distribution
             action = dist.sample()
     
-        # Return the synthetic data (action) as a torch.Tensor
-        return action.squeeze(0).cpu()
-    
-    def learn(self, state, action, reward, next_state, done):
-        """
-        Update policy and value networks using PPO algorithm
-        
-        Args:
-            state: Current state
-            action: Action taken (synthetic data generated)
-            reward: Reward received
-            next_state: Next state
-            done: Whether episode is done
-            random_state: Random seed for reproducibility
-        """
-        torch.manual_seed(self.seed)
-        torch.cuda.manual_seed_all(self.seed)
-        self.rng.manual_seed(self.seed)
-
-        # Convert inputs to tensors if they aren't already
-        state      = torch.as_tensor(state,      dtype=torch.float32, device=self.device)
-        action     = torch.as_tensor(action,     dtype=torch.float32, device=self.device)
-        reward     = torch.as_tensor([reward],   dtype=torch.float32, device=self.device)
-        next_state = torch.as_tensor(next_state, dtype=torch.float32, device=self.device)
-        done       = torch.as_tensor([float(done)], dtype=torch.float32, device=self.device)
-        
-        # Ensure states have batch dimension
-        if len(state.shape) == 1:
-            state = state.unsqueeze(0)
-        if len(next_state.shape) == 1:
-            next_state = next_state.unsqueeze(0)
-        
-        # Set networks to evaluation mode for data collection
-        self.actor.eval()
-        self.critic.eval()
-        
-        with torch.no_grad():
-            # Get action distribution parameters
-            mean, log_std = self.actor(state)
-            std = log_std.exp()
-            dist = Normal(mean, std)
-            
             # Calculate log probability of the action
             log_prob = dist.log_prob(action).sum(dim=-1)
             
-            # Get value estimate
-            value = self.critic(state).squeeze(-1) 
-            
-            # Get next state value (if not done)
-            next_value = 0
-            if not done.item():
-                next_value = self.critic(next_state).item()
-            
-            # Calculate target value using TD(0)
-            target_value = reward.item() + self.gamma * next_value * (1 - done.item())
-            
-            # Calculate advantage
-            advantage = target_value - value.item()
+            # Get value estimate from critic
+            value = self.critic(state)
 
-        if action.dim() == 1:
-            action = action.unsqueeze(0)
-        
-        # Store transition in memory
-        self.memory.append((
-            state,                    # [1, S]
-            action,                   # [1, A]
-            log_prob,                 # scalar tensor
-            torch.as_tensor([reward.item()], dtype=torch.float32, device=self.device),  
-            done,                     # [1]
-            value       # [1]
-        ))
-        
-        # If we have enough samples, perform PPO update
-        if len(self.memory) >= self.batch_size:
-            # Set networks to training mode
-            self.actor.train()
-            self.critic.train()
-            
-            # Prepare data from memory
-            states, actions, old_log_probs, rewards, dones, values = zip(*self.memory)
-            states         = torch.cat(states, dim=0)            # [N, S]
-            actions        = torch.cat(actions, dim=0)           # [N, A]
-            old_log_probs  = torch.stack(old_log_probs).squeeze()# [N]
-            rewards        = torch.stack(rewards).squeeze()      # [N]
-            dones          = torch.stack(dones).squeeze()        # [N]
-            values         = torch.cat(values).squeeze()         # [N]
+        # Return the synthetic data (action) as a torch.Tensor
+        return action.squeeze(0).cpu()
 
-            # Calculate returns and advantages
-            returns = []
-            advantages = []
-            for i in range(len(rewards)):
-                if dones[i]:
-                    ret = rewards[i]
-                    adv = ret - values[i]
-                else:
-                    next_idx = min(i + 1, len(values) - 1)
-                    ret = rewards[i] + self.gamma * values[next_idx]
-                    adv = ret - values[i]
-                returns.append(ret)
-                advantages.append(adv)
-            
-            returns    = torch.stack(returns)
-            advantages = (torch.stack(advantages) - torch.stack(advantages).mean()) \
-                        / (torch.stack(advantages).std() + 1e-8)
-            
-            dataset = torch.utils.data.TensorDataset(
-                states, actions, old_log_probs, returns, advantages
-            )
-            loader = torch.utils.data.DataLoader(
-                dataset,
-                batch_size=self.batch_size,
-                shuffle=True,
-                generator=self.rng
-            )
+    def learn_trajectory(self, states, actions, rewards, next_states, dones, lam: float = 0.95):
+        """
+        PPO update from a single trajectory.
 
-            # PPO update for multiple epochs
-            for _ in range(self.update_epochs):
-                # Process in minibatches
-                for batch_states, batch_actions, batch_old_log_probs, batch_returns, batch_advantages in loader:
+        Args:
+            states:       list/array/tensor of shape [T, state_size]
+            actions:      list/array/tensor of shape [T, action_size]
+            rewards:      list/array/tensor of shape [T]
+            next_states:  list/array/tensor of shape [T, state_size]  (s_{t+1} for each t)
+            dones:        list/array/tensor of shape [T] with {0,1}
+            lam:          GAE lambda (default 0.95)
+        """
 
-                    # Get current action distribution
-                    means, log_stds = self.actor(batch_states)
-                    stds = log_stds.exp()
-                    dist = Normal(means, stds)
-                    
-                    # Calculate current log probabilities
-                    curr_log_probs = dist.log_prob(batch_actions).sum(dim=-1)
-                    entropy = dist.entropy().mean()
-                    
-                    # Fix the dimension issue - instead of reshaping, ensure both tensors are 1D
-                    if len(curr_log_probs.shape) > 1:
-                        curr_log_probs = curr_log_probs.squeeze()
-                    if len(batch_old_log_probs.shape) > 1:
-                        batch_old_log_probs = batch_old_log_probs.squeeze()
-                    
-                    # Calculate ratio for PPO
-                    ratio = torch.exp(curr_log_probs - batch_old_log_probs)
-                    
-                    # Calculate surrogate losses
-                    surr1 = ratio * batch_advantages
-                    surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * batch_advantages
-                    
-                    # Get value predictions
-                    values = self.critic(batch_states).squeeze(-1)
-                    
-                    # Calculate losses
-                    actor_loss = -torch.min(surr1, surr2).mean()
-                    critic_loss = F.mse_loss(values, batch_returns)
-                    total_loss = actor_loss + self.c1 * critic_loss - self.c2 * entropy
-                    
-                    # Update networks
-                    self.optimizer.zero_grad()
-                    total_loss.backward()
-                    self.optimizer.step()
-            
-            # Clear memory after update
-            self.memory = []
+        T = states.shape[0]
 
-    def learn_trajectory(self, states, actions, rewards, next_states, dones):
-        states = torch.as_tensor(torch.stack([torch.as_tensor(s, dtype=torch.float32, device=self.device) for s in states]), device=self.device)
-        actions = torch.as_tensor(torch.stack([torch.as_tensor(a, dtype=torch.float32, device=self.device) for a in actions]), device=self.device)
-        rewards = torch.as_tensor(rewards, dtype=torch.float32, device=self.device)
-        dones   = torch.as_tensor(dones, dtype=torch.float32, device=self.device)
-
-
-        #Discount returns
-        returns = []
-        G = 0
-        for r, d in zip(reversed(rewards), reversed(dones)):
-            G = r + self.gamma * G * (1 - d)
-            returns.insert(0, G)
-        returns = torch.as_tensor(returns, dtype=torch.float32, device=self.device)
-
-        #Value estimates and advantages
+        # ---- Compute values and GAE advantages (bootstrapped) ----
         with torch.no_grad():
-            values = self.critic(states).squeeze(-1)
-        advantages = returns - values
+            values       = self.critic(states).squeeze(-1)                 # [T]
+            next_values  = self.critic(next_states).squeeze(-1)            # [T]
+            deltas       = rewards + self.gamma * next_values * (1.0 - dones) - values  # [T]
+
+            advantages = torch.zeros_like(deltas, device=self.device)      # [T]
+            gae = 0.0
+            for t in reversed(range(T)):
+                gae = deltas[t] + self.gamma * lam * (1.0 - dones[t]) * gae
+                advantages[t] = gae
+
+            returns = values + advantages                                  # [T]
+
+            # Old log probs under behavior policy (assumed current policy; for off-policy, store these at collection time)
+            mean_old, log_std_old = self.actor(states)
+            dist_old = Normal(mean_old, log_std_old.exp())
+            old_log_probs = dist_old.log_prob(actions).sum(dim=-1)         # [T]
+
+        # Normalize advantages
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        #Old log probs
-        with torch.no_grad():
-            means, log_stds = self.actor(states)
-            stds = log_stds.exp()
-            dist = Normal(means, stds)
-            old_log_probs = dist.log_prob(actions).sum(dim=1)
-
-        #Dataloader
+        # ---- Create mini-batches ----
         dataset = TensorDataset(states, actions, old_log_probs, returns, advantages)
-        loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, generator=self.rng)
+        loader  = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, generator=self.rng)
 
-        #PPO update loop
+        # ---- PPO update ----
         for _ in range(self.update_epochs):
-            for b_states, b_actions, b_old_log_probs, b_returns, b_advantages in loader:
-                means, log_stds = self.actor(b_states)
-                stds = log_stds.exp()
-                dist = Normal(means, stds)
+            for b_states, b_actions, b_old_logp, b_returns, b_advs in loader:
+                mean, log_std = self.actor(b_states)
+                dist = Normal(mean, log_std.exp())
 
-                log_probs = dist.log_prob(b_actions).sum(dim=-1)
-                entropy = dist.entropy().mean()
+                logp    = dist.log_prob(b_actions).sum(dim=-1)            # [B]
+                entropy = dist.entropy().sum(dim=-1).mean()
 
-                #Ratio for clipping
-                ratio = torch.exp(log_probs - b_old_log_probs)
-
-                #Surrogate objectives
-                surr1 = ratio * b_advantages
-                surr2 = torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * b_advantages
+                ratio = (logp - b_old_logp).exp()
+                surr1 = ratio * b_advs
+                surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * b_advs
                 actor_loss = -torch.min(surr1, surr2).mean()
 
-                #Critic loss
-                value_preds = self.critic(b_states).squeeze(-1)
-                critic_loss = F.mse_loss(value_preds, b_returns)
+                v_pred = self.critic(b_states).squeeze(-1)
+                critic_loss = F.mse_loss(v_pred, b_returns)
 
-                #Total loss
                 loss = actor_loss + self.c1 * critic_loss - self.c2 * entropy
+
                 self.optimizer.zero_grad()
                 loss.backward()
+                # Optional but recommended:
+                # torch.nn.utils.clip_grad_norm_(list(self.actor.parameters()) + list(self.critic.parameters()), 0.5)
                 self.optimizer.step()
+
         return
+
 
     def save(self, path):
         """
