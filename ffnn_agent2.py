@@ -2,9 +2,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from torch.utils.data import TensorDataset, DataLoader
+
 # torch.backends.cudnn.deterministic = True
 # torch.backends.cudnn.benchmark = False
 # torch.use_deterministic_algorithms(True) 
+
+from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin
+from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 
 class FFNNModel(nn.Module):
     def __init__(
@@ -39,10 +44,10 @@ class FFNNModel(nn.Module):
         return self.network(x)
 
 
-class FFNNAgent:
-    def __init__(self, input_size, hidden_sizes=[64, 64], output_size=1, 
+class FFNNAgent(BaseEstimator, RegressorMixin):
+    def __init__(self, input_size=1, hidden_sizes=[64, 64], output_size=1, 
                  learning_rate=0.001, batch_size=32, epochs=100, type="regression", 
-                 classes=None, device='cpu', seed=42):
+                 classes=None, device='cuda:0', seed=42):
         """
         Initialize the Feed-Forward Neural Network agent.
         
@@ -64,7 +69,6 @@ class FFNNAgent:
         self.seed   = seed
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(self.seed)
-        print(f"FFNN Using device: {self.device}")
         self.dl_generator = torch.Generator().manual_seed(self.seed)
 
         self.input_size   = input_size
@@ -150,7 +154,9 @@ class FFNNAgent:
                     return preds
             else:
                 return outputs.cpu()
-    def train(self, loader: torch.utils.data.DataLoader) -> list[float]:
+            
+
+    def fit(self, X, y=None) -> list[float]:
         """
         Train the model on the provided DataLoader.
 
@@ -160,6 +166,15 @@ class FFNNAgent:
         Returns:
             List of average training loss per epoch
         """
+
+        self.reset()
+
+        X = torch.as_tensor(X, dtype=torch.float32, device=self.device)
+        y = torch.as_tensor(y, dtype=torch.float32, device=self.device)
+
+        dataset = TensorDataset(X, y)
+        loader  = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, generator=self.dl_generator)
+
         # switch to train mode
         self.model.train()
         losses: list[float] = []

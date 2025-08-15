@@ -123,18 +123,20 @@ def train_model_baseline(
 
     results = {}
 
-    def _run_and_eval(agent, x_tr, y_tr, x_v, y_v, x_te, y_te, tag):
+    def _run_and_eval(agent_search, x_tr, y_tr, x_v, y_v, x_te, y_te, tag):
         print(f"\n--- {tag} ---")
-        dataset = TensorDataset(x_tr, y_tr)
-        loader = DataLoader(dataset, batch_size=agent.batch_size, shuffle=shuffle)
-        losses = agent.train(loader)
+        agent_search.fit(x_tr, y_tr)
+        best_model = agent_search.best_estimator_
+        print("Optimal parameters found: ", agent_search.best_params_)
+
+        losses = best_model.fit(x_tr, y_tr)
 
         if show_loss_plots:
             plot_losses(losses)
 
-        m_tr, _, fm_tr = evaluate_model(agent, x_tr, y_tr, sex_female_idx)
-        m_v,  _, fm_v  = evaluate_model(agent, x_v, y_v, sex_female_idx)
-        m_te, _, fm_te = evaluate_model(agent, x_te, y_te, sex_female_idx)
+        m_tr, _, fm_tr = evaluate_model(best_model, x_tr, y_tr, sex_female_idx)
+        m_v,  _, fm_v  = evaluate_model(best_model, x_v, y_v, sex_female_idx)
+        m_te, _, fm_te = evaluate_model(best_model, x_te, y_te, sex_female_idx)
 
         print(f"{tag} Train MSE: {m_tr:.4f} | Female MSE: {fm_tr:.4f}")
         print(f"{tag} Val   MSE: {m_v:.4f}  | Female MSE: {fm_v:.4f}")
@@ -215,7 +217,7 @@ def train_agents(
         target_features,
         dqn_agent, 
         ppo_agent, 
-        base_agent, 
+        ffnn_agent_search, 
         continuous_columns, 
         episodes, 
         synthetic_data_amount, 
@@ -319,36 +321,25 @@ def train_agents(
 
             #Once all synthetic data samples have been generated
             if done:
-                print(f"Episode {episode + 1}/{episodes}: Training {type(base_agent).__name__} ")
+                print(f"Episode {episode + 1}/{episodes}: Training {type(ffnn_agent_search).__name__} ")
                 
-                base_agent.reset()
+                ffnn_agent_search.fit(x_train, y_train)
+                best_model = ffnn_agent_search.best_estimator_
+                print("Optimal parameters found: ", ffnn_agent_search.best_params_)
 
-                # concatenate real + synthetic
-                combined_data   = torch.cat([x_train, synthetic_data], dim=0)    # (N+n, D)
-                combined_labels = torch.cat([y_train, synthetic_labels], dim=0) # (N+n, 5)
+                losses = best_model.fit(x_train, y_train)
 
-                combined_dataset = TensorDataset(combined_data, combined_labels)
-                loader = DataLoader(
-                    combined_dataset,
-                    batch_size=base_agent.batch_size,
-                    shuffle=shuffle,
-                    generator=cpu_rng,
-                    pin_memory=(False)#Don't enable on cpu
-                )
-
-                # Train FFNN or LSTM
-                losses = base_agent.train(loader)
                 if show_loss_plots:
                     plot_losses(losses)
 
-                print(f"Episode {episode + 1}/{episodes}: Evaluating {type(base_agent).__name__} ")
+                print(f"Episode {episode + 1}/{episodes}: Evaluating {type(ffnn_agent_search).__name__} ")
 
-                val_mse, val_mae, val_female_mse = evaluate_model(base_agent, x_val, y_val, sex_female_idx)
+                val_mse, val_mae, val_female_mse = evaluate_model(best_model, x_val, y_val, sex_female_idx)
                 val_accuracies.append(val_mse)
                 val_female_accuracies.append(val_female_mse)
                 if not eval_val_only:
-                    train_mse, train_mae, train_female_mse = evaluate_model(base_agent, x_train, y_train, sex_female_idx)
-                    test_mse, test_mae, test_female_mse = evaluate_model(base_agent, x_test, y_test, sex_female_idx)
+                    train_mse, train_mae, train_female_mse = evaluate_model(best_model, x_train, y_train, sex_female_idx)
+                    test_mse, test_mae, test_female_mse = evaluate_model(best_model, x_test, y_test, sex_female_idx)
                     train_accuracies.append(train_mse)
                     test_accuracies.append(test_mse)
                     train_female_accuracies.append(train_female_mse)
