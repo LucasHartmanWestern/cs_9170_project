@@ -8,19 +8,23 @@ import time
 import numpy as np
 import pandas as pd
 import torch
-
+import copy
 from torch.utils.data import DataLoader, TensorDataset
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.metrics import make_scorer, f1_score
 
 # Local modules
 from env import Environment
 from agents.reinforce_agent import ReinforceAgent
-# from agents.ppo_agent import PPOAgent  # optional
+from agents.ppo_agent import PPOAgent  # optional
 from agents.ffnn_agent2 import FFNNAgent
 from episode_tracker import EpisodeTracker
+from ffnn_cv import FFNN_CV
+from scipy.stats import randint, loguniform  # Added for param_distributions
 
 # ---------------- Config ----------------
 EPISODES        = 300
@@ -61,17 +65,30 @@ class Training:
         }
 
         # FFNN (alpha/beta) config
-        self.ffnn_config = {
-            'input_size': self.pca_components,
-            'hidden_sizes': [32, 16],
-            'output_size': 2,               # logits for 2 classes
-            'learning_rate': 0.001,
-            'batch_size': 32,
-            'epochs': 10,
-            'type': 'classification',
+        # self.ffnn_config = {
+        #     'input_size': self.pca_components,
+        #     'hidden_sizes': [32, 16],
+        #     'output_size': 2,               # logits for 2 classes
+        #     'learning_rate': 0.001,
+        #     'batch_size': 32,
+        #     'epochs': 10,
+        #     'type': 'classification',
+        #     'classes': [0, 1],
+        #     'device': self.device,
+        #     'seed': self.seed
+        # }
+
+        param_distributions = {
+            "input_size": [self.pca_components],
+            "output_size": 2,
+            "type": ["classification"],
             'classes': [0, 1],
-            'device': self.device,
-            'seed': self.seed
+            "seed": [self.seed],
+            "device": [self.device],
+            "batch_size": randint(8, 129),
+            "learning_rate": loguniform(1e-3, 1e-1),
+            "epochs": randint(1, 30),
+            "hidden_sizes": [(8, 8), (32, 32), (128, 128)],
         }
 
         # REINFORCE config
@@ -93,8 +110,31 @@ class Training:
         # Agents
         # self.agent = PPOAgent(**ppo_config)
         self.agent = ReinforceAgent(**reinforce_config)
-        self.alpha_model = FFNNAgent(**self.ffnn_config)
-        self.beta_model  = FFNNAgent(**self.ffnn_config)
+        # Data
+        self.x_theta_train, self.x_theta_test, self.y_theta_train, self.y_theta_test = self.split_dataset(
+            train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT
+        )
+        x_train_np = self.x_theta_train.detach().cpu().numpy()
+        y_train_np = self.y_theta_train.detach().cpu().numpy()
+        
+        f1_scorer = make_scorer(f1_score, average='binary')
+        CV = FFNN_CV(
+            param_distributions=param_distributions,
+            n_iter=5,
+            cv=5,
+            scoring=f1_scorer,      # was "neg_mean_squared_error"
+            n_jobs=-1,
+            seed=self.seed,
+            device=str(self.device) # ok if ignored
+        )
+        best_params = CV.get_params(x_train_np, y_train_np)
+
+        # Save once so we can instantiate α/β consistently
+        self.ffnn_cv_params = {**self.ffnn_config, **best_params}
+        print("FFNN CV Params:", self.ffnn_cv_params)
+
+        self.alpha_model = FFNNAgent(**self.ffnn_cv_params)
+        self.beta_model  = FFNNAgent(**self.ffnn_cv_params)
 
     # ---------------- Data prep ----------------
     def split_dataset(self, train_size=None, bias_pct=0.75):
@@ -262,19 +302,15 @@ class Training:
             save_dir="training_runs"
         )
 
-        # Data
-        x_theta_train, x_theta_test, y_theta_train, y_theta_test = self.split_dataset(
-            train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT
-        )
-
-        print(f"Size of train set: {len(x_theta_train)}")
-        total_data = len(x_theta_train) + TRAJ_LENGTH
-        real_percentage = (len(x_theta_train) / total_data) * 100
+        print(f"Size of train set: {len(self.x_theta_train)}")
+        total_data = len(self.x_theta_train) + TRAJ_LENGTH
+        real_percentage = (len(self.x_theta_train) / total_data) * 100
         synthetic_percentage = (TRAJ_LENGTH / total_data) * 100
         print(f"Real data: {real_percentage:.2f}% of total, Synthetic data: {synthetic_percentage:.2f}% of total")
 
-        # Train α once on real-only train set
-        self.alpha_model = self.train_predictor_model(self.alpha_model, x_theta_train, y_theta_train)
+        # Train alpha once on real-only train set
+        
+        self.alpha_model = self.train_predictor_model(self.alpha_model, self.x_theta_train, self.y_theta_train)
 
         # Environment (state is 2D PCA coords; target is 1 class for synthetic generation)
         env = Environment(
@@ -286,7 +322,7 @@ class Training:
 
         for episode in range(EPISODES):
             # Pre-allocate (GPU tensors)
-            D = x_theta_train.shape[1]  # equals pca_components
+            D = self.x_theta_train.shape[1]  # equals pca_components
             states      = torch.zeros((TRAJ_LENGTH, D), dtype=torch.float32, device=self.device)
             actions     = torch.zeros((TRAJ_LENGTH, D), dtype=torch.float32, device=self.device)
             next_states = torch.zeros((TRAJ_LENGTH, D), dtype=torch.float32, device=self.device)
@@ -297,7 +333,7 @@ class Training:
 
             state = env.reset()
 
-            # Reset β to its initial snapshot each episode for a stable baseline
+            # Reset Beta to its initial snapshot each episode for a stable baseline
             self.beta_model.reset()
 
             for t in range(TRAJ_LENGTH):
@@ -321,14 +357,14 @@ class Training:
             y_phi_t = y_syn_tensor[:T].clone().detach()
 
             # Train beta on hybrid (real + synthetic for this episode)
-            x_hybrid = torch.cat([x_theta_train, x_phi_t])
-            y_hybrid = torch.cat([y_theta_train, y_phi_t])
+            x_hybrid = torch.cat([self.x_theta_train, x_phi_t])
+            y_hybrid = torch.cat([self.y_theta_train, y_phi_t])
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
 
             # Rewards (alpha baseline global + per-step local)
             rewards, f1_pos_beta, brier_synth_local_mean, f1_macro_beta = self.compute_reward(
                 self.alpha_model, self.beta_model,
-                x_theta_test, y_theta_test,
+                self.x_theta_test, self.y_theta_test,
                 x_phi_t, y_phi_t,
                 lambda_=self.lambda_, f1_thresh=0.5
             )

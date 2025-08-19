@@ -2,9 +2,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from torch.utils.data import TensorDataset, DataLoader
 # torch.backends.cudnn.deterministic = True
 # torch.backends.cudnn.benchmark = False
 # torch.use_deterministic_algorithms(True) 
+
+from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin
+from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 
 class FFNNModel(nn.Module):
     def __init__(
@@ -39,8 +43,8 @@ class FFNNModel(nn.Module):
         return self.network(x)
 
 
-class FFNNAgent:
-    def __init__(self, input_size, hidden_sizes=[64, 64], output_size=1, 
+class FFNNAgent(BaseEstimator, ClassifierMixin):
+    def __init__(self, input_size=2, hidden_sizes=[64, 64], output_size=1, 
                  learning_rate=0.001, batch_size=32, epochs=100, type="regression", 
                  classes=None, device='cpu', seed=42):
         super(FFNNAgent, self).__init__()
@@ -126,9 +130,9 @@ class FFNNAgent:
         """
 
         if not torch.is_tensor(features):
-            features = torch.as_tensor(features, dtype=torch.float32, device=self.device)
+            features = torch.as_tensor(features, dtype=torch.long, device=self.device)
         else:
-            features = features.to(self.device, dtype=torch.float32)
+            features = features.to(self.device, dtype=torch.long)
 
         self.model.eval()
 
@@ -165,6 +169,56 @@ class FFNNAgent:
 
                 # forward + loss
                 outputs = self.model(batch_features).squeeze(-1)
+                loss = self.criterion(outputs, batch_targets)
+
+                # backward + step
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                epoch_loss += loss.item()
+                batch_count += 1
+
+            # record epoch’s mean loss
+            losses.append(epoch_loss / batch_count)
+
+        return losses
+
+    #FOR SKLEARN CV
+    def fit(self, X, y=None) -> list[float]:
+        """
+        Train the model on the provided DataLoader.
+
+        Args:
+            loader: DataLoader yielding (features, targets) batches
+
+        Returns:
+            List of average training loss per epoch
+        """
+
+        self.reset()
+
+        X = torch.as_tensor(X, dtype=torch.float32, device=self.device)
+        y = torch.as_tensor(y, dtype=torch.float32, device=self.device)
+
+        dataset = TensorDataset(X, y)
+        loader  = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, generator=self.dl_generator)
+
+        # switch to train mode
+        self.model.train()
+        losses: list[float] = []
+
+        for epoch in range(self.epochs):
+            epoch_loss = 0.0
+            batch_count = 0
+
+            for batch_features, batch_targets in loader:
+                # move to device
+                batch_features = batch_features.to(self.device)
+                batch_targets  = batch_targets .to(self.device)
+
+                # forward + loss
+                outputs = self.model(batch_features)
                 loss = self.criterion(outputs, batch_targets)
 
                 # backward + step
