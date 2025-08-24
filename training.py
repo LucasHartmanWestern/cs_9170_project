@@ -15,11 +15,12 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.decomposition import PCA
+from math import exp
 
 # Local modules
 from env import Environment
 from agents.reinforce_agent import ReinforceAgent
-# from agents.ppo_agent import PPOAgent  # optional
+# from agents.ppo_agent import PPOAgent
 from agents.ffnn_agent2 import FFNNAgent
 from episode_tracker import EpisodeTracker
 
@@ -27,7 +28,24 @@ from episode_tracker import EpisodeTracker
 EPISODES        = 300
 TRAJ_LENGTH     = 2000
 REAL_DATA_SIZE  = 3000
-BIAS_PCT        = 0.8
+BIAS_PCT        = 0.35 #Final percentage of minority data in the dataset
+
+class EMATracker:
+    def __init__(self, tau=0.07, init=0.0):
+        self.tau = float(tau)
+        self.value = float(init)
+        self.initialized = False
+
+    def update(self, x: float):
+        if not self.initialized:
+            self.value = float(x)
+            self.initialized = True
+        else:
+            self.value = (1.0 - self.tau) * self.value + self.tau * float(x)
+        return self.value
+
+    def get(self) -> float:
+        return float(self.value)
 
 
 class Training:
@@ -60,6 +78,15 @@ class Training:
             'device': self.device,
             'seed': self.seed
         }
+
+        # inside Training.__init__
+        self.ema = EMATracker(tau=0.00, init=0.0)  # tau=update rate(High trusts newest episodes more, Low is more cautious)
+        self.w = 0.0                               # current judge weight (Starts at 0, 0=all alpha, 1=all staleβ)
+        self.w_max_step = 0.05                     # clamp |Δw| per episode (Max % weight change per episode)
+        self.w_margin = 0.01                       # minimum EMA margin required before trusting stale-beta. (Deadzone near zero)
+        self.w_k = 10.0                            # steepness of sigmoid that maps EMA to current weight (Higher more abrupt, lower more gradual)
+        self.w_burnin = 0.15                         # % of episodes to force alpha only judge (Prevents an early noisy beta model being used)
+
 
         # FFNN (alpha/beta) config
         self.ffnn_config = {
@@ -98,8 +125,7 @@ class Training:
         self.beta_model  = FFNNAgent(**self.ffnn_config)
 
     # ---------------- Data prep ----------------
-    # ---------------- Data prep ----------------
-    def split_dataset(self, train_size=None, bias_pct=0.75,
+    def split_dataset(self, train_size=None, bias_pct=0.2,
                     val_frac=0.20, test_frac=0.20):
         """
         Loads and processes the Adult Census dataset, applies bias to the minority class,
@@ -151,27 +177,38 @@ class Training:
         )
 
         # Helper: apply the SAME bias inside a split (keep all majority; keep fraction of minority)
-        def apply_bias(df_split, y_split, frac_keep_minority):
+        def apply_bias(df_split, y_split, target_minority_pct):
             df = df_split.copy()
             df["__y__"] = y_split
             df_major = df[df["__y__"] == 0]
             df_minor = df[df["__y__"] == 1]
-            if len(df_minor) > 0:
-                keep_n = max(1, int(np.floor(len(df_minor) * frac_keep_minority)))
-                df_minor_biased = df_minor.sample(n=keep_n, random_state=self.seed, replace=False)
+
+            n_major = len(df_major)
+            n_minor = len(df_minor)
+
+            if n_minor == 0 or n_major == 0:
+                # Edge case: one class missing
+                df_biased = df
             else:
-                df_minor_biased = df_minor  # empty; edge case
-            df_biased = pd.concat([df_major, df_minor_biased], axis=0)\
-                        .sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
+                # compute how many minority to keep to hit target proportion
+                keep_minority = int(np.floor((target_minority_pct * n_major) / (1 - target_minority_pct)))
+
+                # cap to available samples
+                keep_minority = min(n_minor, max(1, keep_minority))
+
+                df_minor_biased = df_minor.sample(n=keep_minority, random_state=self.seed, replace=False)
+                df_biased = pd.concat([df_major, df_minor_biased], axis=0) \
+                            .sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
+
             y_out = df_biased["__y__"].to_numpy(dtype=int)
             X_out = df_biased.drop(columns=["__y__"])
             return X_out, y_out
 
         # 3) Apply same bias in each split (no cross-split duplication, distributions aligned)
-        frac_keep = max(0.0, 1.0 - bias_pct)  # e.g., bias_pct=0.75 -> keep 0.25 of minority
-        X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, frac_keep)
-        X_val_biased_df,   y_val_biased   = apply_bias(X_val_df,   y_val,   frac_keep)
-        X_test_biased_df,  y_test_biased  = apply_bias(X_test_df,  y_test,  frac_keep)
+        target_minority_pct = bias_pct  # e.g., bias_pct=0.25 -> 25% of dataset is minority data
+        X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, target_minority_pct)
+        X_val_biased_df,   y_val_biased   = apply_bias(X_val_df,   y_val,   target_minority_pct)
+        X_test_biased_df,  y_test_biased  = apply_bias(X_test_df,  y_test,  target_minority_pct)
 
         # Optional: subsample θ_train to fixed size *after* biasing (stratified)
         if train_size is not None and train_size < len(X_train_biased_df):
@@ -213,6 +250,16 @@ class Training:
         y_val_theta   = torch.tensor(y_val_biased,   dtype=torch.long, device=self.device)
         y_test_theta  = torch.tensor(y_test_biased,  dtype=torch.long, device=self.device)
 
+        # ---- Sanity check logging ----
+        def log_distribution(name, y_split):
+            n_total = len(y_split)
+            n_min = np.sum(y_split == 1)
+            pct_min = 100.0 * n_min / n_total if n_total > 0 else 0.0
+            print(f"[{name}] size={n_total}, minority={n_min} ({pct_min:.2f}%)")
+
+        log_distribution("TRAIN", y_train_biased)
+        log_distribution("VAL",   y_val_biased)
+        log_distribution("TEST",  y_test_biased)
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
 
@@ -250,50 +297,87 @@ class Training:
         return (p1 - y_true) ** 2  # in [0,1]
 
     #Beta model F1 minority class score + brier score (MSE) of judge on synthetic data. Judge determined by higher brier score on real test set
-    def compute_reward(self, alpha_model, beta_model, stale_beta_model,
-                       x_theta_test, x_theta_val, y_theta_val, y_theta_test,
-                       x_phi, y_phi,
-                       lambda_=0.99, f1_thresh=0.5):
+    def compute_reward(
+        self,
+        alpha_model, beta_model, stale_beta_model,
+        x_theta_val, y_theta_val,
+        x_phi, y_phi,
+        ema,                 # EMATracker instance
+        w_current: float,    # current judge weight in [0,1]
+        progress: float,     # (episode+1)/EPISODES in [0,1]
+        f1_thresh: float = 0.5,
+        # schedules / gates
+        lambda_schedule=(0.30, 0.95),   # (start, end) across the run
+        burnin_frac: float = 0.15,      # fraction of run to force alpha-only judge
+        w_k: float = 10.0,              # sigmoid steepness
+        w_margin: float = 0.01,         # margin needed before trusting stale-β
+        w_max_step: float = 0.05        # max |Δw| per episode
+    ):
         """
         r_t = λ * (F1_pos^β(θ_test) − F1_pos^α(θ_test)) + (1 − λ) * (1 − Brier_t^β on Φ)
         Returns:
           reward[T], f1_pos_beta (scalar), mean(1−Brier) over Φ (scalar), f1_macro_beta (scalar)
         Also returns: mean brier scores for stale_beta_model and alpha_model on y_theta_test
         """
+        lambda_ = 0.8 #HARDCODE FOR FIRST TEST
+        # anneal lambda_t over the run
+        lambda_start, lambda_end = 0.30, 0.95
+        #lambda_t = lambda_start + (lambda_end - lambda_start) * progress
+
         with torch.no_grad():
 
-            # alpha baseline on theta_val
+            # ---- Global term on θ_val ----
             p1_alpha_val = self._p1_from_agent(alpha_model, x_theta_val)
-            f1_minority_alpha  = self.f1_from_probs(y_theta_val, p1_alpha_val, f1_thresh)
-            brier_alpha_val = self.brier_per_sample(y_theta_val, p1_alpha_val).mean()
-
-            # beta performance on theta_val
             p1_beta_val  = self._p1_from_agent(beta_model, x_theta_val)
-            f1_minority_beta   = self.f1_from_probs(y_theta_val, p1_beta_val, f1_thresh)
-
-            # stale_beta_model mean brier score on y_theta_val
             p1_stale_beta_val = self._p1_from_agent(stale_beta_model, x_theta_val)
-            brier_stale_beta_val = self.brier_per_sample(y_theta_val, p1_stale_beta_val).mean()
-            # macro-F1 for logging
+            
+            f1_minority_alpha  = self.f1_from_probs(y_theta_val, p1_alpha_val, f1_thresh)
+            f1_minority_beta   = self.f1_from_probs(y_theta_val, p1_beta_val, f1_thresh)
+            f1_minority_beta_stale   = self.f1_from_probs(y_theta_val, p1_stale_beta_val, f1_thresh)
+
+            # macro for logging
             f1_neg_beta   = self.f1_from_probs(1 - y_theta_val, 1 - p1_beta_val, 1 - f1_thresh)
             f1_macro_beta = 0.5 * (f1_minority_beta + f1_neg_beta)
+            
+            delta_f1_val = (f1_minority_beta - f1_minority_alpha)
 
-            # Use brier scores to select between stale_beta_model and alpha_model for cost
-            if brier_stale_beta_val >= brier_alpha_val:
-                judge = alpha_model
-                print("Using alpha for cost (lower brier)")
-            else:
-                judge = stale_beta_model
-                print("Using stale_beta for cost (lower brier)")
-                
-            # per-step local term on Φ (β probs)
-            p1_phi_judge   = self._p1_from_agent(judge, x_phi)    # [T]
-            brier_t       = self.brier_per_sample(y_phi, p1_phi_judge) # [T]
-            score_local   = 1.0 - brier_t                             # [T]
+            # ---- Judge gating (EMA inside) ----
+            # margin > 0 means stale-beta is the better judge on θ_val
+            margin = float(f1_minority_beta_stale - f1_minority_alpha)
 
-        global_delta = (f1_minority_beta - f1_minority_alpha)                   # scalar
-        reward = lambda_ * global_delta + (1.0 - lambda_) * score_local
-        return reward, f1_minority_beta, score_local.mean(), f1_macro_beta
+            ema_val = ema.update(margin)                     # update EMA here
+            m = ema_val - w_margin                           # require a small edge before trusting stale-β
+            w_target = 1.0 / (1.0 + exp(-w_k * m))          # map to [0,1]
+
+            # burn-in: force alpha-only early in training
+            if progress < burnin_frac:
+                w_target = 0.0
+
+            # clamp weight change per episode
+            delta = max(-w_max_step, min(w_max_step, w_target - w_current))
+            new_w = float(min(1.0, max(0.0, w_current + delta)))
+
+            p1_phi_alpha = self._p1_from_agent(alpha_model,      x_phi)   # [T]
+            p1_phi_stale = self._p1_from_agent(stale_beta_model, x_phi)   # [T]
+            p1_phi_blend = new_w * p1_phi_stale + (1.0 - new_w) * p1_phi_alpha
+
+            brier_t     = self.brier_per_sample(y_phi, p1_phi_blend)      # [T]
+            score_local = 1.0 - brier_t                                   # [T]
+
+
+        reward = lambda_ * delta_f1_val + (1.0 - lambda_) * score_local  # [T]
+        mean_local = score_local.mean()
+
+        diagnostics = {
+            "margin_stale_minus_alpha": margin,
+            "ema_margin": ema_val,
+            "w_target": w_target,
+            "w_used": new_w,
+            "lambda_t": lambda_,
+            "brier_local_mean": float(brier_t.mean()),
+        }
+
+        return reward, f1_minority_beta, mean_local, f1_macro_beta, new_w, lambda_, diagnostics
 
     # ---------------- Training loop ----------------
     def __call__(self):
@@ -319,11 +403,10 @@ class Training:
             train_size=REAL_DATA_SIZE, bias_pct=BIAS_PCT
         )
 
-        print(f"Size of train set: {len(x_theta_train)}")
         total_data = len(x_theta_train) + TRAJ_LENGTH
         real_percentage = (len(x_theta_train) / total_data) * 100
         synthetic_percentage = (TRAJ_LENGTH / total_data) * 100
-        print(f"Real data: {real_percentage:.2f}% of total, Synthetic data: {synthetic_percentage:.2f}% of total")
+        print(f"Beta will train with: {real_percentage:.2f}% real data, {synthetic_percentage:.2f}% synthetic data: ")
 
         # Train α once on real-only train set
         self.alpha_model = self.train_predictor_model(self.alpha_model, x_theta_train, y_theta_train)
@@ -349,7 +432,7 @@ class Training:
 
             state = env.reset()
 
-            # Reset β to its initial snapshot each episode for a stable baseline
+            # Reset beta to its initial snapshot each episode for a stable baseline
             stale_beta_model = copy.deepcopy(self.beta_model)
             self.beta_model.reset()
 
@@ -378,13 +461,24 @@ class Training:
             y_hybrid = torch.cat([y_theta_train, y_phi_t])
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
 
+            progress = (episode + 1) / EPISODES
+
             # Rewards (alpha baseline global + per-step local)
-            rewards, f1_pos_beta, brier_synth_local_mean, f1_macro_beta = self.compute_reward(
+            rewards, f1_pos_beta, brier_synth_local_mean, f1_macro_beta, self.w, lambda_, diagnostics = self.compute_reward(
                 self.alpha_model, self.beta_model, stale_beta_model,
-                x_theta_test, x_theta_val, y_theta_val, y_theta_test,
+                x_theta_val, y_theta_val,
                 x_phi_t, y_phi_t,
-                lambda_=self.lambda_, f1_thresh=0.5
+                ema=self.ema,
+                w_current=self.w,
+                progress=progress,
+                f1_thresh=0.5,
+                lambda_schedule=(0.3, 0.95),
+                burnin_frac=self.w_burnin,
+                w_k=self.w_k,
+                w_margin=self.w_margin,
+                w_max_step=self.w_max_step,
             )
+            print(f"[Judge] w={diagnostics['w_used']:.3f} ema={diagnostics['ema_margin']:.4f} margin={diagnostics['margin_stale_minus_alpha']:.4f}")
 
             # Truncate episode tensors and learn
             states      = states[:T]
