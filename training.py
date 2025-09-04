@@ -16,16 +16,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.decomposition import PCA
 from math import exp
-
+from collections import deque
+import itertools
 # Local modules
 from env import Environment
 from agents.reinforce_agent import ReinforceAgent
 # from agents.ppo_agent import PPOAgent
 from agents.ffnn_agent2 import FFNNAgent
 from episode_tracker import EpisodeTracker
+import multiprocessing as mp
+
 
 # ---------------- Config ----------------
-EPISODES        = 300
+EPISODES        = 1000
 TRAJ_LENGTH     = 2000
 REAL_DATA_SIZE  = 3000
 BIAS_PCT        = 0.35 #Final percentage of minority data in the dataset
@@ -49,43 +52,28 @@ class EMATracker:
 
 
 class Training:
-    def __init__(self, seed=42, device='cpu'):
+    def __init__(self, lambda_schedule=(0.8, 0.8), tau=0.03, init=0.0, w=0.0, w_max_step=0.05, w_margin=0.01, w_k=6.0, w_burnin=0.15, use_new_reward: bool = True, seed=42, device='cpu'):
         self.seed = seed
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device(device)  # honor argument
         if self.device.type == 'cuda':
             torch.cuda.manual_seed_all(self.seed)
             torch.backends.cudnn.benchmark = True
             torch.set_float32_matmul_precision('high')
 
         self.pca_components = 2
-        self.lambda_ = 0.8
+        self.use_new_reward = use_new_reward
+        self.lambda_schedule = (0.8, 0.8)
 
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
 
-        # PPO config (unused here)
-        ppo_config = {
-            'state_size': 2,
-            'action_size': self.pca_components,
-            'hidden_size': 64,
-            'lr': 3e-4,
-            'gamma': 0.9,
-            'clip_epsilon': 0.2,
-            'update_epochs': 10,
-            'batch_size': 64,
-            'c1': 0.5,
-            'c2': 0.01,
-            'device': self.device,
-            'seed': self.seed
-        }
-
         # inside Training.__init__
-        self.ema = EMATracker(tau=0.00, init=0.0)  # tau=update rate(High trusts newest episodes more, Low is more cautious)
-        self.w = 0.0                               # current judge weight (Starts at 0, 0=all alpha, 1=all staleβ)
-        self.w_max_step = 0.05                     # clamp |Δw| per episode (Max % weight change per episode)
-        self.w_margin = 0.01                       # minimum EMA margin required before trusting stale-beta. (Deadzone near zero)
-        self.w_k = 10.0                            # steepness of sigmoid that maps EMA to current weight (Higher more abrupt, lower more gradual)
-        self.w_burnin = 0.15                         # % of episodes to force alpha only judge (Prevents an early noisy beta model being used)
+        self.ema = EMATracker(tau=tau, init=init)  # tau=update rate(High trusts newest episodes more, Low is more cautious)
+        self.w = w                                # current judge weight (Starts at 0, 0=all alpha, 1=all staleβ)
+        self.w_max_step = w_max_step              # clamp |Δw| per episode (Max % weight change per episode)
+        self.w_margin = w_margin                  # minimum EMA margin required before trusting stale-beta. (Deadzone near zero)
+        self.w_k = w_k                            # steepness of sigmoid that maps EMA to current weight (Higher more abrupt, lower more gradual)
+        self.w_burnin = w_burnin                  # % of episodes to force alpha only judge (Prevents an early noisy beta model being used)
 
 
         # FFNN (alpha/beta) config
@@ -123,6 +111,27 @@ class Training:
         self.agent = ReinforceAgent(**reinforce_config)
         self.alpha_model = FFNNAgent(**self.ffnn_config)
         self.beta_model  = FFNNAgent(**self.ffnn_config)
+
+        self._corr_window = 40   # ~13% of 300 eps; tweak if you like
+        self._local_buf = deque(maxlen=self._corr_window)
+        self._delta_buf = deque(maxlen=self._corr_window)
+
+    def _corr_local_delta(self):
+        # need a few points for a stable estimate
+        if len(self._local_buf) < 8:
+            return float('nan')
+        x = torch.tensor(list(self._local_buf), dtype=torch.float32)
+        y = torch.tensor(list(self._delta_buf), dtype=torch.float32)
+        # z-score both; guard against zero variance
+        x = x - x.mean()
+        y = y - y.mean()
+        xs = x.std(unbiased=False)
+        ys = y.std(unbiased=False)
+        if xs.item() < 1e-8 or ys.item() < 1e-8:
+            return float('nan')
+        x = x / xs
+        y = y / ys
+        return float((x * y).mean())  # Pearson corr over the rolling window
 
     # ---------------- Data prep ----------------
     def split_dataset(self, train_size=None, bias_pct=0.2,
@@ -265,7 +274,12 @@ class Training:
 
     def train_predictor_model(self, model, x_train, y_train):
         train_dataset = TensorDataset(x_train, y_train)
-        loader = DataLoader(train_dataset, batch_size=64, shuffle=True, generator=self.dl_generator)
+        loader = DataLoader(
+            train_dataset,
+            batch_size=64,
+            shuffle=True,
+            generator=self.dl_generator,
+        )
         model.train(loader)
         return model
 
@@ -306,6 +320,7 @@ class Training:
         w_current: float,    # current judge weight in [0,1]
         progress: float,     # (episode+1)/EPISODES in [0,1]
         f1_thresh: float = 0.5,
+
         # schedules / gates
         lambda_schedule=(0.30, 0.95),   # (start, end) across the run
         burnin_frac: float = 0.15,      # fraction of run to force alpha-only judge
@@ -313,90 +328,165 @@ class Training:
         w_margin: float = 0.01,         # margin needed before trusting stale-β
         w_max_step: float = 0.05        # max |Δw| per episode
     ):
-        """
-        r_t = λ * (F1_pos^β(θ_test) − F1_pos^α(θ_test)) + (1 − λ) * (1 − Brier_t^β on Φ)
-        Returns:
-          reward[T], f1_pos_beta (scalar), mean(1−Brier) over Φ (scalar), f1_macro_beta (scalar)
-        Also returns: mean brier scores for stale_beta_model and alpha_model on y_theta_test
-        """
-        lambda_ = 0.8 #HARDCODE FOR FIRST TEST
-        # anneal lambda_t over the run
-        lambda_start, lambda_end = 0.30, 0.95
-        #lambda_t = lambda_start + (lambda_end - lambda_start) * progress
+        # --- λ schedule (unchanged) ---
+        lambda_start, lambda_end = lambda_schedule
+        lambda_t = lambda_start + (lambda_end - lambda_start) * progress
 
         with torch.no_grad():
-
-            # ---- Global term on θ_val ----
-            p1_alpha_val = self._p1_from_agent(alpha_model, x_theta_val)
-            p1_beta_val  = self._p1_from_agent(beta_model, x_theta_val)
+            # ---- Global term on θ_val (unchanged) ----
+            p1_alpha_val      = self._p1_from_agent(alpha_model, x_theta_val)
+            p1_beta_val       = self._p1_from_agent(beta_model,  x_theta_val)
             p1_stale_beta_val = self._p1_from_agent(stale_beta_model, x_theta_val)
-            
-            f1_minority_alpha  = self.f1_from_probs(y_theta_val, p1_alpha_val, f1_thresh)
-            f1_minority_beta   = self.f1_from_probs(y_theta_val, p1_beta_val, f1_thresh)
-            f1_minority_beta_stale   = self.f1_from_probs(y_theta_val, p1_stale_beta_val, f1_thresh)
 
-            # macro for logging
+            f1_minority_alpha = self.f1_from_probs(y_theta_val, p1_alpha_val, f1_thresh)
+            f1_minority_beta  = self.f1_from_probs(y_theta_val, p1_beta_val,  f1_thresh)
+            f1_minority_beta_stale = self.f1_from_probs(y_theta_val, p1_stale_beta_val, f1_thresh)
+
+            # macro-F1 for logging
             f1_neg_beta   = self.f1_from_probs(1 - y_theta_val, 1 - p1_beta_val, 1 - f1_thresh)
             f1_macro_beta = 0.5 * (f1_minority_beta + f1_neg_beta)
-            
+
             delta_f1_val = (f1_minority_beta - f1_minority_alpha)
 
-            # ---- Judge gating (EMA inside) ----
-            # margin > 0 means stale-beta is the better judge on θ_val
-            margin = float(f1_minority_beta_stale - f1_minority_alpha)
+            # ---- Judge gating (EMA) (unchanged) ----
+            # margin > 0 means stale-β is a better judge than α on θ_val
+            margin_sa  = float(f1_minority_beta_stale - f1_minority_alpha)
+            ema_val = ema.update(margin_sa)
+            m       = ema_val - w_margin
+            w_target = 1.0 / (1.0 + exp(-w_k * m))
 
-            ema_val = ema.update(margin)                     # update EMA here
-            m = ema_val - w_margin                           # require a small edge before trusting stale-β
-            w_target = 1.0 / (1.0 + exp(-w_k * m))          # map to [0,1]
-
-            # burn-in: force alpha-only early in training
             if progress < burnin_frac:
                 w_target = 0.0
 
-            # clamp weight change per episode
             delta = max(-w_max_step, min(w_max_step, w_target - w_current))
             new_w = float(min(1.0, max(0.0, w_current + delta)))
 
+            # ---- Local term on synthetic (REDESIGNED) ----
+            # Base probabilities
             p1_phi_alpha = self._p1_from_agent(alpha_model,      x_phi)   # [T]
             p1_phi_stale = self._p1_from_agent(stale_beta_model, x_phi)   # [T]
             p1_phi_blend = new_w * p1_phi_stale + (1.0 - new_w) * p1_phi_alpha
 
-            brier_t     = self.brier_per_sample(y_phi, p1_phi_blend)      # [T]
-            score_local = 1.0 - brier_t                                   # [T]
+            # (a) Judge confidence/correctness: 1 - Brier
+            brier_t    = self.brier_per_sample(y_phi, p1_phi_blend)       # [T]
+            judge_conf = 1.0 - brier_t                                    # [T] in [0,1]
 
+            if self.use_new_reward:
+                # ================= NEW LOCAL REWARD: Boundary Helpfulness =================
+                # y_phi == 1 for synthetic tuples; "wrong" means alpha predicts majority.
 
-        reward = lambda_ * delta_f1_val + (1.0 - lambda_) * score_local  # [T]
-        mean_local = score_local.mean()
+                # ---- Banding by Alpha's distance to boundary (0.5) ----
+                margin = torch.abs(p1_phi_alpha - 0.5)   # [T]
+                tau_boundary = 0.05
+                tau_shoulder = 0.15
+
+                near_mask     = (margin <= tau_boundary)
+                shoulder_mask = (margin >  tau_boundary) & (margin <= tau_shoulder)
+                far_mask      = (margin >  tau_shoulder)
+
+                # ---- Realism gate with band-aware floor ----
+                floor_near, floor_shoulder, floor_far = 0.35, 0.20, 0.05
+                floor_per = torch.where(
+                    near_mask, torch.tensor(floor_near, device=margin.device),
+                    torch.where(shoulder_mask, torch.tensor(floor_shoulder, device=margin.device),
+                                torch.tensor(floor_far, device=margin.device))
+                )
+                realism_gate = torch.maximum(judge_conf, floor_per)  # baseline, in [0,1]
+
+                # ---- Boundary usefulness weights (driver) ----
+                alpha_wrong = (p1_phi_alpha < 0.5).float()  # y=1 synthetic
+
+                w_near_wrong, w_near_right         = 1.00, 0.40
+                w_shoulder_wrong, w_shoulder_right = 0.70, 0.20
+                w_far_any                           = 0.05
+
+                weight_near = near_mask.float() * (alpha_wrong * w_near_wrong + (1.0 - alpha_wrong) * w_near_right)
+                weight_shou = shoulder_mask.float() * (alpha_wrong * w_shoulder_wrong + (1.0 - alpha_wrong) * w_shoulder_right)
+                weight_far  = far_mask.float() * w_far_any
+                boundary_usefulness = (weight_near + weight_shou + weight_far).clamp(0.0, 1.0)
+
+                # ---- New local score: additive bonus on top of judge_conf ----
+                k_bonus = 0.6  # try 0.4–0.8 in small sweeps
+                score_local_raw = (realism_gate + k_bonus * (1.0 - realism_gate) * boundary_usefulness).clamp(0.0, 1.0)
+
+                LOCAL_CAP = 0.80
+                cap_t = torch.tensor(LOCAL_CAP, device=score_local_raw.device, dtype=score_local_raw.dtype)
+                over_mask = (score_local_raw > cap_t).float()
+                score_local = torch.minimum(score_local_raw, cap_t)
+
+                # Diagnostics (keep names your tracker expects)
+                uncert_alpha = 1.0 - (2.0 * margin).clamp(0, 1)   # boundary proximity
+                corr_factor  = boundary_usefulness                 # report the boundary weight
+            else:
+                uncert_alpha = torch.zeros_like(judge_conf)  # for diagnostics consistency
+                alpha_wrong  = torch.zeros_like(judge_conf)
+                corr_factor  = torch.ones_like(judge_conf) * 0.5
+                score_local  = judge_conf
+
+        # ---- Combine global + local (unchanged) ----
+        reward = lambda_t * delta_f1_val + (1.0 - lambda_t) * score_local  # [T]
+        mean_local = float(score_local.mean().item())
+        local_cap_frac = float(over_mask.mean().item()) 
 
         diagnostics = {
-            "margin_stale_minus_alpha": margin,
+            # Reward metrics
+            "global_reward": f1_minority_beta,
+            "local_reward": mean_local,
+            "f1_macro_beta": f1_macro_beta,#For Human reading
+
+            #EMA metrics
+            "margin_stale_minus_alpha": margin_sa,
             "ema_margin": ema_val,
             "w_target": w_target,
             "w_used": new_w,
-            "lambda_t": lambda_,
-            "brier_local_mean": float(brier_t.mean()),
+            "lambda_t": lambda_t,
+
+            # new reward specific metrics
+            "judge_conf_mean": float(judge_conf.mean()),
+            "uncert_alpha_mean": float(uncert_alpha.mean()),
+            "alpha_wrong_rate": float(alpha_wrong.mean()),
+            "delta_f1_val": float(delta_f1_val),            # β − α on θ_val (per-episode scalar)
+            "f1_minority_alpha": float(f1_minority_alpha),  # α's F1 on θ_val
+            "f1_minority_beta_stale": float(f1_minority_beta_stale),  # stale-β's F1 on θ_val
+            "local_cap_frac": local_cap_frac,
+
+            # explicit corrective multiplier avg (can be derived, but nice to log)
+            "corr_factor_mean": float(corr_factor.mean()),
         }
 
-        return reward, f1_minority_beta, mean_local, f1_macro_beta, new_w, lambda_, diagnostics
+        return reward, diagnostics
+
 
     # ---------------- Training loop ----------------
     def __call__(self):
         start_time = time.time()
 
-        self.tracker = EpisodeTracker(
-            {
-                "EPISODES": EPISODES,
-                "TRAJ_LENGTH": TRAJ_LENGTH,
-                "REAL_DATA_SIZE": REAL_DATA_SIZE,
-                "BIAS_PCT": BIAS_PCT,
-                "lambda_": self.lambda_,
-                "seed": self.seed,
-                "pca_components": self.pca_components,
-            },
+        run_stats = {
+            "EPISODES": EPISODES,
+            "TRAJ_LENGTH": TRAJ_LENGTH,
+            "REAL_DATA_SIZE": REAL_DATA_SIZE,
+            "BIAS_PCT": BIAS_PCT,
+            "lambda_schedule": self.lambda_schedule,
+            "seed": self.seed,                      # <-- important!
+            "pca_components": self.pca_components,
+            "use_new_reward": self.use_new_reward,
+            "ema_tau": self.ema.tau,
+            "w_max_step": self.w_max_step,
+            "w_margin": self.w_margin,
+            "w_k": self.w_k,
+            "w_burnin": self.w_burnin,
+        }
+
+        # create beta factory once (so tracker can rehydrate best-beta for final test)
+        beta_factory = lambda: FFNNAgent(**self.ffnn_config)
+
+        with EpisodeTracker(
+            run_stats,
             save_dir="training_runs",
             compare_metric="average_reward",
-            beta_factory=lambda: FFNNAgent(**self.ffnn_config)  # <- your class
-        )
+            beta_factory=beta_factory
+        ) as tracker:
+            self.tracker = tracker  
 
         # Data
         x_theta_train, x_theta_val, x_theta_test, y_theta_train, y_theta_val, y_theta_test = self.split_dataset(
@@ -453,8 +543,8 @@ class Training:
                     break
 
             T = t + 1 if done else TRAJ_LENGTH
-            x_phi_t = x_syn_tensor[:T].clone().detach()
-            y_phi_t = y_syn_tensor[:T].clone().detach()
+            x_phi_t = x_syn_tensor[:T]
+            y_phi_t = y_syn_tensor[:T]
 
             # Train beta on hybrid (real + synthetic for this episode)
             x_hybrid = torch.cat([x_theta_train, x_phi_t])
@@ -464,7 +554,7 @@ class Training:
             progress = (episode + 1) / EPISODES
 
             # Rewards (alpha baseline global + per-step local)
-            rewards, f1_pos_beta, brier_synth_local_mean, f1_macro_beta, self.w, lambda_, diagnostics = self.compute_reward(
+            rewards, diagnostics = self.compute_reward(
                 self.alpha_model, self.beta_model, stale_beta_model,
                 x_theta_val, y_theta_val,
                 x_phi_t, y_phi_t,
@@ -472,13 +562,14 @@ class Training:
                 w_current=self.w,
                 progress=progress,
                 f1_thresh=0.5,
-                lambda_schedule=(0.3, 0.95),
+                lambda_schedule=self.lambda_schedule,
                 burnin_frac=self.w_burnin,
                 w_k=self.w_k,
                 w_margin=self.w_margin,
                 w_max_step=self.w_max_step,
             )
-            print(f"[Judge] w={diagnostics['w_used']:.3f} ema={diagnostics['ema_margin']:.4f} margin={diagnostics['margin_stale_minus_alpha']:.4f}")
+            self.w = float(diagnostics["w_used"])
+            #print(f"[Judge] w={diagnostics['w_used']:.3f} ema={diagnostics['ema_margin']:.4f} margin={diagnostics['margin_stale_minus_alpha']:.4f}")
 
             # Truncate episode tensors and learn
             states      = states[:T]
@@ -489,14 +580,53 @@ class Training:
 
             self.agent.learn_trajectory(states, actions, rewards, next_states, dones, episode)
 
+            reward_metrics = {
+                "avg_reward": float(torch.mean(rewards)),
+                "obj1_f1_minority_beta": float(diagnostics["global_reward"]),
+                "obj2_local_useful_mean": float(diagnostics["local_reward"]),
+                "macro_f1_beta": float(diagnostics["f1_macro_beta"]),
+            }
+
+            ema_metrics = {
+                "margin_stale_minus_alpha": diagnostics.get("margin_stale_minus_alpha", float('nan')),
+                "ema_margin": float(diagnostics.get("ema_margin", float('nan'))),
+                "w_used": float(diagnostics.get("w_used", float('nan'))),
+                "w_target": float(diagnostics.get("w_target", float('nan'))),
+                "lambda_t": float(diagnostics.get("lambda_t", float('nan'))),
+            }
+
+            new_reward_metrics = {
+                "judge_conf_mean": float(diagnostics.get("judge_conf_mean", float('nan'))),
+                "uncert_alpha_mean": float(diagnostics.get("uncert_alpha_mean", float('nan'))),
+                "alpha_wrong_rate": float(diagnostics.get("alpha_wrong_rate", float('nan'))),
+                "corr_factor_mean": float(0.5 + 0.5 * diagnostics.get("alpha_wrong_rate", 0.0)),
+                "f1_minority_alpha": float(diagnostics["f1_minority_alpha"]),
+                "f1_minority_beta_stale": float(diagnostics["f1_minority_beta_stale"]),
+                "local_cap_frac": float(diagnostics["local_cap_frac"]), 
+            }
+
+            # Pull episode-level values from diagnostics
+            local_mean = float(diagnostics["local_reward"])     # score_local.mean()
+            delta_val  = float(diagnostics["delta_f1_val"])     # F1_β − F1_α on θ_val
+
+            # Update rolling buffers and compute correlation
+            self._local_buf.append(local_mean)
+            self._delta_buf.append(delta_val)
+            corr_local_delta = self._corr_local_delta()
+
+            alignment_metrics = {
+                "delta_f1_val": delta_val,
+                "corr_local_delta": float(corr_local_delta),
+            }
+            
             # Log
             avg_reward = torch.mean(rewards)
             self.tracker.log_episode(
                 episode + 1,
-                avg_reward,                     # Avg reward across trajectory
-                f1_pos_beta,                    # F1 for positive class on θ_val (β)
-                brier_synth_local_mean,         # Mean (1 - Brier) on synthetic Φ (β)
-                f1_macro_beta                   # macro F1 on θ_val (β), for context
+                reward_metrics,                     # Avg reward across trajectory
+                ema_metrics,                    # F1 for positive class on θ_val (β)
+                new_reward_metrics,         # Mean (1 - Brier) on synthetic Φ (β)
+                alignment_metrics           # macro F1 on θ_val (β), for context
             )
             # Save periodic snapshot and best-so-far synthetic
             self.tracker.maybe_save_synthetic(
@@ -504,9 +634,9 @@ class Training:
                 x_syn=x_phi_t,
                 y_syn=y_phi_t,
                 avg_reward=float(avg_reward),
-                obj1=float(f1_pos_beta),                 # use compare_metric="obj1" if you want best-on-val F1
-                obj2_mean=float(brier_synth_local_mean),
-                global_f1=float(f1_macro_beta),
+                obj1=float(diagnostics['global_reward']),                 # use compare_metric="obj1" if you want best-on-val F1
+                obj2_mean=float(diagnostics['local_reward']),
+                global_f1=float(diagnostics['f1_macro_beta']),
                 feature_names=[f"pca_{i}" for i in range(x_phi_t.shape[1])],
                 beta_model=self.beta_model               # <-- NEW: saves best β when is_best=True
             )
@@ -516,13 +646,39 @@ class Training:
             alpha_model=self.alpha_model,
             x_test=x_theta_test,
             y_test=y_theta_test,
-            f1_thresh=0.5  # or a θ_val-fixed threshold
-        )
+            f1_thresh=0.5,  # or a θ_val-fixed threshold
+            x_train=x_theta_train, y_train=y_theta_train,
+            jitter_n=TRAJ_LENGTH,                 # same count as your per-episode synthetic
+            jitter_scale=0.20                     # tweak as desired (0.1–0.3 is typical)
+            )
+
 
         print(f"Total time {time.time() - start_time:.2f}s")
         print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
 
 
-if __name__ == "__main__":
-    train = Training(seed=42)
+def run_one(device_str, w_burnin_val, seed=42, tau=0.1):
+    print(f"\n=== Running on {device_str} with w_burnin={w_burnin_val} ===")
+    train = Training(
+        seed=seed,
+        use_new_reward=True,
+        tau=tau,
+        device=device_str,
+        w_burnin=w_burnin_val,   # <- EMA-only switch for alpha-only when >1
+    )
     train()
+
+if __name__ == "__main__":
+    import multiprocessing as mp
+    mp.set_start_method("spawn", force=True)  # safe for CUDA
+
+    seed = 42
+    tau  = 0.1
+
+    procs = []
+    #procs.append(mp.Process(target=run_one, args=("cuda:0", 0.15, seed, tau)))  # CAP ONLY (blend)
+    procs.append(mp.Process(target=run_one, args=("cuda:1", 2.0, seed, tau)))   # CAP + ALPHA-ONLY
+
+    for p in procs: p.start()
+    for p in procs: p.join()
+
