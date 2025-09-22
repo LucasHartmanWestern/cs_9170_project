@@ -5,48 +5,66 @@ import pandas as pd
 import csv
 import torch
 from torch.utils.data import TensorDataset, DataLoader
+from test_suite import TestSuite
 import hashlib
 from copy import deepcopy
 
-
-def _fingerprint_run_stats(run_stats: dict, exclude_keys=("seed", "started_at", "device", "notes")) -> tuple[str, dict]:
-    """Return (experiment_id, filtered_stats) for a config, excluding volatile keys.
-    experiment_id is human-readable slug + short hash for uniqueness."""
-    rs = deepcopy(run_stats) if run_stats else {}
-    for k in exclude_keys:
-        rs.pop(k, None)
-
-    # Build a compact, human-friendly slug from common keys if present
-    parts = []
-    def add(tag, key, fmt=None):
-        if key in rs and rs[key] is not None:
-            v = rs[key]
-            if fmt: v = fmt(v)
-            parts.append(f"{tag}{v}")
-
-    add("EP", "EPISODES", int)
-    add("TRJ", "TRAJ_LENGTH", int)
-    add("REAL", "REAL_DATA_SIZE", int)
-    add("BIAS", "BIAS_PCT", lambda x: str(x).rstrip("0").rstrip(".") if isinstance(x, float) else x)
-    add("L", "lambda_", lambda x: ("None" if x is None else str(x)))
-    add("NR", "use_new_reward", lambda b: int(bool(b)))
-    add("TAU", "ema_tau", lambda x: str(x).rstrip("0").rstrip(".") if x is not None else "None")
-
-    slug = "_".join(parts) if parts else "exp"
-    # Stable short hash from the filtered stats (sorted JSON)
-    j = json.dumps(rs, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    h = hashlib.sha1(j).hexdigest()[:8]
-    experiment_id = f"{slug}_{h}"
-    return experiment_id, rs
-
 def _read_json(path: Path) -> dict:
+    """
+    Safe JSON reader. Returns {} on any error or if the file doesn't exist.
+    Accepts Path or str.
+    """
     try:
+        if not isinstance(path, Path):
+            path = Path(path)
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
     except Exception:
         pass
     return {}
+
+
+def _fingerprint_run_stats(
+    run_stats: dict,
+    exclude_keys=("seed", "device", "notes", "started_at", "ts", "timestamp", "time", "date")
+) -> tuple[str, dict]:
+    """
+    Return (experiment_id, filtered_stats) for a config.
+    - Uses stable fields (no timestamps) so all seeds share one parent.
+    - Includes EXP_GROUP so each “run of 3 seeds” is unique.
+    """
+    rs = deepcopy(run_stats) if run_stats else {}
+    for k in exclude_keys:
+        rs.pop(k, None)
+
+    parts = []
+
+    def add(tag, key, fmt=None):
+        if key in run_stats and run_stats[key] is not None:
+            v = run_stats[key]
+            if fmt:
+                v = fmt(v)
+            parts.append(f"{tag}{v}")
+
+    add("EP",   "EPISODES",       int)
+    add("TRJ",  "TRAJ_LENGTH",    int)
+    add("REAL", "REAL_DATA_SIZE", int)
+    add("BIAS", "BIAS_PCT",       lambda x: str(x).rstrip("0").rstrip(".") if isinstance(x, float) else x)
+    add("LS",   "lambda_schedule", lambda t: f"{t[0]}-{t[1]}" if isinstance(t, (tuple, list)) and len(t) == 2 else str(t))
+    add("MODE", "reward_mode",    lambda s: str(s).lower())
+    add("TAU",  "ema_tau",        lambda x: str(x).rstrip("0").rstrip(".") if x is not None else "None")
+    add("G",    "EXP_GROUP",      lambda s: str(s)[:12])
+
+    slug = "_".join(parts) if parts else "exp"
+
+    # Hash only the filtered, stable stats (no seed/timestamps)
+    j = json.dumps(rs, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    h = hashlib.sha1(j).hexdigest()[:8]
+    experiment_id = f"{slug}_{h}"
+    return experiment_id, rs
+
+
 
 
 class _TeeLogger:
@@ -67,19 +85,16 @@ def _flatten_with_prefix(prefix: str, d: dict):
     return {f"{prefix}.{k}": v for k, v in d.items()}
 
 class EpisodeTracker:
-    """
-    Per-run folder with:
-      meta.json, metrics.csv (dynamic headers), console.log,
-      synthetic snapshots, best synthetic, and best β weights.
-    """
-    def __init__(self, run_stats: dict, save_dir: str = "runs",
+    def __init__(self, run_stats: dict, dataset, save_dir: str = "runs",
                  capture_console: bool = True,
                  ckpt_every: int = 5,
                  compare_metric: str = "reward.avg_reward",
                  flush_every_episodes: int = 10,
                  snapshot_csv: bool = False,
-                 beta_factory=None):
+                 beta_factory=None, seed=42):
 
+        self.seed=seed
+        self.dataset=dataset
         self.capture_console = capture_console
         self.flush_every_episodes = max(1, int(flush_every_episodes))
         self._since_last_flush = 0
@@ -94,10 +109,12 @@ class EpisodeTracker:
         self.seed = run_stats.get("seed", None)
 
         self.start_ts = time.strftime("%Y-%m-%d_%H-%M-%S")
-        self.uid = f"{os.getpid()}_{str(uuid.uuid4())[:8]}"
+        # use run_stats as-is; no timestamp in the experiment fingerprint
+        stats_for_fingerprint = dict(run_stats)
+        self.experiment_id, filtered_stats = _fingerprint_run_stats(stats_for_fingerprint)
 
-        # Build experiment id (same for same config regardless of seed or time)
-        self.experiment_id, filtered_stats = _fingerprint_run_stats(run_stats)
+        
+        self.uid = f"{os.getpid()}_{str(uuid.uuid4())[:8]}"
 
         # Folders
         self.experiment_dir = Path(save_dir) / self.experiment_id
@@ -166,6 +183,7 @@ class EpisodeTracker:
         self.best_npz_path  = self.seed_dir / "best_synthetic.npz"
         self.best_beta_path = self.seed_dir / "best_beta_state_dict.pt"
         self.best_beta_meta = self.seed_dir / "best_beta_meta.json"
+        self.alpha_state_dict_path = self.seed_dir / "alpha_state_dict.pt"
 
     # Context manager support
     def __enter__(self): return self
@@ -384,156 +402,128 @@ class EpisodeTracker:
 
     def log_final_test(self, alpha_model, x_test, y_test, f1_thresh: float = 0.5,
                     prefer_best_beta: bool = True, beta_model=None,
-                    x_train=None, y_train=None, jitter_n=None, jitter_scale: float = 0.20):
+                    x_train=None, y_train=None,
+                    jitter_n=None, jitter_scale: float = 0.20,
+                    # NEW alpha toggles/params
+                    run_alpha_raw_original: bool = False,
+                    run_alpha_plus_real: bool = False,
+                    alpha_plus_real_n: int = 2000,
+                    # NEW CTGAN baseline toggles/params
+                    run_alpha_plus_ctgan: bool = False,
+                    alpha_plus_ctgan_n: int = 2000,
+                    ctgan_epochs: int = 300,
+                    cap_ctgan_train: int | None = None,
+                    # dataset settings for rebuilding original pool
+                    data_path: str = "census+income/adult.data",
+                    bias_pct: float = 0.20,
+                    val_frac: float = 0.20,
+                    test_frac: float = 0.20,
+                    train_size: int | None = None):
+
+        tests = TestSuite(
+            seed_dir=self.seed_dir,
+            experiment_dir=self.experiment_dir,
+            seed=self.seed,
+            run_id=self.run_id,
+            beta_factory=self.beta_factory,
+            best_beta_path=self.best_beta_path,
+            alpha_factory=self.alpha_factory if hasattr(self, "alpha_factory") else self.beta_factory,
+            dataset=self.dataset
+        )
+
+        return tests.log_final_test(
+            alpha_model=alpha_model,
+            x_test=x_test, y_test=y_test,
+            f1_thresh=f1_thresh,
+            prefer_best_beta=prefer_best_beta,
+            beta_model=beta_model,
+            x_train=x_train, y_train=y_train,
+            jitter_n=jitter_n, jitter_scale=jitter_scale,
+            # forward alpha baseline params
+            run_alpha_raw_original=run_alpha_raw_original,
+            run_alpha_plus_real=run_alpha_plus_real,
+            alpha_plus_real_n=alpha_plus_real_n,
+            # forward CTGAN baseline params
+            run_alpha_plus_ctgan=run_alpha_plus_ctgan,
+            alpha_plus_ctgan_n=alpha_plus_ctgan_n,
+            ctgan_epochs=ctgan_epochs,
+            cap_ctgan_train=cap_ctgan_train,
+            # dataset/rebuild settings
+            data_path=data_path,
+            bias_pct=bias_pct,
+            val_frac=val_frac,
+            test_frac=test_frac,
+            train_size=train_size,
+            seed=self.seed
+        )
+
+
+
+    def save_alpha_state_dict(self, alpha_model, config=None, n_pca_components=None):
         """
-        End-of-run θ_test evaluation (+ minority jitter baseline).
-        Appends to final_test_metrics.csv as before.
+        Save alpha model weights to <seed_dir>/alpha_state_dict.pt and, if provided,
+        a JSON-safe config to <seed_dir>/ffnn_meta.json (including n_pca_components).
         """
-        beta_for_eval = None
-        if prefer_best_beta and self.beta_factory is not None and self.best_beta_path.exists():
-            beta_for_eval = self.beta_factory()  # fresh β
-            state = torch.load(self.best_beta_path, map_location=x_test.device)
-            beta_for_eval.model.load_state_dict(state)
-            print(f"[Tracker] Loaded best β weights from: {self.best_beta_path}")
-        elif beta_model is not None:
-            beta_for_eval = beta_model
-            print("[Tracker] Using provided β (no best checkpoint found or factory missing).")
-        else:
-            print("[Tracker] No β available for TEST evaluation (skipping β metrics).")
+        # --- save weights ---
+        try:
+            model_obj = getattr(alpha_model, "model", alpha_model)  # support FFNNAgent or raw nn.Module
+            state_dict = model_obj.state_dict()
+        except Exception as e:
+            raise AttributeError(
+                "alpha_model must be an FFNNAgent or a torch.nn.Module exposing .state_dict()."
+            ) from e
 
-        eps = 1e-8
+        torch.save(state_dict, self.alpha_state_dict_path)
+        print(f"[Tracker] Alpha model state_dict saved to {self.alpha_state_dict_path}")
 
-        def _p1_from_agent(agent, x):
-            agent.model.eval()
-            with torch.no_grad():
-                logits = agent.model(x)
-                probs  = torch.softmax(logits, -1)
-                return probs[..., 1]
+        # --- optionally save JSON-safe config ---
+        if (config is not None) and (n_pca_components is not None):
+            # Make a shallow copy so we don't mutate the original
+            meta = dict(config)
 
-        def _all_f1_from_probs(y_true, p1, threshold=0.5):
-            y_true = y_true.to(p1.device).long()
-            y_pred_pos = (p1 >= threshold).long()
-            tp1 = ((y_pred_pos == 1) & (y_true == 1)).sum().float()
-            fp1 = ((y_pred_pos == 1) & (y_true == 0)).sum().float()
-            fn1 = ((y_pred_pos == 0) & (y_true == 1)).sum().float()
-            prec1 = tp1 / (tp1 + fp1 + eps)
-            rec1  = tp1 / (tp1 + fn1 + eps)
-            f1_1  = (2 * prec1 * rec1) / (prec1 + rec1 + eps)
+            # Add required fields
+            meta["n_pca_components"] = int(n_pca_components)
+            meta["saved_at"] = time.strftime("%Y-%m-%d_%H-%M-%S")
 
-            tp0 = ((y_pred_pos == 0) & (y_true == 0)).sum().float()
-            fp0 = ((y_pred_pos == 0) & (y_true == 1)).sum().float()
-            fn0 = ((y_pred_pos == 1) & (y_true == 0)).sum().float()
-            prec0 = tp0 / (tp0 + fn0 + eps)
-            rec0  = tp0 / (tp0 + fp0 + eps)
-            f1_0  = (2 * prec0 * rec0) / (prec0 + rec0 + eps)
+            # Sanitize to JSON-safe types
+            def _to_jsonable(obj):
+                import numpy as _np
+                from pathlib import Path as _Path
 
-            n1 = (y_true == 1).sum().float()
-            n0 = (y_true == 0).sum().float()
-            n  = n0 + n1 + eps
+                # Primitives
+                if obj is None or isinstance(obj, (bool, int, float, str)):
+                    return obj
 
-            f1_macro    = 0.5 * (f1_1 + f1_0)
-            f1_weighted = (f1_1 * (n1 / n)) + (f1_0 * (n0 / n))
-            return float(f1_1), float(f1_0), float(f1_weighted), float(f1_macro)
+                # torch types
+                if isinstance(obj, torch.device):
+                    return str(obj)
+                if isinstance(obj, torch.dtype):
+                    return str(obj)
+                if isinstance(obj, torch.Tensor):
+                    return obj.detach().cpu().tolist()
 
-        def _brier_mean(y_true, p1):
-            y_true = y_true.to(p1.device).float()
-            return float(((p1 - y_true) ** 2).mean())
+                # numpy types
+                if isinstance(obj, (_np.integer, _np.floating, _np.bool_)):
+                    return obj.item()
+                if isinstance(obj, _np.ndarray):
+                    return obj.tolist()
 
-        with torch.no_grad():
-            p1_alpha = _p1_from_agent(alpha_model, x_test)
-            a_f1_min, a_f1_maj, a_f1_w, a_f1_macro = _all_f1_from_probs(y_test, p1_alpha, f1_thresh)
-            a_brier = _brier_mean(y_test, p1_alpha)
+                # containers
+                if isinstance(obj, dict):
+                    return {str(k): _to_jsonable(v) for k, v in obj.items()}
+                if isinstance(obj, (list, tuple, set)):
+                    return [_to_jsonable(v) for v in obj]
 
-            if beta_for_eval is not None:
-                p1_beta = _p1_from_agent(beta_for_eval, x_test)
-                b_f1_min, b_f1_maj, b_f1_w, b_f1_macro = _all_f1_from_probs(y_test, p1_beta, f1_thresh)
-                b_brier = _brier_mean(y_test, p1_beta)
-            else:
-                b_f1_min = b_f1_maj = b_f1_w = b_f1_macro = b_brier = float('nan')
+                # paths
+                if isinstance(obj, _Path):
+                    return str(obj)
 
-        # ---------------- Minority-jitter baseline ----------------
-        j_f1_min = j_f1_maj = j_f1_w = j_f1_macro = j_brier = float('nan')
-        if (x_train is not None) and (y_train is not None) and (self.beta_factory is not None):
-            with torch.no_grad():
-                Xmin = x_train[y_train == 1]
-                if Xmin.numel() == 0:
-                    print("[Tracker] Jitter baseline skipped: no minority samples in x_train.")
-                else:
-                    if jitter_n is None:
-                        jitter_n = Xmin.shape[0]
-                    idx   = torch.randint(0, Xmin.shape[0], (int(jitter_n),), device=Xmin.device)
-                    base  = Xmin[idx]
-                    std   = x_train.std(dim=0, unbiased=False)
-                    noise = torch.randn_like(base) * (jitter_scale * (std + 1e-6))
-                    Xj    = base + noise
-                    yj    = torch.ones(int(jitter_n), dtype=y_train.dtype, device=y_train.device)
+                # fallback: string representation
+                return str(obj)
 
-            jitter_beta = self.beta_factory()
-            if hasattr(jitter_beta.model, "to"):
-                jitter_beta.model.to(x_train.device)
+            safe_meta = _to_jsonable(meta)
 
-            x_hybrid = torch.cat([x_train, Xj], dim=0)
-            y_hybrid = torch.cat([y_train, yj], dim=0)
-            ds = TensorDataset(x_hybrid, y_hybrid)
-            dl = DataLoader(ds, batch_size=32, shuffle=True)
-            jitter_beta.train(dl)
-
-            with torch.no_grad():
-                p1_j = _p1_from_agent(jitter_beta, x_test)
-                j_f1_min, j_f1_maj, j_f1_w, j_f1_macro = _all_f1_from_probs(y_test, p1_j, f1_thresh)
-                j_brier = _brier_mean(y_test, p1_j)
-            print(f"[TEST] Jitterβ -> F1(min)={j_f1_min:.4f} | F1(maj)={j_f1_maj:.4f} | "
-                  f"F1(weighted)={j_f1_w:.4f} | F1(macro)={j_f1_macro:.4f} | Brier={j_brier:.4f}")
-        else:
-            print("[Tracker] Jitter baseline not run (missing x_train/y_train or beta_factory).")
-
-        # ---------------- Console summary ----------------
-        print("\n[TEST] Alpha -> F1(min)=%.4f | F1(maj)=%.4f | F1(weighted)=%.4f | F1(macro)=%.4f | Brier=%.4f"
-              % (a_f1_min, a_f1_maj, a_f1_w, a_f1_macro, a_brier))
-        if not np.isnan(b_f1_min):
-            print("[TEST] Beta  -> F1(min)=%.4f | F1(maj)=%.4f | F1(weighted)=%.4f | F1(macro)=%.4f | Brier=%.4f"
-                  % (b_f1_min, b_f1_maj, b_f1_w, b_f1_macro, b_brier))
-            winner = "beta" if b_f1_min > a_f1_min else "alpha"
-            print(f"[TEST] Winner (by F1 minority): {winner}")
-        else:
-            print("[TEST] Beta  -> (no checkpoint/factory)")
-
-        # ---------------- Append to CSV ----------------
-        seed_csv = self.seed_dir / "final_test_metrics.csv"
-        row = {
-            "timestamp": time.strftime("%Y-%m-%d_%H-%M-%S"),
-            "seed": str(self.seed),
-            "run_id": self.run_id,
-            "threshold": float(f1_thresh),
-
-            "alpha_f1_minority": a_f1_min,
-            "alpha_f1_majority": a_f1_maj,
-            "alpha_f1_weighted": a_f1_w,
-            "alpha_f1_macro":    a_f1_macro,
-            "alpha_brier":       a_brier,
-
-            "beta_f1_minority":  b_f1_min,
-            "beta_f1_majority":  b_f1_maj,
-            "beta_f1_weighted":  b_f1_w,
-            "beta_f1_macro":     b_f1_macro,
-            "beta_brier":        b_brier,
-
-            "jitter_n":          int(jitter_n) if jitter_n is not None else 0,
-            "jitter_scale":      float(jitter_scale),
-            "jitter_f1_minority": j_f1_min,
-            "jitter_f1_majority": j_f1_maj,
-            "jitter_f1_weighted": j_f1_w,
-            "jitter_f1_macro":    j_f1_macro,
-            "jitter_brier":       j_brier,
-
-            "winner_by_f1_minority": ("beta" if (not np.isnan(b_f1_min) and b_f1_min > a_f1_min) else "alpha")
-        }
-        pd.DataFrame([row]).to_csv(seed_csv, mode="a", header=not seed_csv.exists(), index=False)
-        print(f"[Tracker] Final test metrics appended to (seed): {seed_csv}")
-
-        # 2) experiment-level rollup with the same row
-        exp_csv = self.experiment_dir / "final_test_metrics.csv"
-        pd.DataFrame([row]).to_csv(exp_csv, mode="a", header=not exp_csv.exists(), index=False)
-        print(f"[Tracker] Final test metrics appended to (experiment): {exp_csv}")
-        return row
-
+            ffnn_meta_path = self.seed_dir / "ffnn_meta.json"
+            with open(ffnn_meta_path, "w", encoding="utf-8") as f:
+                json.dump(safe_meta, f, indent=2)
+            print(f"[Tracker] Alpha model config saved to {ffnn_meta_path}")
