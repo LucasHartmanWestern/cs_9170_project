@@ -8,6 +8,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from test_suite import TestSuite
 import hashlib
 from copy import deepcopy
+from datetime import datetime
 
 def _read_json(path: Path) -> dict:
     """
@@ -25,44 +26,49 @@ def _read_json(path: Path) -> dict:
     return {}
 
 
+#For naming the parent folder
 def _fingerprint_run_stats(
     run_stats: dict,
     exclude_keys=("seed", "device", "notes", "started_at", "ts", "timestamp", "time", "date")
 ) -> tuple[str, dict]:
-    """
-    Return (experiment_id, filtered_stats) for a config.
-    - Uses stable fields (no timestamps) so all seeds share one parent.
-    - Includes EXP_GROUP so each “run of 3 seeds” is unique.
-    """
     rs = deepcopy(run_stats) if run_stats else {}
     for k in exclude_keys:
         rs.pop(k, None)
 
     parts = []
 
-    def add(tag, key, fmt=None):
+    def add_key(tag, key, fmt=None):
         if key in run_stats and run_stats[key] is not None:
             v = run_stats[key]
             if fmt:
                 v = fmt(v)
             parts.append(f"{tag}{v}")
 
-    add("EP",   "EPISODES",       int)
-    add("TRJ",  "TRAJ_LENGTH",    int)
-    add("REAL", "REAL_DATA_SIZE", int)
-    add("BIAS", "BIAS_PCT",       lambda x: str(x).rstrip("0").rstrip(".") if isinstance(x, float) else x)
-    add("LS",   "lambda_schedule", lambda t: f"{t[0]}-{t[1]}" if isinstance(t, (tuple, list)) and len(t) == 2 else str(t))
-    add("MODE", "reward_mode",    lambda s: str(s).lower())
-    add("TAU",  "ema_tau",        lambda x: str(x).rstrip("0").rstrip(".") if x is not None else "None")
-    add("G",    "EXP_GROUP",      lambda s: str(s)[:12])
+    def add_literal(tag, value):
+        parts.append(f"{tag}{value}")
+
+    add_key("EP",    "EPISODES",       int)
+    add_key("PCA",   "pca_components", int)
+    add_key("REW",   "reward_mode",    lambda s: str(s).lower())
+    add_key("minID", "minority_id",    int)
+    add_key("majID", "majority_id",    int)
+    add_key("thirdID","third_id",      int)
+    add_key("TRJ",   "TRAJ_LENGTH",    int)
+    add_key("REAL",  "REAL_DATA_SIZE", int)
+    add_key("BIAS",  "BIAS_PCT",       lambda x: str(x).rstrip("0").rstrip(".") if isinstance(x, float) else x)
+
+    # filesystem-safe date; does NOT affect the hash below
+    add_literal("DATE", datetime.now().strftime("%Y%m%d"))
+
+    add_key("G",     "EXP_GROUP",      lambda s: str(s)[:12])
 
     slug = "_".join(parts) if parts else "exp"
 
-    # Hash only the filtered, stable stats (no seed/timestamps)
     j = json.dumps(rs, sort_keys=True, separators=(",", ":")).encode("utf-8")
     h = hashlib.sha1(j).hexdigest()[:8]
     experiment_id = f"{slug}_{h}"
     return experiment_id, rs
+
 
 
 
@@ -235,7 +241,7 @@ class EpisodeTracker:
             row[k] = v
         return row
 
-    def log_episode(self, episode_num, reward_metrics, ema_metrics, new_reward_metrics, alignment_metrics):
+    def log_episode(self, episode_num, reward_metrics, new_reward_metrics, alignment_metrics):
         """
         All metric dicts are flattened into:
         reward.*, ema.*, newr.*, align.* columns.
@@ -243,7 +249,6 @@ class EpisodeTracker:
         """
         flat = {}
         flat.update(_flatten_with_prefix("reward", reward_metrics))
-        flat.update(_flatten_with_prefix("ema", ema_metrics))
         flat.update(_flatten_with_prefix("newr", new_reward_metrics))
         flat.update(_flatten_with_prefix("align", alignment_metrics))
 

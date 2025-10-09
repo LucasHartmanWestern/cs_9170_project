@@ -17,18 +17,21 @@ class Dataset:
             "data_path": "datasets/PAMAP2_Dataset",
         },
     }
-    def __init__(self, dataset_name, seed=42, device="cpu"):
+    def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu"):
         self.dataset_name = dataset_name
+        self.MINORITY_ID = minority_id
+        self.MAJORITY_ID = majority_id
+        self.third_id=third_id
+        self.pca_components = pca_components
         self.seed = seed
         self.device = device
         self.data_path = self.DATASET_REGISTRY[dataset_name]["data_path"]
+        self.multiclass=multiclass
+
 
     def split_census_income(self, train_size=None, bias_pct=0.2,
                     val_frac=0.20, test_frac=0.20, pca_components=2):
         """
-        Loads and processes the Adult Census dataset, applies bias to the minority class,
-        and returns PCA-transformed train/val/test splits as torch tensors.
-
         PIPELINE:
         1) Load raw data.
         2) Split raw data into θ_train / θ_val / θ_test (stratified by the original labels).
@@ -40,10 +43,6 @@ class Dataset:
         5) Fit PCA on θ_train *only*; transform θ_val and θ_test with that PCA (no leakage).
         6) Optionally subsample θ_train to a fixed size *after* biasing and before fitting PCA (still no leakage).
         7) Return torch tensors for train/val/test on self.device.
-
-        Returns:
-        X_train_theta, X_val_theta, X_test_theta,
-        y_train_theta, y_val_theta, y_test_theta
         """
         assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1, \
             "val_frac and test_frac must be in (0,1) and sum to < 1."
@@ -225,6 +224,7 @@ class Dataset:
         rng = np.random.RandomState(self.seed)
 
         # -------- constants / helpers --------
+        third_activity_id = self.third_id
         FS = 100
         WIN = int(win_seconds * FS)
         STEP = int(step_seconds * FS)
@@ -237,7 +237,8 @@ class Dataset:
         def colnames():
             cols = ["timestamp", "activity_id", "heart_rate"]
             sub = ["temp","acc16g_x","acc16g_y","acc16g_z","acc6g_x","acc6g_y","acc6g_z",
-                "gyro_x","gyro_y","gyro_z","mag_x","mag_y","mag_z","orient_w","orient_x","orient_y","orient_z"]
+                "gyro_x","gyro_y","gyro_z","mag_x","mag_y","mag_z",
+                "orient_w","orient_x","orient_y","orient_z"]
             for p in imu_pos:
                 cols += [f"{p}_{s}" for s in sub]
             return cols  # 54 total
@@ -266,13 +267,19 @@ class Dataset:
             dfs.append(df)
         df = pd.concat(dfs, ignore_index=True)
 
-        # -------- filter to two activities & map labels --------
-        df = df[df["activity_id"].isin([4, 24])].copy()
-        df["y"] = df["activity_id"].map({4: 0, 24: 1})
+        # -------- choose activities & map labels --------
+        include_third_label = self.multiclass
+        keep_ids = [self.MAJORITY_ID, self.MINORITY_ID] if not include_third_label else [self.MAJORITY_ID, self.MINORITY_ID, third_activity_id]
+        df = df[df["activity_id"].isin(keep_ids)].copy()
+
+        # map: walking->0, rope->1, optional third->2
+        mapping = {self.MAJORITY_ID: 0, self.MINORITY_ID: 1}
+        if include_third_label:
+            mapping[third_activity_id] = 2
+        df["y"] = df["activity_id"].map(mapping)
 
         # -------- per-subject interpolation (avoid leakage) --------
         num = df.select_dtypes(include=[np.number]).columns.tolist()
-        # do not interpolate labels
         num = [c for c in num if c not in ("activity_id", "y")]
         df = df.sort_values(["subject_id", "timestamp"]).groupby("subject_id", group_keys=False).apply(
             lambda g: g.assign(**{c: g[c].interpolate(limit_direction="both") for c in num})
@@ -285,14 +292,12 @@ class Dataset:
 
         base_cols = []
         if use_vector_norms:
-            # vector norms per IMU & sensor
             for p in imu_pos:
                 for name, axes in keep_triplets:
                     cols = [f"{p}_{a}" for a in axes]
                     df[f"{p}_{name}_norm"] = np.sqrt((df[cols].values ** 2).sum(axis=1))
                     base_cols.append(f"{p}_{name}_norm")
         else:
-            # keep raw axes (x, y, z)
             for p in imu_pos:
                 for _, axes in keep_triplets:
                     for a in axes:
@@ -300,11 +305,10 @@ class Dataset:
 
         base_cols = ["heart_rate"] + base_cols  # prepend HR
 
-        # -------- windowing → features (std, rms) --------
+        # -------- windowing → features (std, rms[, mean]) --------
         rows, labels, subjects = [], [], []
         df = df.sort_values(["subject_id", "timestamp"]).reset_index(drop=True)
 
-        # which stats are we computing?
         compute_mean = ("mean" in stats)
         compute_std  = ("std"  in stats)
         compute_rms  = ("rms"  in stats)
@@ -316,8 +320,8 @@ class Dataset:
                 w = g.iloc[start:start + WIN]
                 if len(w) < WIN:
                     continue
-                # binary majority label in window
-                y_win = int(np.round(w["y"].values.mean()))
+                # majority label in window
+                y_win = int(np.bincount(w["y"].astype(int)).argmax())
                 W = w[base_cols]
 
                 feats = {}
@@ -342,9 +346,7 @@ class Dataset:
         n_subj = len(unique_subjects)
         n_test = max(1, int(round(test_frac * n_subj)))
         n_val  = max(1, int(round(val_frac  * n_subj)))
-        # keep the rest for train
         if n_test + n_val >= n_subj:
-            # ensure at least 1 train subject
             n_test = max(1, n_test)
             n_val  = max(1, min(n_val, n_subj - n_test - 1))
 
@@ -364,32 +366,36 @@ class Dataset:
         y_val      = y_all[m_val]
         y_test     = y_all[m_test]
 
-        # -------- apply the SAME bias inside each split --------
-        def apply_bias(df_split, y_split, target_minority_pct, seed_local):
+        # -------- bias rope (class 1) inside each split --------
+        # In multiclass mode we treat the union of non-rope classes as "majority pool".
+        def apply_bias_rope(df_split, y_split, target_minority_pct, seed_local):
             dfb = df_split.copy()
             dfb["__y__"] = y_split
-            dfM = dfb[dfb["__y__"] == 0]
-            dfm = dfb[dfb["__y__"] == 1]
 
-            nM = len(dfM); nm = len(dfm)
-            if nM == 0 or nm == 0:
+            mask_rope = (dfb["__y__"] == 1)
+            df_rope = dfb[mask_rope]
+            df_nonrope = dfb[~mask_rope]  # walking (+ third if present)
+
+            n_nonrope = len(df_nonrope)
+            n_rope = len(df_rope)
+            if n_nonrope == 0 or n_rope == 0:
                 out = dfb
             else:
-                # target_minority_pct = nm_kept / (nM + nm_kept)
-                # => nm_kept = (target * nM) / (1 - target)
-                nm_keep = int(np.floor((target_minority_pct * nM) / (1 - target_minority_pct)))
-                nm_keep = min(nm, max(1, nm_keep))
-                dfm_b = dfm.sample(n=nm_keep, random_state=seed_local, replace=False)
-                out = pd.concat([dfM, dfm_b], axis=0).sample(frac=1.0, random_state=seed_local).reset_index(drop=True)
+                # want: n_rope_kept / (n_nonrope + n_rope_kept) ≈ target_minority_pct
+                n_rope_keep = int(np.floor((target_minority_pct * n_nonrope) / (1 - target_minority_pct)))
+                n_rope_keep = min(n_rope, max(1, n_rope_keep))
+                df_rope_b = df_rope.sample(n=n_rope_keep, random_state=seed_local, replace=False)
+                out = pd.concat([df_nonrope, df_rope_b], axis=0).sample(frac=1.0, random_state=seed_local).reset_index(drop=True)
 
             y_out = out["__y__"].to_numpy(dtype=int)
             X_out = out.drop(columns=["__y__"])
             return X_out, y_out
 
         target_minority_pct = float(bias_pct)
-        X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, target_minority_pct, rng.randint(0, 10**6))
-        X_val_biased_df,   y_val_biased   = apply_bias(X_val_df,   y_val,   target_minority_pct, rng.randint(0, 10**6))
-        X_test_biased_df,  y_test_biased  = apply_bias(X_test_df,  y_test,  target_minority_pct, rng.randint(0, 10**6))
+        X_train_biased_df, y_train_biased = apply_bias_rope(X_train_df, y_train, target_minority_pct, rng.randint(0, 10**6))
+        X_val_biased_df,   y_val_biased   = apply_bias_rope(X_val_df,   y_val,   target_minority_pct, rng.randint(0, 10**6))
+        # X_test_biased_df,  y_test_biased  = apply_bias_rope(X_test_df,  y_test,  target_minority_pct, rng.randint(0, 10**6))
+        X_test_biased_df,  y_test_biased  = X_test_df,  y_test
 
         # Optional: subsample TRAIN after biasing
         if train_size is not None and train_size < len(X_train_biased_df):
@@ -425,16 +431,24 @@ class Dataset:
         y_test_theta  = torch.tensor(y_test_biased,  dtype=torch.long, device=device)
 
         # ---- Sanity logging ----
-        def log_dist(name, ysplit):
-            n = len(ysplit); m = int((ysplit == 1).sum())
-            pct = 100.0 * m / n if n else 0.0
-            print(f"[{name}] size={n}, minority={m} ({pct:.2f}%)")
-        log_dist("TRAIN", y_train_biased)
-        log_dist("VAL",   y_val_biased)
-        log_dist("TEST",  y_test_biased)
-        print(f"PCA comps: {Xtr_p.shape[1]} | Features in: {len(feature_cols)}")
+        def log_counts(name, ysplit):
+            vals, cnts = np.unique(ysplit, return_counts=True)
+            parts = ", ".join([f"class{int(v)}={int(c)}" for v, c in zip(vals, cnts)])
+            if 1 in vals:
+                n_total = len(ysplit)
+                n_rope = cnts[list(vals).index(1)]
+                pct_rope = 100.0 * n_rope / n_total if n_total else 0.0
+                print(f"[{name}] size={n_total}, rope={n_rope} ({pct_rope:.2f}%), {parts}")
+            else:
+                print(f"[{name}] size={len(ysplit)}, {parts}")
+
+        log_counts("TRAIN", y_train_biased)
+        log_counts("VAL",   y_val_biased)
+        log_counts("TEST",  y_test_biased)
+        print(f"PCA comps: {Xtr_p.shape[1]} | Features in: {len(feature_cols)} | Classes: {sorted(np.unique(y_train_biased))}")
 
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
 
     def get_data_splits(self, **kwargs):
         if self.dataset_name == "census_income":
@@ -444,16 +458,20 @@ class Dataset:
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 
-    # Inside class Dataset:
-
     def rebuild_original_train_pool_theta(
         self, *, bias_pct: float, val_frac: float, test_frac: float,
-        train_size: int | None, pca_components: int, device: torch.device
+        train_size: int | None, pca_components: int, device: torch.device,
+        include_third_label: bool = False, third_activity_id: int = 13,
     ):
         """
         Build the ORIGINAL (unbiased) TRAIN pool mapped into θ-space that matches
-        the experiment (i.e., encoder/scaler/PCA fitted on TRAIN-biased).
+        the experiment (i.e., scaler/PCA fitted on TRAIN-biased).
         Returns (X_pool_theta, y_pool_theta) as torch tensors on `device`.
+
+        PAMAP2:
+        - Binary (default): keep {4 (walking)->0, 24 (rope)->1}
+        - Multiclass (include_third_label=True): keep {4->0, 24->1, third_activity_id->2}
+        - Biasing always targets rope (class 1) vs the combined non-rope pool.
         """
         if self.dataset_name == "census_income":
             # ---- Adult (Census) ----
@@ -481,8 +499,7 @@ class Dataset:
             )
 
             def apply_bias(df_split, y_split, target_minority_pct):
-                df = df_split.copy()
-                df["__y__"] = y_split
+                df = df_split.copy(); df["__y__"] = y_split
                 maj = df[df["__y__"] == 0]; mino = df[df["__y__"] == 1]
                 if len(maj)==0 or len(mino)==0:
                     out = df
@@ -497,14 +514,12 @@ class Dataset:
 
             # TRAIN-biased for fitting transforms
             X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, bias_pct)
-
             if train_size is not None and train_size < len(X_train_biased_df):
                 X_train_biased_df, _, y_train_biased, _ = train_test_split(
                     X_train_biased_df, y_train_biased,
                     train_size=train_size, random_state=self.seed, stratify=y_train_biased
                 )
 
-            # Fit enc/scale/PCA on TRAIN-biased; transform UNBIASED TRAIN
             try:
                 encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
             except TypeError:
@@ -528,9 +543,6 @@ class Dataset:
 
         elif self.dataset_name == "pamap2":
             # ---- PAMAP2 ----
-            # Rebuild the full feature dataframe, subject-aware split, then:
-            #  - Fit scaler+PCA on TRAIN-biased (to match the experiment)
-            #  - Transform the UNBIASED TRAIN rows to θ-space and return them.
             rng = np.random.RandomState(self.seed)
 
             # constants copied from split_pamap2 defaults
@@ -550,13 +562,13 @@ class Dataset:
             def colnames():
                 cols = ["timestamp","activity_id","heart_rate"]
                 sub  = ["temp","acc16g_x","acc16g_y","acc16g_z","acc6g_x","acc6g_y","acc6g_z",
-                        "gyro_x","gyro_y","gyro_z","mag_x","mag_y","mag_z","orient_w","orient_x","orient_y","orient_z"]
+                        "gyro_x","gyro_y","gyro_z","mag_x","mag_y","mag_z",
+                        "orient_w","orient_x","orient_y","orient_z"]
                 for p in imu_pos:
                     cols += [f"{p}_{s}" for s in sub]
                 return cols
 
             def parse_sid(path):
-                import re
                 m = re.search(r"subject(\d+)", Path(path).stem.lower())
                 return m.group(1) if m else "unknown"
 
@@ -576,9 +588,13 @@ class Dataset:
                 dfs.append(df)
             df = pd.concat(dfs, ignore_index=True)
 
-            # binary subset: walking(4) vs rope jumping(24); map {4:0, 24:1}
-            df = df[df["activity_id"].isin([4,24])].copy()
-            df["y"] = df["activity_id"].map({4:0, 24:1})
+            # keep activities (binary or 3-class)
+            keep_ids = [self.MAJORITY_ID, self.MINORITY_ID] if not include_third_label else [self.MAJORITY_ID, self.MINORITY_ID, third_activity_id]
+            df = df[df["activity_id"].isin(keep_ids)].copy()
+            mapping = {self.MAJORITY_ID: 0, self.MINORITY_ID: 1}
+            if include_third_label:
+                mapping[third_activity_id] = 2
+            df["y"] = df["activity_id"].map(mapping)
 
             # per-subject interpolation
             num = df.select_dtypes(include=[np.number]).columns.tolist()
@@ -620,7 +636,7 @@ class Dataset:
                 for start in range(0, max(0, n - WIN + 1), STEP):
                     w = g.iloc[start:start + WIN]
                     if len(w) < WIN: continue
-                    y_win = int(np.round(w["y"].values.mean()))
+                    y_win = int(np.bincount(w["y"].astype(int)).argmax())
                     feats = compute_feats(w[base_cols])
                     feats["subject_id"] = sid
                     rows.append(feats); labels.append(y_win); subjects.append(sid)
@@ -629,7 +645,7 @@ class Dataset:
             y_all   = np.asarray(labels, dtype=int)
             subj_all= np.asarray(subjects)
 
-            # subject-aware split
+            # subject-aware split (get UNBIASED TRAIN for the pool)
             unique_subjects = np.unique(subj_all); rng.shuffle(unique_subjects)
             n_subj = len(unique_subjects)
             n_test = max(1, int(round(test_frac * n_subj)))
@@ -640,29 +656,31 @@ class Dataset:
             test_subj = unique_subjects[:n_test]
             val_subj  = unique_subjects[n_test:n_test + n_val]
             train_subj= unique_subjects[n_test + n_val:]
-
             m_train = np.isin(subj_all, train_subj)
 
             X_train_unbiased_df = feat_df[m_train].copy()
             y_train_unbiased    = y_all[m_train]
 
-            # TRAIN-biased version for fitting transforms (match experiment)
-            def apply_bias(df_split, y_split, target_minority_pct):
-                dfb = df_split.copy()
-                dfb["__y__"] = y_split
-                dfM = dfb[dfb["__y__"] == 0]; dfm = dfb[dfb["__y__"] == 1]
-                if len(dfM)==0 or len(dfm)==0:
+            # TRAIN-biased (fit transforms) – rope vs non-rope
+            def apply_bias_rope(df_split, y_split, target_minority_pct):
+                dfb = df_split.copy(); dfb["__y__"] = y_split
+                mask_rope = (dfb["__y__"] == 1)
+                df_rope, df_nonrope = dfb[mask_rope], dfb[~mask_rope]
+                n_nonrope, n_rope = len(df_nonrope), len(df_rope)
+                if n_nonrope == 0 or n_rope == 0:
                     out = dfb
                 else:
-                    nm_keep = int(np.floor((target_minority_pct * len(dfM)) / (1 - target_minority_pct)))
-                    nm_keep = min(len(dfm), max(1, nm_keep))
-                    dfm_b = dfm.sample(n=nm_keep, random_state=self.seed, replace=False)
-                    out = pd.concat([dfM, dfm_b], axis=0).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
+                    n_rope_keep = int(np.floor((target_minority_pct * n_nonrope) / (1 - target_minority_pct)))
+                    n_rope_keep = min(n_rope, max(1, n_rope_keep))
+                    df_rope_b = df_rope.sample(n=n_rope_keep, random_state=self.seed, replace=False)
+                    out = pd.concat([df_nonrope, df_rope_b], axis=0).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
                 y_out = out["__y__"].to_numpy(dtype=int)
                 X_out = out.drop(columns=["__y__"])
                 return X_out, y_out
 
-            X_train_biased_df, y_train_biased = apply_bias(X_train_unbiased_df, y_train_unbiased, float(bias_pct))
+            X_train_biased_df, y_train_biased = apply_bias_rope(
+                X_train_unbiased_df, y_train_unbiased, float(bias_pct)
+            )
             if train_size is not None and train_size < len(X_train_biased_df):
                 X_train_biased_df, _, y_train_biased, _ = train_test_split(
                     X_train_biased_df, y_train_biased,

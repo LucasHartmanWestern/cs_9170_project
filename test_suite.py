@@ -37,6 +37,14 @@ class TestSuite:
         gen.manual_seed(int(seed))
         return gen
 
+    def _to_binary_rope_vs_rest(self, y: torch.Tensor) -> torch.Tensor:
+        """
+        Map labels to rope-vs-rest: {0,2} -> 0, {1} -> 1, preserving dtype/device.
+        Works for both 0/1 and 0/1/2 inputs.
+        """
+        return (y == 1).to(dtype=torch.long, device=y.device)
+
+
     def _p1_from_agent(self, agent, x):
         agent.model.eval()
         with torch.no_grad():
@@ -45,35 +53,46 @@ class TestSuite:
             return probs[..., 1]
 
     def _all_f1_from_probs(self, y_true, p1, threshold=0.5):
+        """
+        Compute rope-vs-rest F1s from P(y=1). We *only* binarize for metrics.
+        Training labels can remain 0/1/2.
+        """
         eps = 1e-8
-        y_true = y_true.to(p1.device).long()
+        y_bin = self._to_binary_rope_vs_rest(y_true).to(p1.device)
         y_pred_pos = (p1 >= threshold).long()
 
-        tp1 = ((y_pred_pos == 1) & (y_true == 1)).sum().float()
-        fp1 = ((y_pred_pos == 1) & (y_true == 0)).sum().float()
-        fn1 = ((y_pred_pos == 0) & (y_true == 1)).sum().float()
+        # Positive (rope=1) class
+        tp1 = ((y_pred_pos == 1) & (y_bin == 1)).sum().float()
+        fp1 = ((y_pred_pos == 1) & (y_bin == 0)).sum().float()
+        fn1 = ((y_pred_pos == 0) & (y_bin == 1)).sum().float()
         prec1 = tp1 / (tp1 + fp1 + eps)
         rec1  = tp1 / (tp1 + fn1 + eps)
         f1_1  = (2 * prec1 * rec1) / (prec1 + rec1 + eps)
 
-        tp0 = ((y_pred_pos == 0) & (y_true == 0)).sum().float()
-        fp0 = ((y_pred_pos == 0) & (y_true == 1)).sum().float()
-        fn0 = ((y_pred_pos == 1) & (y_true == 0)).sum().float()
+        # Negative (non-rope) class
+        tp0 = ((y_pred_pos == 0) & (y_bin == 0)).sum().float()
+        fp0 = ((y_pred_pos == 0) & (y_bin == 1)).sum().float()
+        fn0 = ((y_pred_pos == 1) & (y_bin == 0)).sum().float()
         prec0 = tp0 / (tp0 + fn0 + eps)
         rec0  = tp0 / (tp0 + fp0 + eps)
         f1_0  = (2 * prec0 * rec0) / (prec0 + rec0 + eps)
 
-        n1 = (y_true == 1).sum().float()
-        n0 = (y_true == 0).sum().float()
+        n1 = (y_bin == 1).sum().float()
+        n0 = (y_bin == 0).sum().float()
         n  = n0 + n1 + eps
 
         f1_macro    = 0.5 * (f1_1 + f1_0)
         f1_weighted = (f1_1 * (n1 / n)) + (f1_0 * (n0 / n))
         return float(f1_1), float(f1_0), float(f1_weighted), float(f1_macro)
 
+
     def _brier_mean(self, y_true, p1):
-        y_true = y_true.to(p1.device).float()
-        return float(((p1 - y_true) ** 2).mean())
+        """
+        Rope-vs-rest Brier: binarize then MSE on P(y=1).
+        """
+        y_bin = self._to_binary_rope_vs_rest(y_true).to(p1.device).float()
+        return float(((p1 - y_bin) ** 2).mean())
+
 
     def _sample_real_minority(self, x_pool, y_pool, add_n: int, seed: int | None):
         add_n = int(max(0, add_n))
@@ -138,10 +157,14 @@ class TestSuite:
                 "oversample_brier": float('nan'),
             }
 
-        y1_mask = (y_train == 1); y0_mask = (y_train == 0)
-        n1 = int(y1_mask.sum().item()); n0 = int(y0_mask.sum().item())
-        if n1 == 0 or n0 == 0:
-            print("[TestSuite] Oversample baseline skipped: one class missing in training.")
+        # Majority is NON-rope (y != 1). Keep original 0/1/2 labels for training.
+        y_is_min = (y_train == 1)
+        y_is_maj = (y_train != 1)
+
+        n1 = int(y_is_min.sum().item())
+        nM = int(y_is_maj.sum().item())
+        if n1 == 0 or nM == 0:
+            print("[TestSuite] Oversample baseline skipped: one side missing in training.")
             return {
                 "oversample_added": 0,
                 "oversample_f1_minority": float('nan'),
@@ -151,14 +174,14 @@ class TestSuite:
                 "oversample_brier": float('nan'),
             }
 
-        n_add = max(0, n0 - n1)
+        n_add = max(0, nM - n1)
         if n_add > 0:
-            idx_min_all = torch.nonzero(y1_mask, as_tuple=False).squeeze(1)
+            idx_min_all = torch.nonzero(y_is_min, as_tuple=False).squeeze(1)
             gen = self._make_generator(idx_min_all.device, seed)
-            rand_idx = torch.randint(0, n1, (n_add,), device=idx_min_all.device, generator=gen)
+            rand_idx = torch.randint(0, idx_min_all.shape[0], (n_add,), device=idx_min_all.device, generator=gen)
             add_idx = idx_min_all[rand_idx]
             X_add = x_train[add_idx]
-            y_add = torch.ones(n_add, dtype=y_train.dtype, device=y_train.device)
+            y_add = y_train[add_idx]  # keep label==1
             x_os = torch.cat([x_train, X_add], dim=0)
             y_os = torch.cat([y_train, y_add], dim=0)
         else:
@@ -170,12 +193,12 @@ class TestSuite:
         beta.train(dl)
 
         with torch.no_grad():
-            p1 = self._p1_from_agent(beta, x_test)
+            p1 = self._p1_from_agent(beta, x_test)  # P(y=1|x), valid for 2 or 3 logits
             f1_min, f1_maj, f1_w, f1_macro = self._all_f1_from_probs(y_test, p1, f1_thresh)
             brier = self._brier_mean(y_test, p1)
 
-        print(f"[TEST] OverSampleβ -> F1(min)={f1_min:.4f} | F1(maj)={f1_maj:.4f} | "
-              f"F1(weighted)={f1_w:.4f} | F1(macro)={f1_macro:.4f} | Brier={brier:.4f}")
+        print(f"[TEST] OverSampleβ -> F1(rope)={f1_min:.4f} | F1(non-rope)={f1_maj:.4f} | "
+            f"F1(weighted)={f1_w:.4f} | F1(macro)={f1_macro:.4f} | Brier={brier:.4f}")
 
         return {
             "oversample_added": int(n_add),
@@ -186,9 +209,10 @@ class TestSuite:
             "oversample_brier": brier,
         }
 
+
     def run_undersample_baseline(self, x_train, y_train, x_test, y_test,
-                                 f1_thresh: float = 0.5, batch_size: int = 32,
-                                 seed: int | None = None):
+                                f1_thresh: float = 0.5, batch_size: int = 32,
+                                seed: int | None = None):
         if (x_train is None) or (y_train is None) or (self.beta_factory is None):
             print("[TestSuite] Undersample baseline not run (missing x_train/y_train or beta_factory).")
             return {
@@ -200,10 +224,13 @@ class TestSuite:
                 "undersample_brier": float('nan'),
             }
 
-        y1_mask = (y_train == 1); y0_mask = (y_train == 0)
-        n1 = int(y1_mask.sum().item()); n0 = int(y0_mask.sum().item())
-        if n1 == 0 or n0 == 0:
-            print("[TestSuite] Undersample baseline skipped: one class missing in training.")
+        y_is_min = (y_train == 1)
+        y_is_maj = (y_train != 1)
+
+        n1 = int(y_is_min.sum().item())
+        nM = int(y_is_maj.sum().item())
+        if n1 == 0 or nM == 0:
+            print("[TestSuite] Undersample baseline skipped: one side missing in training.")
             return {
                 "undersample_dropped": 0,
                 "undersample_f1_minority": float('nan'),
@@ -213,16 +240,18 @@ class TestSuite:
                 "undersample_brier": float('nan'),
             }
 
-        if n0 > n1:
-            idx_maj_all = torch.nonzero(y0_mask, as_tuple=False).squeeze(1)
+        if nM > n1:
+            idx_maj_all = torch.nonzero(y_is_maj, as_tuple=False).squeeze(1)
             gen = self._make_generator(idx_maj_all.device, seed)
-            perm = torch.randperm(n0, device=idx_maj_all.device, generator=gen)[:n1]
+            perm = torch.randperm(nM, device=idx_maj_all.device, generator=gen)[:n1]
             keep_maj_idx = idx_maj_all[perm]
-            X_keep = x_train[keep_maj_idx]; y_keep = torch.zeros(n1, dtype=y_train.dtype, device=y_train.device)
-            X_min = x_train[y1_mask];       y_min = y_train[y1_mask]
+            X_keep = x_train[keep_maj_idx]
+            y_keep = y_train[keep_maj_idx]  # can be 0 or 2
+            X_min  = x_train[y_is_min]
+            y_min  = y_train[y_is_min]      # == 1
             x_us = torch.cat([X_keep, X_min], dim=0)
             y_us = torch.cat([y_keep, y_min], dim=0)
-            n_drop = n0 - n1
+            n_drop = nM - n1
         else:
             x_us, y_us = x_train, y_train
             n_drop = 0
@@ -237,8 +266,8 @@ class TestSuite:
             f1_min, f1_maj, f1_w, f1_macro = self._all_f1_from_probs(y_test, p1, f1_thresh)
             brier = self._brier_mean(y_test, p1)
 
-        print(f"[TEST] UnderSampleβ -> F1(min)={f1_min:.4f} | F1(maj)={f1_maj:.4f} | "
-              f"F1(weighted)={f1_w:.4f} | F1(macro)={f1_macro:.4f} | Brier={brier:.4f}")
+        print(f"[TEST] UnderSampleβ -> dropped={n_drop} | F1(rope)={f1_min:.4f} | F1(non-rope)={f1_maj:.4f} | "
+            f"F1(weighted)={f1_w:.4f} | F1(macro)={f1_macro:.4f} | Brier={brier:.4f}")
 
         return {
             "undersample_dropped": int(max(0, n_drop)),
@@ -248,6 +277,7 @@ class TestSuite:
             "undersample_f1_macro": f1_macro,
             "undersample_brier": brier,
         }
+
 
     def run_jitter_baseline(self, x_train, y_train, x_test, y_test,
                             f1_thresh: float = 0.5,
@@ -702,15 +732,17 @@ class TestSuite:
             "beta_brier": b_brier,
         }
 
-        row = {
-            **base_row,
-            **jitter_metrics,
-            **oversample_metrics,
-            **undersample_metrics,
-            **alpha_raworig_metrics,
-            **alpha_plusreal_metrics,
-            **alpha_ctgan_metrics,
-        }
+        row = dict(base_row)
+        for metrics_var in [
+            "jitter_metrics",
+            "oversample_metrics",
+            "undersample_metrics",
+            "alpha_raworig_metrics",
+            "alpha_plusreal_metrics",
+            "alpha_ctgan_metrics",
+        ]:
+            if metrics_var in locals() and locals()[metrics_var] is not None:
+                row.update(locals()[metrics_var])
 
         pd.DataFrame([row]).to_csv(seed_csv, mode="a", header=not seed_csv.exists(), index=False)
         print(f"[TestSuite] Final test metrics appended to (seed): {seed_csv}")
