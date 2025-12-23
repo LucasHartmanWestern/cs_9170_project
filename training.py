@@ -30,14 +30,16 @@ from episode_tracker import EpisodeTracker
 import multiprocessing as mp
 from datetime import datetime
 import uuid
+import json
+import subprocess
 
 # ---------------- Config ----------------
-EPISODES        = 2000
 
 class Training:
     def __init__(
         self,
         exp_group=None,
+        curriculum_learning=True,
         multiclass=False,
         dataset_name="census_income",
         minority_id=None,
@@ -47,6 +49,7 @@ class Training:
         pca_components=2,
         traj_length=500,
         real_data_size=1500,
+        total_episodes=1,
         reward_mode="gauss_penalty",
         seed=42,
         device='cpu'
@@ -63,12 +66,19 @@ class Training:
         self.pca_components = pca_components
         self.reward_mode = reward_mode
         self.lambda_schedule = (0.8, 0.8)
+        self.curriculum_learning = curriculum_learning
         self.multiclass = multiclass
         self.minority_id = minority_id
         self.majority_id = majority_id
         self.third_id = third_id
         self.traj_length = traj_length
         self.real_data_size = real_data_size
+        self.episodes = total_episodes
+
+        if self.curriculum_learning:
+            self.state_dim = 1 + 2 * self.pca_components   # frac_done + pca + editable_mask
+        else:
+            self.state_dim = 2
 
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
@@ -91,10 +101,10 @@ class Training:
 
         # REINFORCE config
         reinforce_config = {
-            'state_size': 2,
+            'state_size': self.state_dim,          # <<< was 2
             'action_size': self.pca_components,
             'hidden_sizes': [64, 64],
-            'total_episodes': EPISODES,
+            'total_episodes': self.episodes,
             'lr': 3e-4,
             'gamma': 0.99,
             'entropy_start': 1e-2,
@@ -169,7 +179,7 @@ class Training:
         y_true = y_true.to(p1.device).float()
         return (p1 - y_true) ** 2  # in [0,1]
 
-    # Beta model F1 minority class score + local term (no EMA)
+        # Beta model F1 minority class score + local term (no EMA)
     def compute_reward(
         self,
         alpha_model, beta_model, stale_beta_model,   # stale_beta_model unused (kept for signature compat)
@@ -197,10 +207,6 @@ class Training:
         - "binary": y_theta_val is 0/1; we evaluate directly.
         - "multiclass": y_theta_val is 0/1/2; we evaluate as (rope vs non-rope):
                 y_val_bin = 1 if y==1 else 0    # {0,2} -> 0, 1->1
-
-        Notes:
-        * We always treat class 1 = rope as the minority of interest.
-        * stale_beta_model/EMA params are accepted for compatibility but not used.
         """
         # ---------- Mode selection ----------
         alias = {
@@ -227,6 +233,9 @@ class Training:
         else:
             # collapse 3 classes into rope vs non-rope: {0,2}→0, 1→1
             y_val_bin = (y_theta_val == 1).long()
+
+        # shared Gaussian width (also used in diagnostics)
+        tau = 0.10
 
         with torch.no_grad():
             # ---- Global term on θ_val ----
@@ -259,24 +268,9 @@ class Training:
             p = self._p1_from_agent(alpha_model, x_phi)  # P_alpha(y=1|x_phi) in [0,1]
 
             # Symmetric Gaussian around 0.5
-            tau = 0.10
             m = torch.abs(p - 0.5)
             score_gauss = torch.exp(-0.5 * (m / tau) ** 2)
             score_local_raw = score_gauss.clone()
-
-            # Optional slice-based radial gate
-            w_slice = torch.ones_like(score_local_raw)
-            if mode == "local_slices":
-                if hasattr(self, "slice_pairs") and len(self.slice_pairs) > 0:
-                    gates = []
-                    for idx, (i, j) in enumerate(self.slice_pairs):
-                        r_ij = torch.linalg.norm(x_phi[:, [i, j]], dim=1)  # [T]
-                        denom = (self.slice_gain * self.slice_r_iqr[idx]).clamp_min(1e-6)
-                        g_ij = torch.sigmoid(((r_ij - self.slice_r_med[idx]) / denom).clamp(-10, 10))
-                        gates.append(g_ij)
-                    w_slice = torch.stack(gates, dim=1).amax(dim=1)      # union of “outside cores”
-                    score_local_raw = score_local_raw * w_slice
-                # else keep w_slice = 1
 
             # Cap local score
             LOCAL_CAP = 1.0
@@ -285,20 +279,70 @@ class Training:
             local_cap_frac = float(over_mask.mean().item())
             score_local = torch.minimum(score_local_raw, cap_t)
 
-        # ---- Combine global + local ----
-        base_reward = lambda_t * delta_f1_minority + (1.0 - lambda_t) * score_local  # [T]
+            # ---- Combine global + local ----
+            base_reward = lambda_t * delta_f1_minority + (1.0 - lambda_t) * score_local  # [T]
 
-        # Penalty (optional mode)
-        maj_violation = 0.0
-        wtd_violation = 0.0
-        penalty = 0.0
-        if mode == "local_gauss_penalty":
-            maj_violation = max(0.0, -(delta_f1_majority + epsilon_majority))
-            wtd_violation = max(0.0, -(delta_f1_weighted + epsilon_weighted))
-            penalty = c_majority * maj_violation + c_weighted * wtd_violation
+            # Penalty (optional mode)
+            maj_violation = 0.0
+            wtd_violation = 0.0
+            penalty = 0.0
+            if mode == "local_gauss_penalty":
+                maj_violation = max(0.0, -(delta_f1_majority + epsilon_majority))
+                wtd_violation = max(0.0, -(delta_f1_weighted + epsilon_weighted))
+                penalty = c_majority * maj_violation + c_weighted * wtd_violation
 
-        reward = base_reward - penalty
-        mean_local = float(score_local.mean().item())
+            reward = base_reward - penalty
+            mean_local = float(score_local.mean().item())
+
+            # keep these around for diagnostics
+            alpha_wrong_rate = float(
+                ((p >= 0.5).float() != (y_phi.to(p.device).float())).float().mean().item()
+            )
+            judge_conf_mean = float(score_gauss.mean().item())
+            uncert_alpha_mean = float((1.0 - (2.0 * m).clamp(0, 1)).mean().item())
+
+        # -------------------------------------------------------
+        # Extra diagnostics: confidence, radius, and grad norm
+        # (computed outside no_grad, using detached copy of x_phi)
+        # -------------------------------------------------------
+        diag_mean_conf_all  = float("nan")
+        diag_frac_mid_conf  = float("nan")
+        diag_gen_radius_mean = float("nan")
+        diag_grad_norm      = float("nan")
+
+        try:
+            x_phi_det = x_phi.detach().clone().requires_grad_(True)
+            with torch.enable_grad():
+                p_diag = self._p1_from_agent(alpha_model, x_phi_det)  # [T]
+
+                # 1) confidence over generator samples: max(p, 1-p)
+                conf = torch.maximum(p_diag, 1.0 - p_diag)
+                diag_mean_conf_all = float(conf.mean().item())
+
+                # fraction near decision boundary (0.4–0.6)
+                mid_band = ((p_diag >= 0.4) & (p_diag <= 0.6)).float()
+                diag_frac_mid_conf = float(mid_band.mean().item())
+
+                # 2) radial distance in PCA space for generator samples
+                radius = torch.linalg.norm(x_phi_det, dim=1)  # [T]
+                diag_gen_radius_mean = float(radius.mean().item())
+
+                # 3) gradient norm of local Gaussian reward w.r.t x
+                m_diag = torch.abs(p_diag - 0.5)
+                score_gauss_diag = torch.exp(-0.5 * (m_diag / tau) ** 2)
+                local_mean_diag = score_gauss_diag.mean()  # scalar
+                grad_x, = torch.autograd.grad(
+                    local_mean_diag,
+                    x_phi_det,
+                    retain_graph=False,
+                    create_graph=False,
+                    allow_unused=False,
+                )
+                diag_grad_norm = float(torch.linalg.norm(grad_x, dim=1).mean().item())
+        except Exception as e:
+            # If anything goes wrong, keep NaNs but don't break training
+            # print(f"[warn] diag metrics failed: {e}")
+            pass
 
         diagnostics = {
             "reward_mode": mode,
@@ -306,10 +350,10 @@ class Training:
             "local_reward": mean_local,                   # mean local score
             "f1_macro_beta": float(f1_macro_beta),
 
-            # Details
-            "judge_conf_mean": float(score_gauss.mean().item()),
-            "uncert_alpha_mean": float((1.0 - (2.0 * m).clamp(0, 1)).mean().item()),
-            "alpha_wrong_rate": float(((p >= 0.5).float() != (y_phi.to(p.device).float())).float().mean().item()),
+            # Details (existing)
+            "judge_conf_mean": judge_conf_mean,
+            "uncert_alpha_mean": uncert_alpha_mean,
+            "alpha_wrong_rate": alpha_wrong_rate,
             "delta_f1_val": delta_f1_minority,
             "delta_f1_majority": delta_f1_majority,
             "delta_f1_weighted": delta_f1_weighted,
@@ -323,11 +367,13 @@ class Training:
             "penalty": penalty if mode == "local_gauss_penalty" else 0.0,
             "maj_violation": maj_violation if mode == "local_gauss_penalty" else 0.0,
             "wtd_violation": wtd_violation if mode == "local_gauss_penalty" else 0.0,
-
-            # Slice gate signal
-            "w_slice_mean": float(w_slice.mean().item()) if mode == "local_slices" else 1.0,
-
             "corr_factor_mean": None,
+
+            # NEW diagnostic metrics
+            "diag_mean_conf_all": diag_mean_conf_all,          # avg max(p, 1-p) over generator samples
+            "diag_frac_mid_conf": diag_frac_mid_conf,          # fraction with p in [0.4, 0.6]
+            "diag_gen_radius_mean": diag_gen_radius_mean,      # mean PCA radius of generated samples
+            "diag_grad_norm": diag_grad_norm,                  # mean ||∂ local reward / ∂x||
         }
         return reward, diagnostics
 
@@ -338,19 +384,19 @@ class Training:
 
         run_stats = {
             "EXP_GROUP": self.exp_group,
-            "EPISODES": EPISODES,
+            "CURRICULUM_LEARNING": self.curriculum_learning,   # <<< CHANGED (already added by you)
+            "EPISODES": self.episodes,
             "TRAJ_LENGTH": self.traj_length,
             "REAL_DATA_SIZE": self.real_data_size,
             "BIAS_PCT": self.bias_pct,
             "lambda_schedule": self.lambda_schedule,
             "seed": self.seed,
             "pca_components": self.pca_components,
-            "reward_mode": self.reward_mode,     
+            "reward_mode": self.reward_mode,
             "minority_id": self.minority_id,
-            "majority_id":self.majority_id,
-            "third_id":self.third_id
+            "majority_id": self.majority_id,
+            "third_id": self.third_id,
         }
-
 
         # create beta factory once (so tracker can rehydrate best-beta for final test)
         beta_factory = lambda: FFNNAgent(**self.ffnn_config)
@@ -361,280 +407,493 @@ class Training:
             save_dir="training_runs",
             compare_metric="average_reward",
             beta_factory=beta_factory,
-            seed=self.seed
+            seed=self.seed,
         ) as tracker:
-            self.tracker = tracker  
+            self.tracker = tracker
 
+            # ---------------- Data splits ----------------
+            x_theta_train, x_theta_val, x_theta_test, y_theta_train, y_theta_val, y_theta_test = (
+                self.dataset.get_data_splits(
+                    train_size=self.real_data_size,
+                    bias_pct=self.bias_pct,
+                    pca_components=self.pca_components,
+                )
+            )
+            minority_mask = (y_theta_train == 1)
+            real_minority_samples = x_theta_train[minority_mask]
 
-        x_theta_train, x_theta_val, x_theta_test, y_theta_train, y_theta_val, y_theta_test = self.dataset.get_data_splits(
-            train_size=self.real_data_size, bias_pct=self.bias_pct, pca_components=self.pca_components, 
-        )
-
-        total_data = len(x_theta_train) + self.traj_length
-        real_percentage = (len(x_theta_train) / total_data) * 100
-        synthetic_percentage = (self.traj_length / total_data) * 100
-        print(f"Beta will train with: {real_percentage:.2f}% real data, {synthetic_percentage:.2f}% synthetic data: ")
-
-        # Train α once on real-only train set
-        self.alpha_model = self.train_predictor_model(self.alpha_model, x_theta_train, y_theta_train)
-        self.tracker.save_alpha_state_dict(self.alpha_model, self.ffnn_config, self.pca_components)
-
-        # Environment (state is 2D PCA coords; target is 1 class for synthetic generation)
-        env = Environment(
-            target=1,
-            max_actions=self.traj_length,
-            device=self.device,
-            seed=self.seed
-        )
-
-        for episode in range(EPISODES):
-            # Pre-allocate (GPU tensors)
-            D = 2
-            A = self.pca_components
-            states      = torch.zeros((self.traj_length, D), dtype=torch.float32, device=self.device)
-            actions     = torch.zeros((self.traj_length, A), dtype=torch.float32, device=self.device)
-            next_states = torch.zeros((self.traj_length, D), dtype=torch.float32, device=self.device)
-            dones       = torch.zeros(self.traj_length, dtype=torch.bool, device=self.device)
-
-            x_syn_tensor = torch.zeros((self.traj_length, A), dtype=torch.float32, device=self.device)
-            y_syn_tensor = torch.zeros(self.traj_length, dtype=torch.long, device=self.device)
-
-            state = env.reset()
-
-            # Reset beta to its initial snapshot each episode for a stable baseline
-            stale_beta_model = copy.deepcopy(self.beta_model)
-            self.beta_model.reset()
-
-            for t in range(self.traj_length):
-                action = self.agent.predict(state)                      
-                next_state, done, info = env.step(action, (t + 1))
-
-                states[t]      = state
-                actions[t]     = action
-                next_states[t] = next_state
-                dones[t]       = done
-
-                x_syn_tensor[t] = action
-                y_syn_tensor[t] = info['sampled_target']  # 1 for minority
-
-                state = next_state
-                if done:
-                    break
-
-            T = t + 1 if done else self.traj_length
-            x_phi_t = x_syn_tensor[:T]
-            y_phi_t = y_syn_tensor[:T]
-
-            # Train beta on hybrid (real + synthetic for this episode)
-            x_hybrid = torch.cat([x_theta_train, x_phi_t])
-            y_hybrid = torch.cat([y_theta_train, y_phi_t])
-            self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
-
-            progress = (episode + 1) / EPISODES
-
-            # Rewards (alpha baseline global + per-step local)
-            rewards, diagnostics = self.compute_reward(
-                self.alpha_model, self.beta_model, stale_beta_model,
-                x_theta_val, y_theta_val,
-                x_phi_t, y_phi_t,
-                progress=progress,
-                f1_thresh=0.5,
-                lambda_schedule=self.lambda_schedule,
-                class_mode=("multiclass" if self.multiclass else "binary")
+            total_data = len(x_theta_train) + self.traj_length
+            real_percentage = (len(x_theta_train) / total_data) * 100
+            synthetic_percentage = (self.traj_length / total_data) * 100
+            print(
+                f"Beta will train with: {real_percentage:.2f}% real data, "
+                f"{synthetic_percentage:.2f}% synthetic data: "
             )
 
-            # Truncate episode tensors and learn
-            states      = states[:T]
-            actions     = actions[:T]
-            next_states = next_states[:T]
-            dones       = dones[:T]
-            rewards     = rewards[:T]
-
-            self.agent.learn_trajectory(states, actions, rewards, next_states, dones, episode)
-
-            reward_metrics = {
-                "avg_reward": float(torch.mean(rewards)),
-                "obj1_f1_minority_beta": float(diagnostics["global_reward"]),
-                "obj2_local_useful_mean": float(diagnostics["local_reward"]),
-                "macro_f1_beta": float(diagnostics["f1_macro_beta"]),
-            }
-
-            new_reward_metrics = {
-                "judge_conf_mean": float(diagnostics.get("judge_conf_mean", float('nan'))),
-                "uncert_alpha_mean": float(diagnostics.get("uncert_alpha_mean", float('nan'))),
-                "alpha_wrong_rate": float(diagnostics.get("alpha_wrong_rate", float('nan'))),
-                "corr_factor_mean": float(0.5 + 0.5 * diagnostics.get("alpha_wrong_rate", 0.0)),
-                "f1_minority_alpha": float(diagnostics["f1_minority_alpha"]),
-                "f1_minority_beta_stale": float(diagnostics["f1_minority_beta_stale"]),
-                "local_cap_frac": float(diagnostics["local_cap_frac"]), 
-            }
-
-            # Pull episode-level values from diagnostics
-            local_mean = float(diagnostics["local_reward"])     
-            delta_val  = float(diagnostics["delta_f1_val"])     
-
-            # Update rolling buffers and compute correlation
-            self._local_buf.append(local_mean)
-            self._delta_buf.append(delta_val)
-            corr_local_delta = self._corr_local_delta()
-
-            alignment_metrics = {
-                "delta_f1_val": delta_val,
-                "corr_local_delta": float(corr_local_delta),
-            }
-            
-            # Log
-            avg_reward = torch.mean(rewards)
-            self.tracker.log_episode(
-                episode + 1,
-                reward_metrics,                     # Avg reward across trajectory
-                new_reward_metrics,         # Mean (1 - Brier) on synthetic Φ (β)
-                alignment_metrics           # macro F1 on θ_val (β), for context
+            # Train α once on real-only train set
+            self.alpha_model = self.train_predictor_model(
+                self.alpha_model, x_theta_train, y_theta_train
             )
-            # Save periodic snapshot and best-so-far synthetic
-            self.tracker.maybe_save_synthetic(
-                episode_num=episode + 1,
-                x_syn=x_phi_t,
-                y_syn=y_phi_t,
-                avg_reward=float(avg_reward),
-                obj1=float(diagnostics['global_reward']),
-                obj2_mean=float(diagnostics['local_reward']),
-                global_f1=float(diagnostics['f1_macro_beta']),
-                feature_names=[f"pca_{i}" for i in range(x_phi_t.shape[1])],
-                beta_model=self.beta_model               
+            self.tracker.save_alpha_state_dict(
+                self.alpha_model, self.ffnn_config, self.pca_components
             )
 
-        self.tracker.log_final_test(
-            alpha_model=self.alpha_model,
-            x_test=x_theta_test,
-            y_test=y_theta_test,
-            f1_thresh=0.5,                       # or a θ_val-fixed threshold
-            x_train=x_theta_train, y_train=y_theta_train,
+            try:
+                pca_means = getattr(self.dataset, "pca_means_tensor", None)
+            except Exception:
+                pca_means = None
 
-            # Existing jitter baseline (β)
-            jitter_n=self.traj_length,                # match per-episode synthetic count
-            jitter_scale=0.20,                   # 0.10–0.30 typical
+            # Build a multi-stage curriculum: dims 2..A (or up to A if A < 10)
+            if self.curriculum_learning:
+                A = self.pca_components
+                start_dim = min(2, A)
+                max_dim = min(10, A)   # if A < 10, stop at A
 
-            # (A) α_raw_original on ORIGINAL TRAIN (unbiased) mapped to θ
-            run_alpha_raw_original=True,
+                ks = list(range(start_dim, max_dim + 1))  # [2,3,...,10]
+                num_stages = len(ks)
 
-            # (B) α_same+REAL: add real minority from ORIGINAL TRAIN pool
-            run_alpha_plus_real=True,
-            alpha_plus_real_n=self.traj_length,       # keep parity with jitter/ctgan counts
+                curriculum_stages = []
+                for i, k in enumerate(ks):
+                    # thresholds spaced across [0, 1); last stage covers the tail
+                    th = i / float(num_stages)
+                    curriculum_stages.append((th, k))
+            else:
+                curriculum_stages = None
 
-            # (C) Alpha+CTGAN: add conditional CTGAN minority (trained in raw space)
-            run_alpha_plus_ctgan=False,
-            alpha_plus_ctgan_n=self.traj_length,      # same augmentation count for fairness
-            ctgan_epochs=300,                    # bump if you want more stable synth
-            cap_ctgan_train=None,                # or an int to cap CTGAN training rows
+            env = Environment(
+                curriculum=self.curriculum_learning,
+                target=1,
+                max_actions=self.traj_length,
+                device=self.device,
+                seed=self.seed,
+                pca_components=self.pca_components,
+                pca_means=pca_means,
+                total_episodes=self.episodes,
+                curriculum_stages=curriculum_stages,
+                real_minority_samples=real_minority_samples,
+            )
 
-            # Dataset settings for rebuilding the original pool
-            data_path=self.dataset.data_path,
-            bias_pct=self.bias_pct,
-            val_frac=0.20,
-            test_frac=0.20,
-            train_size=self.real_data_size                    
-        )
 
+
+            # ---------------- Episodes ----------------
+            for episode in range(self.episodes):
+                A = self.pca_components
+                if self.curriculum_learning:                 # <<< CHANGED
+                    D = 1 + A + A                            # <<< CHANGED
+                else:
+                    D = 2                                    # <<< CHANGED (legacy)
+
+                # Pre-allocate (GPU tensors)
+                states = torch.zeros(
+                    (self.traj_length, D),
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                actions = torch.zeros(
+                    (self.traj_length, A),
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                next_states = torch.zeros(
+                    (self.traj_length, D),
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                dones = torch.zeros(
+                    self.traj_length, dtype=torch.bool, device=self.device
+                )
+
+                x_syn_tensor = torch.zeros(
+                    (self.traj_length, A),
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                y_syn_tensor = torch.zeros(
+                    self.traj_length, dtype=torch.long, device=self.device
+                )
+
+                # Reset env — pass episode index so curriculum can schedule stages
+                if self.curriculum_learning:                 # <<< CHANGED
+                    state = env.reset(episode_idx=episode)   # <<< CHANGED
+                else:
+                    state = env.reset()                      # <<< CHANGED (still works; env has default)
+
+                # Reset beta to its initial snapshot each episode for a stable baseline
+                stale_beta_model = copy.deepcopy(self.beta_model)
+                self.beta_model.reset()
+
+                for t in range(self.traj_length):
+                    action = self.agent.predict(state)
+                    next_state, done, info = env.step(action, (t + 1))
+
+                    states[t] = state
+                    actions[t] = action
+                    next_states[t] = next_state
+                    dones[t] = done
+
+                    # In curriculum mode, use env's current_pca as the *actual* synthetic PCA point.
+                    # In non-curriculum mode, we keep the legacy behaviour: action == PCA point.
+                    if self.curriculum_learning:             # <<< CHANGED
+                        pca_sample = info.get("current_pca", action)
+                    else:
+                        pca_sample = action
+
+                    x_syn_tensor[t] = pca_sample             # <<< CHANGED (was: action)
+                    y_syn_tensor[t] = info["sampled_target"]  # 1 for minority
+
+                    state = next_state
+                    if done:
+                        break
+
+                T = t + 1 if done else self.traj_length
+                x_phi_t = x_syn_tensor[:T]
+                y_phi_t = y_syn_tensor[:T]
+
+                # Train beta on hybrid (real + synthetic for this episode)
+                x_hybrid = torch.cat([x_theta_train, x_phi_t])
+                y_hybrid = torch.cat([y_theta_train, y_phi_t])
+                self.beta_model = self.train_predictor_model(
+                    self.beta_model, x_hybrid, y_hybrid
+                )
+
+                progress = (episode + 1) / self.episodes
+
+                # Rewards (alpha baseline global + per-step local)
+                rewards, diagnostics = self.compute_reward(
+                    self.alpha_model,
+                    self.beta_model,
+                    stale_beta_model,
+                    x_theta_val,
+                    y_theta_val,
+                    x_phi_t,
+                    y_phi_t,
+                    progress=progress,
+                    f1_thresh=0.5,
+                    lambda_schedule=self.lambda_schedule,
+                    class_mode=("multiclass" if self.multiclass else "binary"),
+                )
+
+                # Truncate episode tensors and learn
+                states = states[:T]
+                actions = actions[:T]
+                next_states = next_states[:T]
+                dones = dones[:T]
+                rewards = rewards[:T]
+
+                self.agent.learn_trajectory(
+                    states, actions, rewards, next_states, dones, episode
+                )
+
+                reward_metrics = {
+                    "avg_reward": float(torch.mean(rewards)),
+                    "obj1_f1_minority_beta": float(diagnostics["global_reward"]),
+                    "obj2_local_useful_mean": float(diagnostics["local_reward"]),
+                    "macro_f1_beta": float(diagnostics["f1_macro_beta"]),
+                }
+
+                new_reward_metrics = {
+                    "judge_conf_mean": float(
+                        diagnostics.get("judge_conf_mean", float("nan"))
+                    ),
+                    "uncert_alpha_mean": float(
+                        diagnostics.get("uncert_alpha_mean", float("nan"))
+                    ),
+                    "alpha_wrong_rate": float(
+                        diagnostics.get("alpha_wrong_rate", float("nan"))
+                    ),
+                    "corr_factor_mean": float(
+                        0.5 + 0.5 * diagnostics.get("alpha_wrong_rate", 0.0)
+                    ),
+                    "f1_minority_alpha": float(diagnostics["f1_minority_alpha"]),
+                    "f1_minority_beta_stale": float(
+                        diagnostics["f1_minority_beta_stale"]
+                    ),
+                    "local_cap_frac": float(diagnostics["local_cap_frac"]),
+
+                    # 🔹 NEW diagnostics actually written to metrics.csv (prefixed as newr.*)
+                    "diag_mean_conf_all": float(
+                        diagnostics.get("diag_mean_conf_all", float("nan"))
+                    ),
+                    "diag_frac_mid_conf": float(
+                        diagnostics.get("diag_frac_mid_conf", float("nan"))
+                    ),
+                    "diag_gen_radius_mean": float(
+                        diagnostics.get("diag_gen_radius_mean", float("nan"))
+                    ),
+                    "diag_grad_norm": float(
+                        diagnostics.get("diag_grad_norm", float("nan"))
+                    ),
+                }
+
+
+                # Pull episode-level values from diagnostics
+                local_mean = float(diagnostics["local_reward"])
+                delta_val = float(diagnostics["delta_f1_val"])
+
+                # Update rolling buffers and compute correlation
+                self._local_buf.append(local_mean)
+                self._delta_buf.append(delta_val)
+                corr_local_delta = self._corr_local_delta()
+
+                alignment_metrics = {
+                    "delta_f1_val": delta_val,
+                    "corr_local_delta": float(corr_local_delta),
+                    "curriculum_stage": int(env.current_stage),
+                }
+
+                # Log
+                avg_reward = torch.mean(rewards)
+                self.tracker.log_episode(
+                    episode + 1,
+                    reward_metrics,      # Avg reward across trajectory
+                    new_reward_metrics,  # local/details
+                    alignment_metrics,   # global ΔF1, corr
+                )
+                # Save periodic snapshot and best-so-far synthetic
+                self.tracker.maybe_save_synthetic(
+                    episode_num=episode + 1,
+                    x_syn=x_phi_t,
+                    y_syn=y_phi_t,
+                    avg_reward=float(avg_reward),
+                    obj1=float(diagnostics["global_reward"]),
+                    obj2_mean=float(diagnostics["local_reward"]),
+                    global_f1=float(diagnostics["f1_macro_beta"]),
+                    feature_names=[f"pca_{i}" for i in range(x_phi_t.shape[1])],
+                    beta_model=self.beta_model,
+                )
+
+            # ---------------- Final test ----------------
+            self.tracker.log_final_test(
+                alpha_model=self.alpha_model,
+                x_test=x_theta_test,
+                y_test=y_theta_test,
+                f1_thresh=0.5,  # or a θ_val-fixed threshold
+                x_train=x_theta_train,
+                y_train=y_theta_train,
+                # Existing jitter baseline (β)
+                jitter_n=self.traj_length,  # match per-episode synthetic count
+                jitter_scale=0.20,          # 0.10–0.30 typical
+                # (A) α_raw_original on ORIGINAL TRAIN (unbiased) mapped to θ
+                run_alpha_raw_original=False,
+                # (B) α_same+REAL: add real minority from ORIGINAL TRAIN pool
+                run_alpha_plus_real=False,
+                alpha_plus_real_n=self.traj_length,
+                # (C) Alpha+CTGAN: add conditional CTGAN minority (trained in raw space)
+                run_alpha_plus_ctgan=True,
+                alpha_plus_ctgan_n=self.traj_length,
+                ctgan_epochs=6000,
+                cap_ctgan_train=None,
+                # Dataset settings for rebuilding the original pool
+                data_path=self.dataset.data_path,
+                bias_pct=self.bias_pct,
+                val_frac=0.20,
+                test_frac=0.20,
+                train_size=self.real_data_size,
+            )
 
         print(f"Total time {time.time() - start_time:.2f}s")
         print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
 
-
-import re
-
 def _slug(s: str) -> str:
+    import re
     return re.sub(r'[^A-Za-z0-9_.-]+', '-', s).strip('-')
 
-def run_one(dataset_name: str, device_str: str, seed: int, reward_mode: str,
-            multiclass: bool, majority_id: int, minority_id: int,
-            third_id: int | None, bias_pct: float, exp_group: str,
-            pca_components: int, traj_length: int, real_data_size: int):
-    print(f"\n=== RUN start | group={exp_group} | dev={device_str} | seed={seed} | mode={reward_mode} "
-          f"| multi={multiclass} | maj={majority_id} | min={minority_id} | third={third_id} | "
-          f"bias={bias_pct} | PCA={pca_components} | T={traj_length} | R={real_data_size} | ds={dataset_name} ===")
+
+def run_one_experiment(spec, seed, device):
+    """
+    Run a single (spec, seed) job on the given device.
+
+    NOTE: exp_group is now taken from spec["exp_group"] so that all seeds for the
+    same experiment share the same folder.
+    """
+    exp_group = spec["exp_group"]
+
+    print(f"[dispatcher] LAUNCH {spec['name']} (seed={seed}) "
+          f"on {device} · exp_group={exp_group}")
 
     trainer = Training(
         exp_group=exp_group,
-        dataset_name=dataset_name,
+        dataset_name=spec["dataset_name"],
         seed=seed,
-        device=device_str,
-        reward_mode=reward_mode,
-        multiclass=multiclass,
-        majority_id=majority_id,
-        minority_id=minority_id,
-        third_id=third_id,
-        bias_pct=bias_pct,
-        pca_components=pca_components,
-        traj_length=traj_length,
-        real_data_size=real_data_size,
+        device=device,
+        reward_mode="local_gauss",
+        multiclass=spec["multiclass"],
+        majority_id=spec["majority_id"],
+        minority_id=spec["minority_id"],
+        third_id=spec["third_id"],
+        bias_pct=spec["bias_pct"],
+        pca_components=spec["pca_components"],
+        traj_length=spec["traj_length"],
+        real_data_size=spec["real_data_size"],
+        curriculum_learning=spec.get("curriculum_learning", True),  # NEW: per-spec toggle
     )
+
+    trainer.lambda_schedule = spec["lambda_schedule"]
     trainer()
 
-    if torch.cuda.is_available() and 'cuda' in device_str:
-        torch.cuda.synchronize(torch.device(device_str))
+    if torch.cuda.is_available() and "cuda" in device:
+        torch.cuda.synchronize(torch.device(device))
         torch.cuda.empty_cache()
-    time.sleep(2)
 
 
-if __name__ == "__main__":
-    base_group = datetime.now().strftime("%Y%m%d%H%M%S")
-    devices = ["cuda:0"] if torch.cuda.is_available() else ["cpu"]
+# ---------------------------------------------------------------
+# FULL EXPERIMENT GRID (covers PCA, bias, dataset, direction)
+# ---------------------------------------------------------------
 
-    # Requested updates
-    seeds = [42, 123, 999, 2020, 5555]
-    reward_mode = "local_gauss"
+seeds = [42, 123]
 
-    pca_list = [2, 4, 6, 8]
-    bias_list = [0.25]  # keep as before unless you want a different bias grid
-    TRAJ_LENGTH = 2000
-    REAL_DATA_SIZE = 3000
+# RQ1 — PCA component sweep
+pca_list = [10]
 
-    # Sensor dataset only (activity IDs apply here)
-    sensor_pairs = [(4, 13), (12, 13)]
+# RQ2 — Representation bias sweep
+bias_list = [0.35]
 
+# RQ3 — Reward function
+reward_modes = ["local_gauss"]
+
+# RQ4 — Dataset comparison
+dataset_list = ["pamap2", "census_income"]
+
+# Global training settings
+lambda_grid    = [(0.8, 0.8)]
+
+TRAJ_LENGTH    = 2000
+REAL_DATA_SIZE = 3000
+
+# PAMAP2-specific (minority, majority) activity pairs
+pamap_sensor_pairs = [(13, 4), (13,12)]
+
+
+def build_experiments():
+    """
+    Build the full experiment grid.
+
+    Each spec gets a unique exp_group that is shared across seeds.
+    """
     exps = []
-    for pca in pca_list:
-        for bias in bias_list:
-            for (min_id, maj_id) in sensor_pairs:
-                name = f"pamap2_PCA{pca}_Bias{bias}_Min{min_id}_Maj{maj_id}_T{TRAJ_LENGTH}_R{REAL_DATA_SIZE}"
-                exps.append(dict(
-                    name=name,
-                    dataset_name="pamap2",       # <-- adjust to your Dataset class key if different
-                    multiclass=False,
-                    minority_id=min_id,
-                    majority_id=maj_id,
-                    third_id=None,
-                    bias_pct=bias,
-                    pca_components=pca,
-                    traj_length=TRAJ_LENGTH,
-                    real_data_size=REAL_DATA_SIZE,
-                ))
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
 
-    # Dispatcher
+    for dataset_name in dataset_list:
+        # dataset-specific class labels
+        if dataset_name == "pamap2":
+            pairs = pamap_sensor_pairs
+        else:
+            # census_income is binary {0, 1} → treat 1 as minority, 0 as majority
+            pairs = [(1, 0)]
+
+        for minority_id, majority_id in pairs:
+            for pca in pca_list:
+                for bias in bias_list:
+                    for reward_mode in reward_modes:
+                        for lam in lambda_grid:
+
+                            name = (
+                                f"{dataset_name}_PCA{pca}_Bias{bias}"
+                                f"_Min{minority_id}_Maj{majority_id}"
+                                f"_Lam{lam[0]:.2f}-{lam[1]:.2f}"
+                                f"_T{TRAJ_LENGTH}_R{REAL_DATA_SIZE}"
+                            )
+
+                            exp_group = f"{timestamp}__{_slug(name)}"
+
+                            exps.append(dict(
+                                name=name,
+                                exp_group=exp_group,          # NEW: shared across seeds
+                                dataset_name=dataset_name,
+                                minority_id=minority_id,
+                                majority_id=majority_id,
+                                third_id=None,
+                                multiclass=False,
+                                bias_pct=bias,
+                                pca_components=pca,
+                                reward_mode=reward_mode,
+                                lambda_schedule=lam,
+                                traj_length=TRAJ_LENGTH,
+                                real_data_size=REAL_DATA_SIZE,
+                                curriculum_learning=True,   # default: curriculum ON
+                            ))
+    return exps
+
+
+def build_test_experiments():
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    dataset_name = "census_income"
+    minority_id, majority_id = 1, 0
+    pca = 4
+    bias = 0.35
+    lam = (0.80, 0.8)
+
+    name = (
+        f"TEST_{dataset_name}_PCA{pca}_Bias{bias}"
+        f"_Min{minority_id}_Maj{majority_id}"
+        f"_Lam{lam[0]:.2f}-{lam[1]:.2f}_T500_R1000"
+    )
+    exp_group = f"{timestamp}__{_slug(name)}"
+
+    return [dict(
+        name=name,
+        exp_group=exp_group,
+        dataset_name=dataset_name,
+        minority_id=minority_id,
+        majority_id=majority_id,
+        third_id=None,
+        multiclass=False,
+        bias_pct=bias,
+        pca_components=pca,
+        reward_mode="local_gauss",
+        lambda_schedule=lam,
+        traj_length=500,     # shorter traj for quick test
+        real_data_size=1000, # smaller training set for speed
+        curriculum_learning=True,  # explicitly test curriculum
+    )]
+
+
+# ---------------------------------------------------------------
+# Parallel dispatch to cuda:0 and cuda:1, grouping seeds per spec
+# ---------------------------------------------------------------
+if __name__ == "__main__":
+    devices = ["cuda:0"]
+
+    # Toggle this manually if you want a very small curriculum test run.
+    USE_TEST_EXPERIMENTS = False
+
+    if USE_TEST_EXPERIMENTS:
+        exps = build_test_experiments()
+        run_seeds = [42]      # single seed for quick sanity check
+    else:
+        exps = build_experiments()
+        run_seeds = seeds     # full seed set
+
+    # Assign each experiment spec to a GPU in round-robin,
+    # then expand to (spec, seed) jobs. This guarantees all
+    # seeds for a given spec run on the same GPU and share exp_group.
+    jobs_by_gpu = {dev: [] for dev in devices}
+
     for i, spec in enumerate(exps):
-        for seed in seeds:
-            dev = devices[i % len(devices)]
-            exp_group = f"{base_group}__{_slug(spec['name'])}"
-            print(f"\n[dispatcher] launching {spec['name']} (seed={seed}) | group={exp_group} on {dev}")
+        dev = devices[i % len(devices)]
+        for sd in run_seeds:
+            jobs_by_gpu[dev].append((spec, sd))
 
-            run_one(
-                dataset_name=spec["dataset_name"],
-                device_str=dev,
-                seed=seed,
-                reward_mode=reward_mode,
-                multiclass=spec["multiclass"],
-                majority_id=spec["majority_id"],
-                minority_id=spec["minority_id"],
-                third_id=spec["third_id"],
-                bias_pct=spec["bias_pct"],
-                exp_group=exp_group,
-                pca_components=spec["pca_components"],
-                traj_length=spec["traj_length"],
-                real_data_size=spec["real_data_size"],
-            )
+    gpu0_jobs = jobs_by_gpu[devices[0]]
+    gpu1_jobs = jobs_by_gpu[devices[1]]
 
-    print("\n[dispatcher] all sequential runs complete.")
+    print(f"[dispatcher-full] Total experiments: {len(exps)}")
+    print(f"[dispatcher-full] Total jobs: {len(gpu0_jobs) + len(gpu1_jobs)}")
+    print(f"[dispatcher-full] cuda:0 receives {len(gpu0_jobs)} jobs")
+    print(f"[dispatcher-full] cuda:1 receives {len(gpu1_jobs)} jobs")
 
 
+    # Save job lists for workers (spec dict + seed are JSON-serializable)
+    with open("gpu0_jobs.json", "w") as f:
+        json.dump(gpu0_jobs, f)
+    with open("gpu1_jobs.json", "w") as f:
+        json.dump(gpu1_jobs, f)
 
+    # Launch workers
+    p0 = subprocess.Popen(["python", "worker_entry.py", "0"])
+    p1 = subprocess.Popen(["python", "worker_entry.py", "1"])
+
+    p0.wait()
+    p1.wait()
+
+    print("\n[dispatcher-full] ALL RUNS COMPLETE.")

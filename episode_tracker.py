@@ -57,9 +57,6 @@ def _fingerprint_run_stats(
     add_key("REAL",  "REAL_DATA_SIZE", int)
     add_key("BIAS",  "BIAS_PCT",       lambda x: str(x).rstrip("0").rstrip(".") if isinstance(x, float) else x)
 
-    # filesystem-safe date; does NOT affect the hash below
-    add_literal("DATE", datetime.now().strftime("%Y%m%d"))
-
     add_key("G",     "EXP_GROUP",      lambda s: str(s)[:12])
 
     slug = "_".join(parts) if parts else "exp"
@@ -68,10 +65,6 @@ def _fingerprint_run_stats(
     h = hashlib.sha1(j).hexdigest()[:8]
     experiment_id = f"{slug}_{h}"
     return experiment_id, rs
-
-
-
-
 
 class _TeeLogger:
     def __init__(self, *streams):
@@ -414,7 +407,7 @@ class EpisodeTracker:
                     run_alpha_plus_real: bool = False,
                     alpha_plus_real_n: int = 2000,
                     # NEW CTGAN baseline toggles/params
-                    run_alpha_plus_ctgan: bool = False,
+                    run_alpha_plus_ctgan: bool = True,
                     alpha_plus_ctgan_n: int = 2000,
                     ctgan_epochs: int = 300,
                     cap_ctgan_train: int | None = None,

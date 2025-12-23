@@ -3,5 +3,5 @@
 data/Optional/*
 data/Protocol/*
 .idea/*
-training_runs/
+training_runs*/
 datasets/

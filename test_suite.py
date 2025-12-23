@@ -141,6 +141,79 @@ class TestSuite:
             pca_components=pca_components,
             device=device,
         )
+    def _ctgan_train_conditional(
+        self,
+        X_df: pd.DataFrame,
+        y: np.ndarray,
+        *,
+        label_col: str = "__y__",
+        ctgan_epochs: int = 300,
+        seed: int | None = None,
+        cap_ctgan_train: int | None = None,
+    ):
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if not _HAS_SDV:
+            raise RuntimeError("SDV/CTGAN not installed")
+
+        df = X_df.copy().reset_index(drop=True)
+        df[label_col] = np.asarray(y, dtype=int)
+
+        if cap_ctgan_train is not None and cap_ctgan_train < len(df):
+            df = df.sample(n=int(cap_ctgan_train), random_state=seed).reset_index(drop=True)
+
+        # Build metadata and force label to categorical
+        md = SingleTableMetadata()
+        md.detect_from_dataframe(df)
+        try:
+            md.update_column(label_col, sdtype="categorical")
+        except Exception:
+            pass
+
+        synth = CTGANSynthesizer(metadata=md, epochs=int(ctgan_epochs))
+        synth.fit(df)
+        return synth
+
+
+    def _ctgan_sample_minority(
+        self,
+        synth,
+        n_samples: int,
+        *,
+        label_col: str = "__y__",
+        label_value: int = 1,
+    ) -> pd.DataFrame:
+        n_samples = int(n_samples)
+
+        # SDV >= 1.0: sample(num_rows=..., conditions=DataFrame)
+        cond_df = pd.DataFrame({label_col: [label_value] * n_samples})
+        try:
+            return synth.sample(num_rows=n_samples, conditions=cond_df)
+        except Exception:
+            pass
+
+        # Older SDV: sample_conditions([{label_col: value, "num_rows": n}])
+        try:
+            out = synth.sample_conditions([{label_col: label_value, "num_rows": n_samples}])
+            if isinstance(out, list):
+                out = pd.concat(out, ignore_index=True)
+            return out
+        except Exception:
+            pass
+
+        # Fallback: unconditional sample then filter
+        tmp = synth.sample(num_rows=max(n_samples * 2, 1000))
+        if label_col in tmp.columns:
+            tmp = tmp[tmp[label_col] == label_value]
+            if len(tmp) >= n_samples:
+                return tmp.sample(n=n_samples, replace=False).reset_index(drop=True)
+            # pad if short
+            if len(tmp) > 0:
+                need = n_samples - len(tmp)
+                return pd.concat([tmp, tmp.sample(n=need, replace=True)], ignore_index=True)
+        # Replace the final return with:
+        return pd.DataFrame()  # empty; caller checks len() and skips cleanly
+ # last-resort empty frame
 
     # ---------------- Existing baselines (β) ----------------
     def run_oversample_baseline(self, x_train, y_train, x_test, y_test,
@@ -508,6 +581,7 @@ class TestSuite:
         Alpha + CTGAN: add synthetic minority (conditioned on label) mapped to θ-space.
         Uses Dataset.ctgan_training_view(). Skips cleanly if not supported (e.g., PAMAP2).
         """
+        print(f"[TestSuite] CTGAN Running...")
         if not _HAS_SDV:
             print("[TestSuite] CTGAN baseline skipped: SDV/CTGAN not installed.")
             return {
@@ -661,37 +735,37 @@ class TestSuite:
                 b_f1_min = b_f1_maj = b_f1_w = b_f1_macro = b_brier = float('nan')
 
         # ----- built-in β baselines -----
-        jitter_metrics = self.run_jitter_baseline(
-            x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
-            f1_thresh=f1_thresh, jitter_n=jitter_n, jitter_scale=jitter_scale, seed=seed
-        ) if (x_train is not None and y_train is not None) else {}
+        # jitter_metrics = self.run_jitter_baseline(
+        #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
+        #     f1_thresh=f1_thresh, jitter_n=jitter_n, jitter_scale=jitter_scale, seed=seed
+        # ) if (x_train is not None and y_train is not None) else {}
 
-        oversample_metrics = self.run_oversample_baseline(
-            x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
-            f1_thresh=f1_thresh, batch_size=32, seed=seed
-        ) if (x_train is not None and y_train is not None) else {}
+        # oversample_metrics = self.run_oversample_baseline(
+        #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
+        #     f1_thresh=f1_thresh, batch_size=32, seed=seed
+        # ) if (x_train is not None and y_train is not None) else {}
 
-        undersample_metrics = self.run_undersample_baseline(
-            x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
-            f1_thresh=f1_thresh, batch_size=32, seed=seed
-        ) if (x_train is not None and y_train is not None) else {}
+        # undersample_metrics = self.run_undersample_baseline(
+        #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
+        #     f1_thresh=f1_thresh, batch_size=32, seed=seed
+        # ) if (x_train is not None and y_train is not None) else {}
 
-        # ----- NEW α baselines (dataset-driven) -----
-        alpha_raworig_metrics = self.run_alpha_raw_original_train(
-            x_test=x_test, y_test=y_test,
-            data_path=data_path,  # ignored, for back-compat
-            bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac,
-            train_size=train_size, pca_components=int(x_test.shape[1]), batch_size=64, f1_thresh=f1_thresh
-        ) if run_alpha_raw_original else {}
+        # # ----- NEW α baselines (dataset-driven) -----
+        # alpha_raworig_metrics = self.run_alpha_raw_original_train(
+        #     x_test=x_test, y_test=y_test,
+        #     data_path=data_path,  # ignored, for back-compat
+        #     bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac,
+        #     train_size=train_size, pca_components=int(x_test.shape[1]), batch_size=64, f1_thresh=f1_thresh
+        # ) if run_alpha_raw_original else {}
 
-        alpha_plusreal_metrics = self.run_alpha_same_train_plus_real_minority(
-            x_train_used=x_train, y_train_used=y_train, x_test=x_test, y_test=y_test,
-            real_add_n=int(alpha_plus_real_n),
-            data_path=data_path,  # ignored, for back-compat
-            bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac, train_size=train_size,
-            pca_components=int(x_train.shape[1]) if x_train is not None else int(x_test.shape[1]),
-            batch_size=64, f1_thresh=f1_thresh, seed=seed
-        ) if (run_alpha_plus_real and x_train is not None and y_train is not None) else {}
+        # alpha_plusreal_metrics = self.run_alpha_same_train_plus_real_minority(
+        #     x_train_used=x_train, y_train_used=y_train, x_test=x_test, y_test=y_test,
+        #     real_add_n=int(alpha_plus_real_n),
+        #     data_path=data_path,  # ignored, for back-compat
+        #     bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac, train_size=train_size,
+        #     pca_components=int(x_train.shape[1]) if x_train is not None else int(x_test.shape[1]),
+        #     batch_size=64, f1_thresh=f1_thresh, seed=seed
+        # ) if (run_alpha_plus_real and x_train is not None and y_train is not None) else {}
 
         alpha_ctgan_metrics = self.run_ctgan_baseline(
             x_train_used=x_train, y_train_used=y_train, x_test=x_test, y_test=y_test,

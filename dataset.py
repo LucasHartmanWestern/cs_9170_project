@@ -704,81 +704,253 @@ class Dataset:
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 
+    def _pamap2_build_feature_table(self,
+                                    win_seconds=5.0,
+                                    step_seconds=2.5,
+                                    drop_magnetometers=True,
+                                    use_vector_norms=True,
+                                    stats=("std","rms")):
+        """
+        Build the PAMAP2 per-window feature table used by split_pamap2.
+        Returns:
+        feat_df: DataFrame [n_windows x (features + subject_id)]
+        y_all:   np.ndarray[int] labels per window (0=majority, 1=minority[, 2=third if multiclass])
+        subj_all: np.ndarray[str] subject ids per window
+        feature_cols: list[str] numeric feature columns (EXCLUDES 'subject_id')
+        """
+        rng = np.random.RandomState(self.seed)
+
+        # constants
+        FS = 100
+        WIN = int(win_seconds * FS)
+        STEP = int(step_seconds * FS)
+        data_dir = Path(self.data_path)
+
+        imu_pos = ["hand", "chest", "ankle"]
+        ACC16 = ["acc16g_x", "acc16g_y", "acc16g_z"]
+        GYR   = ["gyro_x", "gyro_y", "gyro_z"]
+        MAG   = ["mag_x", "mag_y", "mag_z"]
+
+        def colnames():
+            cols = ["timestamp", "activity_id", "heart_rate"]
+            sub = ["temp","acc16g_x","acc16g_y","acc16g_z","acc6g_x","acc6g_y","acc6g_z",
+                "gyro_x","gyro_y","gyro_z","mag_x","mag_y","mag_z",
+                "orient_w","orient_x","orient_y","orient_z"]
+            for p in imu_pos:
+                cols += [f"{p}_{s}" for s in sub]
+            return cols
+
+        def parse_sid(path):
+            m = re.search(r"subject(\d+)", Path(path).stem.lower())
+            return m.group(1) if m else "unknown"
+
+        # load .dat
+        files = []
+        for sub in ["Protocol","Optional","protocol","optional"]:
+            d = data_dir / sub
+            if d.exists():
+                files += list(d.glob("subject*.dat"))
+        if not files:
+            raise FileNotFoundError(f"No .dat files found under {data_dir}")
+
+        dfs = []
+        for f in sorted(files):
+            df = pd.read_csv(f, sep=r"\s+", header=None, names=colnames(),
+                            engine="python", na_values=["NaN","nan"])
+            df["subject_id"] = parse_sid(f)
+            dfs.append(df)
+        df = pd.concat(dfs, ignore_index=True)
+
+        # keep target activities
+        include_third_label = self.multiclass
+        keep_ids = [self.MAJORITY_ID, self.MINORITY_ID] if not include_third_label \
+                else [self.MAJORITY_ID, self.MINORITY_ID, self.third_id]
+        df = df[df["activity_id"].isin(keep_ids)].copy()
+
+        # map labels: majority->0, minority->1, optional third->2
+        mapping = {self.MAJORITY_ID: 0, self.MINORITY_ID: 1}
+        if include_third_label:
+            mapping[self.third_id] = 2
+        df["y"] = df["activity_id"].map(mapping)
+
+        # per-subject interpolation
+        num = df.select_dtypes(include=[np.number]).columns.tolist()
+        num = [c for c in num if c not in ("activity_id","y")]
+        df = df.sort_values(["subject_id","timestamp"]).groupby("subject_id", group_keys=False).apply(
+            lambda g: g.assign(**{c: g[c].interpolate(limit_direction="both") for c in num})
+        )
+
+        # base channels
+        keep_triplets = [("acc", ACC16), ("gyr", GYR)]
+        if not drop_magnetometers:
+            keep_triplets.append(("mag", MAG))
+
+        base_cols = ["heart_rate"]
+        if use_vector_norms:
+            for p in ["hand","chest","ankle"]:
+                for name, axes in keep_triplets:
+                    cols = [f"{p}_{a}" for a in axes]
+                    df[f"{p}_{name}_norm"] = np.sqrt((df[cols].values ** 2).sum(axis=1))
+                    base_cols.append(f"{p}_{name}_norm")
+        else:
+            for p in ["hand","chest","ankle"]:
+                for _, axes in keep_triplets:
+                    for a in axes:
+                        base_cols.append(f"{p}_{a}")
+
+        # window → features
+        def compute_feats(W: pd.DataFrame):
+            out = {}
+            if "std" in stats:
+                out.update(W.std(ddof=1).add_suffix("__std").to_dict())
+            if "rms" in stats:
+                out.update((np.sqrt((W**2).mean())).add_suffix("__rms").to_dict())
+            if "mean" in stats:
+                out.update(W.mean().add_suffix("__mean").to_dict())
+            return out
+
+        rows, labels, subjects = [], [], []
+        df = df.sort_values(["subject_id","timestamp"]).reset_index(drop=True)
+        for sid, g in df.groupby("subject_id", sort=False):
+            g = g.reset_index(drop=True)
+            n = len(g)
+            for start in range(0, max(0, n - WIN + 1), STEP):
+                w = g.iloc[start:start + WIN]
+                if len(w) < WIN: 
+                    continue
+                y_win = int(np.bincount(w["y"].astype(int)).argmax())
+                feats = compute_feats(w[base_cols])
+                feats["subject_id"] = sid
+                rows.append(feats); labels.append(y_win); subjects.append(sid)
+
+        feat_df = pd.DataFrame(rows).fillna(0.0)
+        y_all   = np.asarray(labels, dtype=int)
+        subj_all= np.asarray(subjects)
+
+        feature_cols = [c for c in feat_df.columns if c != "subject_id"]
+        return feat_df, y_all, subj_all, feature_cols
 
     def ctgan_training_view(
         self, *, bias_pct: float, val_frac: float, test_frac: float,
         train_size: int | None, pca_components: int, device: torch.device
     ):
         """
-        Provide RAW unbiased TRAIN and fitted transforms (from TRAIN-biased)
-        so TestSuite can train CTGAN in raw space and map samples into θ-space.
+        Provide RAW unbiased TRAIN and the fitted transforms (from TRAIN-biased)
+        so CTGAN can train in raw feature space and later map samples into θ-space.
+
+        Returns dict with:
+        - supported: bool
+        - X_train_unbiased_df: pd.DataFrame    (raw feature columns only; no label)
+        - y_train_unbiased: np.ndarray[int]    (binary 0/1 with 1 = rope/minority)
+        - encoder: OneHotEncoder | None        (fitted on TRAIN-biased; None for numeric-only)
+        - scaler: StandardScaler               (fitted on TRAIN-biased)
+        - pca: PCA                             (fitted on TRAIN-biased)
+        - cat_cols: list[str]
+        - num_cols: list[str]
         """
+        rng = np.random.RandomState(getattr(self, "seed", 0))
+
+        def _ensure_binary_01(y_like):
+            y = np.asarray(y_like)
+            u = np.unique(y)
+            # Common case: labels already in {0,1} or {0,1,2} with rope==1
+            if set(u).issubset({0, 1}):
+                return y.astype(int)
+            if set(u).issubset({0, 1, 2}):
+                return (y == 1).astype(int)
+            # Otherwise: allow a dataset-level rope id, else pick the minority as positive
+            rope_id = getattr(self, "rope_class_id", None)
+            if rope_id is None:
+                vals, counts = np.unique(y, return_counts=True)
+                rope_id = vals[np.argmin(counts)]
+            return (y == rope_id).astype(int)
+
+        def _fit_pca_safe(pca_obj, X):
+            # clip n_components if user asked for more than columns
+            n_cols = X.shape[1]
+            if pca_obj.n_components is None:
+                return pca_obj.fit_transform(X)
+            if isinstance(pca_obj.n_components, int) and pca_obj.n_components > n_cols:
+                pca_obj.n_components = n_cols
+            return pca_obj.fit_transform(X)
+
         if self.dataset_name == "census_income":
+            # --- Load raw Adult/Census Income data ---
             column_names = [
                 "age","workclass","fnlwgt","education","education-num","marital-status",
                 "occupation","relationship","race","sex","capital-gain","capital-loss",
                 "hours-per-week","native-country","income"
             ]
-            X_df_raw = pd.read_csv(self.data_path, header=None, names=column_names,
-                                na_values="?", skipinitialspace=True)
-            y_raw = np.where(X_df_raw["income"].isin([">50K",">50K."]), 1, 0).astype(int)
+            X_df_raw = pd.read_csv(
+                self.data_path, header=None, names=column_names,
+                na_values="?", skipinitialspace=True
+            )
+            y_raw = np.where(X_df_raw["income"].isin([">50K", ">50K."]), 1, 0).astype(int)
             X_df_raw = X_df_raw.drop(columns=["income"])
 
-            cat_cols = [c for c in X_df_raw.columns if X_df_raw[c].dtype.name in ["category","object","bool"]]
+            # Split cat/num columns
+            cat_cols = [c for c in X_df_raw.columns if X_df_raw[c].dtype.name in ("object", "category", "bool")]
             num_cols = [c for c in X_df_raw.columns if np.issubdtype(X_df_raw[c].dtype, np.number)]
 
+            # --- Stratified split into train/val/test on UNBIASED labels ---
             X_train_df, X_temp_df, y_train, y_temp = train_test_split(
                 X_df_raw, y_raw, test_size=(val_frac + test_frac),
-                random_state=self.seed, stratify=y_raw
+                random_state=getattr(self, "seed", 0), stratify=y_raw
             )
-            rel_test = test_frac / (val_frac + test_frac)
-            _X_val_df, _X_test_df, _y_val, _y_test = train_test_split(
+            rel_test = test_frac / max(1e-12, (val_frac + test_frac))
+            _, _, _, _ = train_test_split(  # (kept for completeness, but not used below)
                 X_temp_df, y_temp, test_size=rel_test,
-                random_state=self.seed, stratify=y_temp
+                random_state=getattr(self, "seed", 0), stratify=y_temp
             )
 
-            def apply_bias(df_split, y_split, target_minority_pct):
-                df = df_split.copy()
-                df["__y__"] = y_split
-                maj = df[df["__y__"] == 0]; mino = df[df["__y__"] == 1]
-                if len(maj)==0 or len(mino)==0:
-                    out = df
+            # UNBIASED TRAIN (this is what CTGAN should see)
+            X_train_unbiased_df = X_train_df.reset_index(drop=True)
+            y_train_unbiased = _ensure_binary_01(y_train)
+
+            # --- Build a TRAIN-biased view ONLY to fit transforms (to match θ space of your runs) ---
+            def apply_bias(df_split, y_split, target_minority_pct, seed_val):
+                dfb = df_split.copy()
+                dfb["__y__"] = _ensure_binary_01(y_split)
+                maj = dfb[dfb["__y__"] == 0]
+                mino = dfb[dfb["__y__"] == 1]
+                if len(maj) == 0 or len(mino) == 0:
+                    out = dfb
                 else:
-                    keep_min = int(np.floor((target_minority_pct * len(maj)) / (1 - target_minority_pct)))
+                    keep_min = int(np.floor((target_minority_pct * len(maj)) / max(1e-12, (1 - target_minority_pct))))
                     keep_min = min(len(mino), max(1, keep_min))
-                    mino_b = mino.sample(n=keep_min, random_state=self.seed, replace=False)
-                    out = pd.concat([maj, mino_b], axis=0).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
+                    mino_b = mino.sample(n=keep_min, random_state=seed_val, replace=False)
+                    out = pd.concat([maj, mino_b], axis=0).sample(frac=1.0, random_state=seed_val).reset_index(drop=True)
                 y_out = out["__y__"].to_numpy(dtype=int)
                 X_out = out.drop(columns=["__y__"])
                 return X_out, y_out
 
-            # unbiased train for CTGAN
-            X_train_unbiased_df, y_train_unbiased = X_train_df.copy(), y_train.copy()
-
-            # TRAIN-biased to fit enc/scale/PCA (to map CTGAN samples → θ)
-            X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, float(bias_pct))
+            X_train_biased_df, y_train_biased = apply_bias(
+                X_train_df, y_train, float(bias_pct), seed_val=getattr(self, "seed", 0)
+            )
             if train_size is not None and train_size < len(X_train_biased_df):
                 X_train_biased_df, _, y_train_biased, _ = train_test_split(
                     X_train_biased_df, y_train_biased,
-                    train_size=train_size, random_state=self.seed, stratify=y_train_biased
+                    train_size=train_size, random_state=getattr(self, "seed", 0),
+                    stratify=y_train_biased
                 )
 
+            # --- Fit transforms on TRAIN-biased ---
             try:
                 encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-            except TypeError:
+            except TypeError:  # sklearn < 1.2
                 encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
             scaler = StandardScaler()
-            pca    = PCA(n_components=pca_components)
+            pca = PCA(n_components=pca_components, svd_solver="full", random_state=getattr(self, "seed", 0))
 
-            Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_biased_df),0))
-            Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])   if len(num_cols) else np.empty((len(X_train_biased_df),0))
+            Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_biased_df), 0))
+            Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])   if len(num_cols) else np.empty((len(X_train_biased_df), 0))
             Xtr_all = np.hstack([Xtr_num, Xtr_cat])
-            _ = pca.fit_transform(Xtr_all)
+            _ = _fit_pca_safe(pca, Xtr_all)
 
             return {
                 "supported": True,
-                "X_train_unbiased_df": X_train_unbiased_df.reset_index(drop=True),
-                "y_train_unbiased": y_train_unbiased,
+                "X_train_unbiased_df": X_train_unbiased_df,  # raw features (no label)
+                "y_train_unbiased": y_train_unbiased.astype(int),
                 "encoder": encoder,
                 "scaler": scaler,
                 "pca": pca,
@@ -787,35 +959,83 @@ class Dataset:
             }
 
         elif self.dataset_name == "pamap2":
-            # Featurized numeric table → we can still support CTGAN in raw feature space.
-            # Build same feature_df as in split_pamap2, then subject split; use unbiased TRAIN
-            # for CTGAN, and fit scaler+PCA on TRAIN-biased (to map samples → θ).
-            # (Identical to the PAMAP2 path above, but we return the pieces.)
-            # Reuse the previous method to avoid code duplication:
-            #   - Build feat_df, y_all, subj_all (same code as in rebuild_original_train_pool_theta)
-            #   - Get X_train_unbiased_df, y_train_unbiased
-            #   - Build X_train_biased_df for fitting scaler+pca
-            #   - Return with encoder=None, cat_cols=[], num_cols=list of features
-            # To keep this concise, call the same block and return pieces:
-
-            # Build everything once:
-            X_pool_theta, y_pool_theta = self.rebuild_original_train_pool_theta(
-                bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac,
-                train_size=train_size, pca_components=pca_components, device=torch.device("cpu")
+            # --- Build numeric feature table with subject ids (your helper is assumed to exist) ---
+            feat_df, y_all, subj_all, feature_cols = self._pamap2_build_feature_table(
+                win_seconds=5.0, step_seconds=2.5,
+                drop_magnetometers=True, use_vector_norms=True, stats=("std", "rms")
             )
-            # To provide CTGAN RAW view, we need the raw unbiased TRAIN feature table again.
-            # We re-create minimal parts quickly (same as above) but only to extract the tables:
 
-            # (Tiny helper to avoid duplicating a very long block in this snippet:)
-            def _pamap2_feature_table():
-                # return (feat_df, y_all, subj_all, base for train/val/test split)
-                # For brevity here, you can factor the long building code into a private
-                # _build_pamap2_feature_table(seed) in your class and reuse it in both places.
-                raise NotImplementedError  # <--- optional: factorization idea
+            # Ensure binary 0/1 labels with 1=rope/minority
+            y_all = _ensure_binary_01(y_all)
 
-            # If you prefer not to factor now, simply return unsupported and the testsuite will skip CTGAN:
-            return {"supported": False}
+            # --- Subject-aware split to get UNBIASED TRAIN for CTGAN ---
+            unique_subjects = np.unique(subj_all)
+            rng.shuffle(unique_subjects)
+            n_subj = len(unique_subjects)
+            n_test = max(1, int(round(test_frac * n_subj)))
+            n_val  = max(1, int(round(val_frac  * n_subj)))
+            if n_test + n_val >= n_subj:
+                n_test = max(1, n_test)
+                n_val  = max(1, min(n_val, n_subj - n_test - 1))
+
+            test_subj = unique_subjects[:n_test]
+            val_subj  = unique_subjects[n_test:n_test + n_val]
+            train_subj= unique_subjects[n_test + n_val:]
+
+            m_train = np.isin(subj_all, train_subj)
+
+            # UNBIASED TRAIN for CTGAN (drop subject id; keep numeric features only)
+            X_train_unbiased_df = feat_df.loc[m_train, feature_cols].reset_index(drop=True)
+            y_train_unbiased    = y_all[m_train].astype(int)
+
+            # --- Build TRAIN-biased view to FIT transforms (numeric only) ---
+            def apply_bias_rope(X_df, y_vec, target_minority_pct, seed_val):
+                dfb = X_df.copy()
+                dfb["__y__"] = y_vec
+                df_nonrope = dfb[dfb["__y__"] == 0]
+                df_rope    = dfb[dfb["__y__"] == 1]
+                if len(df_nonrope) == 0 or len(df_rope) == 0:
+                    out = dfb
+                else:
+                    n_nonrope = len(df_nonrope)
+                    n_rope_keep = int(np.floor((target_minority_pct * n_nonrope) / max(1e-12, (1 - target_minority_pct))))
+                    n_rope_keep = min(len(df_rope), max(1, n_rope_keep))
+                    df_rope_b = df_rope.sample(n=n_rope_keep, random_state=seed_val, replace=False)
+                    out = pd.concat([df_nonrope, df_rope_b], axis=0).sample(frac=1.0, random_state=seed_val).reset_index(drop=True)
+                y_out = out["__y__"].to_numpy(dtype=int)
+                X_out = out.drop(columns=["__y__"])
+                return X_out, y_out
+
+            X_train_biased_df, y_train_biased = apply_bias_rope(
+                X_train_unbiased_df, y_train_unbiased, float(bias_pct), seed_val=rng.randint(0, 10**6)
+            )
+            if train_size is not None and train_size < len(X_train_biased_df):
+                X_train_biased_df, _, y_train_biased, _ = train_test_split(
+                    X_train_biased_df, y_train_biased,
+                    train_size=train_size, random_state=rng.randint(0, 10**6),
+                    stratify=y_train_biased
+                )
+
+            # --- Fit transforms on TRAIN-biased (numeric only) ---
+            scaler = StandardScaler()
+            Xtr_z  = scaler.fit_transform(X_train_biased_df.values)
+            pca    = PCA(n_components=pca_components, svd_solver="full", random_state=getattr(self, "seed", 0))
+            _      = _fit_pca_safe(pca, Xtr_z)
+
+            return {
+                "supported": True,
+                "X_train_unbiased_df": X_train_unbiased_df,  # numeric-only
+                "y_train_unbiased": y_train_unbiased,
+                "encoder": None,           # no categoricals
+                "scaler": scaler,
+                "pca": pca,
+                "cat_cols": [],
+                "num_cols": feature_cols,  # columns in X_train_unbiased_df
+            }
 
         else:
+            # Unknown dataset → report unsupported cleanly
             return {"supported": False}
+
+
 
