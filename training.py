@@ -848,52 +848,107 @@ def build_test_experiments():
     )]
 
 
-# ---------------------------------------------------------------
-# Parallel dispatch to cuda:0 and cuda:1, grouping seeds per spec
-# ---------------------------------------------------------------
 if __name__ == "__main__":
-    devices = ["cuda:0"]
+    import os
+    import json
+    import subprocess
+    import sys
+
+    def _visible_gpu_count() -> int:
+        """
+        On DRAC, SLURM usually sets CUDA_VISIBLE_DEVICES to the GPUs you requested.
+        Inside the job, those map to cuda:0..cuda:N-1.
+        Locally, if no mask is set, fall back to torch.cuda.device_count().
+        """
+        cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+        if cvd:
+            parts = [p.strip() for p in cvd.split(",") if p.strip() != ""]
+            return len(parts)
+        try:
+            import torch
+            return torch.cuda.device_count()
+        except Exception:
+            return 0
+
+    def _json_safe(obj):
+        """
+        Ensure job specs are JSON-serializable (handles numpy scalars/arrays, torch tensors).
+        If your specs are already plain dict/float/int/str, this is harmless.
+        """
+        try:
+            import numpy as np
+        except Exception:
+            np = None
+        try:
+            import torch
+        except Exception:
+            torch = None
+
+        if torch is not None and isinstance(obj, torch.Tensor):
+            return obj.detach().cpu().tolist()
+        if np is not None:
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, (np.integer, np.floating, np.bool_)):
+                return obj.item()
+        if isinstance(obj, dict):
+            return {str(k): _json_safe(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [_json_safe(v) for v in obj]
+        return obj
 
     # Toggle this manually if you want a very small curriculum test run.
-    USE_TEST_EXPERIMENTS = False
+    USE_TEST_EXPERIMENTS = True
 
     if USE_TEST_EXPERIMENTS:
         exps = build_test_experiments()
-        run_seeds = [42]      # single seed for quick sanity check
+        run_seeds = [42]  # single seed for quick sanity check
     else:
         exps = build_experiments()
-        run_seeds = seeds     # full seed set
+        run_seeds = seeds  # full seed set
 
-    # Assign each experiment spec to a GPU in round-robin,
-    # then expand to (spec, seed) jobs. This guarantees all
-    # seeds for a given spec run on the same GPU and share exp_group.
-    jobs_by_gpu = {dev: [] for dev in devices}
+    n_gpus = _visible_gpu_count()
+
+    # If you requested 1 GPU on DRAC, you'll get n_gpus=1 and we only launch worker 0.
+    # If you requested 2 GPUs, we'll launch worker 0 and worker 1.
+    # If no GPUs, we still run one worker (gpu_id=0) and your worker.py will use CPU.
+    gpu_ids = list(range(n_gpus)) if n_gpus > 0 else [0]
+
+    # Round-robin assign each spec to a worker, then expand to (spec, seed) jobs.
+    jobs_by_gpu = {gid: [] for gid in gpu_ids}
 
     for i, spec in enumerate(exps):
-        dev = devices[i % len(devices)]
+        gid = gpu_ids[i % len(gpu_ids)]
         for sd in run_seeds:
-            jobs_by_gpu[dev].append((spec, sd))
+            jobs_by_gpu[gid].append((spec, sd))
 
-    gpu0_jobs = jobs_by_gpu[devices[0]]
-    gpu1_jobs = jobs_by_gpu[devices[1]]
+    total_jobs = sum(len(v) for v in jobs_by_gpu.values())
 
     print(f"[dispatcher-full] Total experiments: {len(exps)}")
-    print(f"[dispatcher-full] Total jobs: {len(gpu0_jobs) + len(gpu1_jobs)}")
-    print(f"[dispatcher-full] cuda:0 receives {len(gpu0_jobs)} jobs")
-    print(f"[dispatcher-full] cuda:1 receives {len(gpu1_jobs)} jobs")
+    print(f"[dispatcher-full] Total jobs: {total_jobs}")
+    if n_gpus > 0:
+        print(f"[dispatcher-full] CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')}")
+        print(f"[dispatcher-full] Visible GPU count: {n_gpus}")
+    else:
+        print("[dispatcher-full] No GPUs visible. Running CPU-only.")
 
+    for gid in gpu_ids:
+        print(f"[dispatcher-full] cuda:{gid} receives {len(jobs_by_gpu[gid])} jobs")
 
-    # Save job lists for workers (spec dict + seed are JSON-serializable)
-    with open("gpu0_jobs.json", "w") as f:
-        json.dump(gpu0_jobs, f)
-    with open("gpu1_jobs.json", "w") as f:
-        json.dump(gpu1_jobs, f)
+    # Save job lists for workers
+    for gid in gpu_ids:
+        jobs_file = f"gpu{gid}_jobs.json"
+        with open(jobs_file, "w") as f:
+            json.dump(_json_safe(jobs_by_gpu[gid]), f)
+        print(f"[dispatcher-full] Wrote {jobs_file}")
 
-    # Launch workers
-    p0 = subprocess.Popen(["python", "worker_entry.py", "0"])
-    p1 = subprocess.Popen(["python", "worker_entry.py", "1"])
+    # Launch workers (one per visible GPU; or one CPU worker if none)
+    procs = []
+    for gid in gpu_ids:
+        procs.append(subprocess.Popen([sys.executable, "-u", "worker_entry.py", str(gid)]))
 
-    p0.wait()
-    p1.wait()
+    exit_codes = [p.wait() for p in procs]
+    if any(code != 0 for code in exit_codes):
+        raise SystemExit(f"[dispatcher-full] Worker failure. exit_codes={exit_codes}")
 
     print("\n[dispatcher-full] ALL RUNS COMPLETE.")
