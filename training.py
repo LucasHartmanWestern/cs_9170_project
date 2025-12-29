@@ -898,7 +898,7 @@ if __name__ == "__main__":
         return obj
 
     # Toggle this manually if you want a very small curriculum test run.
-    USE_TEST_EXPERIMENTS = True
+    USE_TEST_EXPERIMENTS = False
 
     if USE_TEST_EXPERIMENTS:
         exps = build_test_experiments()

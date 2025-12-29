@@ -1,0 +1,68 @@
+Job started: Mon 29 Dec 2025 03:46:05 PM EST
+Host: rg31605
+Workdir: /home/epigou/links/projects/def-mcapretz/epigou/cs_9170_project
+CUDA_VISIBLE_DEVICES=0,1
+Python 3.12.4
+Mon Dec 29 15:46:06 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.195.03             Driver Version: 570.195.03     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100 80GB HBM3          Off |   00000000:CB:00.0 Off |                    0 |
+| N/A   45C    P0             71W /  700W |       0MiB /  81559MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA H100 80GB HBM3          Off |   00000000:DB:00.0 Off |                    0 |
+| N/A   45C    P0             73W /  700W |       0MiB /  81559MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+[dispatcher-full] Total experiments: 1
+[dispatcher-full] Total jobs: 1
+[dispatcher-full] CUDA_VISIBLE_DEVICES=0,1
+[dispatcher-full] Visible GPU count: 2
+[dispatcher-full] cuda:0 receives 1 jobs
+[dispatcher-full] cuda:1 receives 0 jobs
+[dispatcher-full] Wrote gpu0_jobs.json
+[dispatcher-full] Wrote gpu1_jobs.json
+[dispatcher] LAUNCH TEST_census_income_PCA4_Bias0.35_Min1_Maj0_Lam0.80-0.80_T500_R1000 (seed=42) on cuda:0 · exp_group=20251229154611__TEST_census_income_PCA4_Bias0.35_Min1_Maj0_Lam0.80-0.80_T500_R1000
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[Tracker] Experiment: EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457
+[Tracker] Seed folder: training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/seed_42
+[Tracker] Run: 2025-12-29_15-46-16_seed42_2781640_0513446f
+[Tracker] Metrics CSV: training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/seed_42/metrics.csv
+[Tracker] Mirroring console to: training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/seed_42/console.log
+[TRAIN] size=1000, minority=241 (24.10%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+Beta will train with: 66.67% real data, 33.33% synthetic data: 
+[Tracker] Alpha model state_dict saved to training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/seed_42/alpha_state_dict.pt
+[Tracker] Alpha model config saved to training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/seed_42/ffnn_meta.json
+[Tracker] CSV header written with 20 columns.
+[Tracker] Ep    1 | AvgR 0.0447 | Global 0.5855 | Local_Avg 0.2624 | F1_macro 0.7310
+[Tracker] New BEST synthetic (by average_reward: 0.044683) saved.
+[Tracker] BEST β weights saved -> training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/seed_42/best_beta_state_dict.pt
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/seed_42/best_beta_state_dict.pt
+[TestSuite] CTGAN Running...
+[TestSuite] CTGAN baseline skipped: SDV/CTGAN not installed.
+
+[TEST] Alpha -> F1(min)=0.5905 | F1(maj)=0.8904 | F1(weighted)=0.8182 | F1(macro)=0.7405 | Brier=0.1223
+[TEST] Beta  -> F1(min)=0.5848 | F1(maj)=0.8751 | F1(weighted)=0.8051 | F1(macro)=0.7299 | Brier=0.1348
+[TestSuite] Final test metrics appended to (seed): training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/final_test_metrics.csv
+Total time 4.02s
+[Tracker] Finished. Run folder: training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291546_4d965457/seed_42
+
+[dispatcher-full] ALL RUNS COMPLETE.

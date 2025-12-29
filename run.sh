@@ -1,12 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=adapt_rl
 #SBATCH --account=def-mcapretz
-#SBATCH --time=7:00:00
+#SBATCH --time=52:00:00
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:2                   
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
+export TORCH_COMPILE_DISABLE=1
+export TORCHDYNAMO_DISABLE=1
 
 set -euo pipefail
 
