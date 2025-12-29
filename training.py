@@ -3,23 +3,29 @@
 # Standard library
 from audioop import bias
 import os
+import sys
 import time
+import uuid
+import subprocess
+import json
+import multiprocessing as mp
+from datetime import datetime
 
 # Third-party: numpy, pandas, sklearn, torch
-from sklearn.decomposition import PCA
 import numpy as np
 import pandas as pd
 import torch
 import copy
+from copy import deepcopy
 
 from torch.utils.data import DataLoader, TensorDataset
-
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.decomposition import PCA
 from math import exp
 from collections import deque
 import itertools
+
 # Local modules
 from env import Environment
 from dataset import Dataset
@@ -27,11 +33,6 @@ from agents.reinforce_agent import ReinforceAgent
 # from agents.ppo_agent import PPOAgent
 from agents.ffnn_agent2 import FFNNAgent
 from episode_tracker import EpisodeTracker
-import multiprocessing as mp
-from datetime import datetime
-import uuid
-import json
-import subprocess
 
 # ---------------- Config ----------------
 
@@ -52,9 +53,15 @@ class Training:
         total_episodes=1,
         reward_mode="gauss_penalty",
         seed=42,
-        device='cpu'
+        device='cpu',
+        lambda_schedule=(0.8, 0.8),
+        use_delta_actions=True,
+        delta_scale=0.10,
+        delta_clip=0.20,
+        pca_clip=None,
+        radius_clip=None
     ):
-        self.exp_group=exp_group
+        self.exp_group = exp_group
         self.seed = seed
         self.device = torch.device(device)
         if self.device.type == 'cuda':
@@ -62,10 +69,10 @@ class Training:
             torch.backends.cudnn.benchmark = True
             torch.set_float32_matmul_precision('high')
 
-        self.bias_pct=bias_pct
+        self.bias_pct = bias_pct
         self.pca_components = pca_components
         self.reward_mode = reward_mode
-        self.lambda_schedule = (0.8, 0.8)
+        self.lambda_schedule = lambda_schedule
         self.curriculum_learning = curriculum_learning
         self.multiclass = multiclass
         self.minority_id = minority_id
@@ -74,6 +81,12 @@ class Training:
         self.traj_length = traj_length
         self.real_data_size = real_data_size
         self.episodes = total_episodes
+        self.dataset_name = dataset_name
+        self.use_delta_actions = use_delta_actions
+        self.delta_scale = delta_scale
+        self.delta_clip = delta_clip
+        self.pca_clip = pca_clip
+        self.radius_clip = radius_clip
 
         if self.curriculum_learning:
             self.state_dim = 1 + 2 * self.pca_components   # frac_done + pca + editable_mask
@@ -384,19 +397,32 @@ class Training:
 
         run_stats = {
             "EXP_GROUP": self.exp_group,
-            "CURRICULUM_LEARNING": self.curriculum_learning,   # <<< CHANGED (already added by you)
+            "dataset_name": self.dataset_name,
+            "multiclass": self.multiclass,
+
+            "CURRICULUM_LEARNING": self.curriculum_learning,
             "EPISODES": self.episodes,
             "TRAJ_LENGTH": self.traj_length,
             "REAL_DATA_SIZE": self.real_data_size,
             "BIAS_PCT": self.bias_pct,
-            "lambda_schedule": self.lambda_schedule,
-            "seed": self.seed,
-            "pca_components": self.pca_components,
+
             "reward_mode": self.reward_mode,
+            "lambda_schedule": self.lambda_schedule,
+
+            "pca_components": self.pca_components,
             "minority_id": self.minority_id,
             "majority_id": self.majority_id,
             "third_id": self.third_id,
+
+            "use_delta_actions": self.use_delta_actions,
+            "delta_scale": self.delta_scale,
+            "delta_clip": self.delta_clip,
+            "pca_clip": self.pca_clip,
+            "radius_clip": self.radius_clip,
+
+            "seed": self.seed,
         }
+
 
         # create beta factory once (so tracker can rehydrate best-beta for final test)
         beta_factory = lambda: FFNNAgent(**self.ffnn_config)
@@ -447,7 +473,7 @@ class Training:
             if self.curriculum_learning:
                 A = self.pca_components
                 start_dim = min(2, A)
-                max_dim = min(10, A)   # if A < 10, stop at A
+                max_dim = min(20, A)   # if A < 10, stop at A
 
                 ks = list(range(start_dim, max_dim + 1))  # [2,3,...,10]
                 num_stages = len(ks)
@@ -471,7 +497,15 @@ class Training:
                 total_episodes=self.episodes,
                 curriculum_stages=curriculum_stages,
                 real_minority_samples=real_minority_samples,
+
+                use_delta_actions=self.use_delta_actions,
+                delta_scale=self.delta_scale,
+                delta_clip=self.delta_clip,
+                pca_clip=self.pca_clip,
+                radius_clip=self.radius_clip,
             )
+
+
 
 
 
@@ -694,41 +728,120 @@ class Training:
         print(f"Total time {time.time() - start_time:.2f}s")
         print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
 
+# ===============================================================
+# DRAC-SAFE DISPATCHER: baseline anchor + isolated ablations
+# Replaces your dispatcher code (outside Training class)
+# ===============================================================
+
+
+
+# ---------------------------------------------------------------
+# utils
+# ---------------------------------------------------------------
 def _slug(s: str) -> str:
     import re
-    return re.sub(r'[^A-Za-z0-9_.-]+', '-', s).strip('-')
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", s).strip("-")
 
 
+def _visible_gpu_count() -> int:
+    """
+    On DRAC, SLURM sets CUDA_VISIBLE_DEVICES to the GPUs you requested.
+    Inside the job, those map to cuda:0..cuda:N-1.
+    """
+    cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+    if cvd:
+        parts = [p.strip() for p in cvd.split(",") if p.strip() != ""]
+        return len(parts)
+    try:
+        return torch.cuda.device_count()
+    except Exception:
+        return 0
+
+
+def _json_safe(obj):
+    """
+    Ensure job specs are JSON-serializable (handles numpy scalars/arrays, torch tensors).
+    If your specs are already plain dict/float/int/str, this is harmless.
+    """
+    try:
+        import numpy as np
+    except Exception:
+        np = None
+    try:
+        import torch as _torch
+    except Exception:
+        _torch = None
+
+    if _torch is not None and isinstance(obj, _torch.Tensor):
+        return obj.detach().cpu().tolist()
+    if np is not None:
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.integer, np.floating, np.bool_)):
+            return obj.item()
+    if isinstance(obj, dict):
+        return {str(k): _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
+# ---------------------------------------------------------------
+# IMPORTANT: run_one_experiment must be importable by worker.py
+# worker.py currently does: from training import run_one_experiment
+#
+# You have two choices:
+#   A) Move this function into training.py (recommended, minimal)
+#   B) Change worker.py import to: from dispatcher import run_one_experiment
+#
+# This code assumes you will do (A) OR update worker.py for (B).
+# ---------------------------------------------------------------
 def run_one_experiment(spec, seed, device):
     """
     Run a single (spec, seed) job on the given device.
-
-    NOTE: exp_group is now taken from spec["exp_group"] so that all seeds for the
-    same experiment share the same folder.
+    exp_group comes from spec["exp_group"] so all seeds share folder.
     """
     exp_group = spec["exp_group"]
 
-    print(f"[dispatcher] LAUNCH {spec['name']} (seed={seed}) "
-          f"on {device} · exp_group={exp_group}")
+    print(
+        f"[dispatcher] LAUNCH {spec['name']} (seed={seed}) "
+        f"on {device} · exp_group={exp_group}"
+    )
 
     trainer = Training(
         exp_group=exp_group,
         dataset_name=spec["dataset_name"],
         seed=seed,
         device=device,
-        reward_mode="local_gauss",
-        multiclass=spec["multiclass"],
-        majority_id=spec["majority_id"],
-        minority_id=spec["minority_id"],
-        third_id=spec["third_id"],
+
+        # core flags
+        curriculum_learning=spec.get("curriculum_learning", True),
+        multiclass=spec.get("multiclass", False),
+
+        # labels
+        minority_id=spec.get("minority_id", None),
+        majority_id=spec.get("majority_id", None),
+        third_id=spec.get("third_id", None),
+
+        # data / PCA
         bias_pct=spec["bias_pct"],
         pca_components=spec["pca_components"],
         traj_length=spec["traj_length"],
         real_data_size=spec["real_data_size"],
-        curriculum_learning=spec.get("curriculum_learning", True),  # NEW: per-spec toggle
+        total_episodes=spec.get("total_episodes", 1),
+
+        # reward
+        reward_mode=spec["reward_mode"],
+        lambda_schedule=tuple(spec["lambda_schedule"]),
+
+        # env knobs
+        use_delta_actions=spec.get("use_delta_actions", True),
+        delta_scale=spec.get("delta_scale", 0.10),
+        delta_clip=spec.get("delta_clip", 0.20),
+        pca_clip=spec.get("pca_clip", None),
+        radius_clip=spec.get("radius_clip", None),
     )
 
-    trainer.lambda_schedule = spec["lambda_schedule"]
     trainer()
 
     if torch.cuda.is_available() and "cuda" in device:
@@ -737,186 +850,204 @@ def run_one_experiment(spec, seed, device):
 
 
 # ---------------------------------------------------------------
-# FULL EXPERIMENT GRID (covers PCA, bias, dataset, direction)
+# EXPERIMENT DEFINITION
+# Baseline anchor + isolated ablations (one knob changed)
 # ---------------------------------------------------------------
 
-seeds = [42, 123]
+# Seeds (keep as you like)
+seeds = [42, 123, 999]
 
-# RQ1 — PCA component sweep
-pca_list = [10]
+# Your agreed sweeps
+ACTIVITY_PAIRS = [(4, 7), (2, 3), (9, 10)]
+LAMBDA_SWEEP   = [(0.5, 0.5),(0.2, 0.8)]
+PCA_SWEEP      = [14, 18]
+RATIO_SWEEP    = [(1000, 1500), (4000, 6000), (3000, 2000)]
+EP_LENGTHS     = [8000, 10000]
 
-# RQ2 — Representation bias sweep
-bias_list = [0.35]
+DELTA_SCALES   = [0.05, 0.20]
+DELTA_CLIPS    = [0.10, 0.40]
+PCA_CLIPS      = [5, 8]
+RADIUS_CLIPS   = [8, 10]
 
-# RQ3 — Reward function
-reward_modes = ["local_gauss"]
+# ---- Baseline anchor (single source of truth) ----
+BASELINE = dict(
+    dataset_name="pamap2",
+    multiclass=False,
+    bias_pct=0.35,
 
-# RQ4 — Dataset comparison
-dataset_list = ["pamap2", "census_income"]
+    reward_mode="local_gauss",
+    lambda_schedule=(0.8, 0.8),
 
-# Global training settings
-lambda_grid    = [(0.8, 0.8)]
+    minority_id=13,
+    majority_id=12,
+    third_id=None,
 
-TRAJ_LENGTH    = 2000
-REAL_DATA_SIZE = 3000
+    pca_components=10,
+    traj_length=2000,
+    real_data_size=3000,
 
-# PAMAP2-specific (minority, majority) activity pairs
-pamap_sensor_pairs = [(13, 4), (13,12)]
+    # This is the number of trajectories (episodes) you generate/test
+    total_episodes=6000,
+
+    curriculum_learning=True,
+
+    # env knobs
+    use_delta_actions=True,
+    delta_scale=0.10,
+    delta_clip=0.20,
+    pca_clip=None,
+    radius_clip=None,
+)
 
 
-def build_experiments():
+def _make_name(s: dict) -> str:
+    # Keep names readable; the hash/fingerprint in EpisodeTracker will ensure uniqueness too.
+    # You can trim fields here if names get too long.
+    lam0, lam1 = s["lambda_schedule"]
+    return (
+        f"{s['dataset_name']}"
+        f"_PCA{s['pca_components']}"
+        f"_Bias{s['bias_pct']}"
+        f"_Min{s['minority_id']}_Maj{s['majority_id']}"
+        f"_Lam{lam0:.2f}-{lam1:.2f}"
+        f"_T{s['traj_length']}_R{s['real_data_size']}"
+        f"_EP{s['total_episodes']}"
+        f"_DS{s.get('delta_scale')}"
+        f"_DC{s.get('delta_clip')}"
+        f"_PC{s.get('pca_clip')}"
+        f"_RC{s.get('radius_clip')}"
+        f"_CURR{int(s.get('curriculum_learning', True))}"
+    )
+
+
+def build_experiments_baseline_plus_ablations():
     """
-    Build the full experiment grid.
-
-    Each spec gets a unique exp_group that is shared across seeds.
+    Baseline anchor + isolated ablations:
+      - curriculum off
+      - activity pairs
+      - lambda
+      - PCA
+      - ratio
+      - "episode length" (traj_length)
+      - env knobs (delta_scale, delta_clip, pca_clip, radius_clip)
     """
     exps = []
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-    for dataset_name in dataset_list:
-        # dataset-specific class labels
-        if dataset_name == "pamap2":
-            pairs = pamap_sensor_pairs
-        else:
-            # census_income is binary {0, 1} → treat 1 as minority, 0 as majority
-            pairs = [(1, 0)]
+    base = deepcopy(BASELINE)
+    base["name"] = "BASE__" + _make_name(base)
+    base["exp_group"] = f"{timestamp}__{_slug(base['name'])}"
+    exps.append(base)
 
-        for minority_id, majority_id in pairs:
-            for pca in pca_list:
-                for bias in bias_list:
-                    for reward_mode in reward_modes:
-                        for lam in lambda_grid:
+    def add_variant(tag: str, mutate_fn):
+        s = deepcopy(base)
+        mutate_fn(s)
+        s["name"] = f"{tag}__{_make_name(s)}"
+        s["exp_group"] = f"{timestamp}__{_slug(s['name'])}"
+        exps.append(s)
 
-                            name = (
-                                f"{dataset_name}_PCA{pca}_Bias{bias}"
-                                f"_Min{minority_id}_Maj{majority_id}"
-                                f"_Lam{lam[0]:.2f}-{lam[1]:.2f}"
-                                f"_T{TRAJ_LENGTH}_R{REAL_DATA_SIZE}"
-                            )
+    # --- Curriculum toggle ---
+    add_variant("CURR_OFF", lambda s: s.update(curriculum_learning=False))
 
-                            exp_group = f"{timestamp}__{_slug(name)}"
+    # --- Activity pairs ---
+    for mn, mj in ACTIVITY_PAIRS:
+        if (mn, mj) == (base["minority_id"], base["majority_id"]):
+            continue
+        add_variant(f"PAIR_{mn}_{mj}", lambda s, mn=mn, mj=mj: s.update(minority_id=mn, majority_id=mj))
 
-                            exps.append(dict(
-                                name=name,
-                                exp_group=exp_group,          # NEW: shared across seeds
-                                dataset_name=dataset_name,
-                                minority_id=minority_id,
-                                majority_id=majority_id,
-                                third_id=None,
-                                multiclass=False,
-                                bias_pct=bias,
-                                pca_components=pca,
-                                reward_mode=reward_mode,
-                                lambda_schedule=lam,
-                                traj_length=TRAJ_LENGTH,
-                                real_data_size=REAL_DATA_SIZE,
-                                curriculum_learning=True,   # default: curriculum ON
-                            ))
+    # --- Lambda sweep ---
+    for lam in LAMBDA_SWEEP:
+        if tuple(lam) == tuple(base["lambda_schedule"]):
+            continue
+        add_variant(f"LAM_{lam[0]}_{lam[1]}", lambda s, lam=lam: s.update(lambda_schedule=tuple(lam)))
+
+    # --- PCA sweep ---
+    for pca in PCA_SWEEP:
+        if pca == base["pca_components"]:
+            continue
+        add_variant(f"PCA_{pca}", lambda s, pca=pca: s.update(pca_components=pca))
+
+    # --- Ratio sweep (T,R) ---
+    for T, R in RATIO_SWEEP:
+        if (T, R) == (base["traj_length"], base["real_data_size"]):
+            continue
+        add_variant(f"RATIO_T{T}_R{R}", lambda s, T=T, R=R: s.update(traj_length=T, real_data_size=R))
+
+    # --- "episode length" sweep (traj_length only) ---
+    for T in EP_LENGTHS:
+        if T == base["traj_length"]:
+            continue
+        add_variant(f"EP_LEN_{T}", lambda s, T=T: s.update(traj_length=T))
+
+    # --- Env hyperparams: delta_scale ---
+    for v in DELTA_SCALES:
+        if v == base["delta_scale"]:
+            continue
+        add_variant(f"DSCALE_{v}", lambda s, v=v: s.update(delta_scale=v))
+
+    # --- Env hyperparams: delta_clip ---
+    for v in DELTA_CLIPS:
+        if v == base["delta_clip"]:
+            continue
+        add_variant(f"DCLIP_{v}", lambda s, v=v: s.update(delta_clip=v))
+
+    # --- Env hyperparams: pca_clip ---
+    for v in PCA_CLIPS:
+        if v == base["pca_clip"]:
+            continue
+        add_variant(f"PCACLIP_{v}", lambda s, v=v: s.update(pca_clip=v))
+
+    # --- Env hyperparams: radius_clip ---
+    for v in RADIUS_CLIPS:
+        if v == base["radius_clip"]:
+            continue
+        add_variant(f"RCLIP_{v}", lambda s, v=v: s.update(radius_clip=v))
+
     return exps
 
 
 def build_test_experiments():
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    dataset_name = "census_income"
-    minority_id, majority_id = 1, 0
-    pca = 4
-    bias = 0.35
-    lam = (0.80, 0.8)
-
-    name = (
-        f"TEST_{dataset_name}_PCA{pca}_Bias{bias}"
-        f"_Min{minority_id}_Maj{majority_id}"
-        f"_Lam{lam[0]:.2f}-{lam[1]:.2f}_T500_R1000"
-    )
-    exp_group = f"{timestamp}__{_slug(name)}"
-
-    return [dict(
-        name=name,
-        exp_group=exp_group,
-        dataset_name=dataset_name,
-        minority_id=minority_id,
-        majority_id=majority_id,
-        third_id=None,
-        multiclass=False,
-        bias_pct=bias,
-        pca_components=pca,
+    """
+    Tiny sanity run (fast) to verify everything launches on DRAC.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    s = deepcopy(BASELINE)
+    s.update(
+        dataset_name="census_income",
+        minority_id=1,
+        majority_id=0,
+        pca_components=4,
+        traj_length=200,         # tiny
+        real_data_size=400,      # tiny
+        total_episodes=20,       # tiny
+        lambda_schedule=(0.8, 0.8),
         reward_mode="local_gauss",
-        lambda_schedule=lam,
-        traj_length=500,     # shorter traj for quick test
-        real_data_size=1000, # smaller training set for speed
-        curriculum_learning=True,  # explicitly test curriculum
-    )]
+        curriculum_learning=True,
+    )
+    s["name"] = "TEST__" + _make_name(s)
+    s["exp_group"] = f"{timestamp}__{_slug(s['name'])}"
+    return [s]
 
 
+# ---------------------------------------------------------------
+# MAIN
+# ---------------------------------------------------------------
 if __name__ == "__main__":
-    import os
-    import json
-    import subprocess
-    import sys
-
-    def _visible_gpu_count() -> int:
-        """
-        On DRAC, SLURM usually sets CUDA_VISIBLE_DEVICES to the GPUs you requested.
-        Inside the job, those map to cuda:0..cuda:N-1.
-        Locally, if no mask is set, fall back to torch.cuda.device_count().
-        """
-        cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
-        if cvd:
-            parts = [p.strip() for p in cvd.split(",") if p.strip() != ""]
-            return len(parts)
-        try:
-            import torch
-            return torch.cuda.device_count()
-        except Exception:
-            return 0
-
-    def _json_safe(obj):
-        """
-        Ensure job specs are JSON-serializable (handles numpy scalars/arrays, torch tensors).
-        If your specs are already plain dict/float/int/str, this is harmless.
-        """
-        try:
-            import numpy as np
-        except Exception:
-            np = None
-        try:
-            import torch
-        except Exception:
-            torch = None
-
-        if torch is not None and isinstance(obj, torch.Tensor):
-            return obj.detach().cpu().tolist()
-        if np is not None:
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()
-            if isinstance(obj, (np.integer, np.floating, np.bool_)):
-                return obj.item()
-        if isinstance(obj, dict):
-            return {str(k): _json_safe(v) for k, v in obj.items()}
-        if isinstance(obj, (list, tuple)):
-            return [_json_safe(v) for v in obj]
-        return obj
-
-    # Toggle this manually if you want a very small curriculum test run.
     USE_TEST_EXPERIMENTS = False
 
     if USE_TEST_EXPERIMENTS:
         exps = build_test_experiments()
-        run_seeds = [42]  # single seed for quick sanity check
+        run_seeds = [42]
     else:
-        exps = build_experiments()
-        run_seeds = seeds  # full seed set
+        exps = build_experiments_baseline_plus_ablations()
+        run_seeds = seeds
 
     n_gpus = _visible_gpu_count()
-
-    # If you requested 1 GPU on DRAC, you'll get n_gpus=1 and we only launch worker 0.
-    # If you requested 2 GPUs, we'll launch worker 0 and worker 1.
-    # If no GPUs, we still run one worker (gpu_id=0) and your worker.py will use CPU.
     gpu_ids = list(range(n_gpus)) if n_gpus > 0 else [0]
 
-    # Round-robin assign each spec to a worker, then expand to (spec, seed) jobs.
     jobs_by_gpu = {gid: [] for gid in gpu_ids}
 
+    # Assign GPU per SPEC (round-robin), then add all seeds for that spec to same GPU
     for i, spec in enumerate(exps):
         gid = gpu_ids[i % len(gpu_ids)]
         for sd in run_seeds:
@@ -924,8 +1055,8 @@ if __name__ == "__main__":
 
     total_jobs = sum(len(v) for v in jobs_by_gpu.values())
 
-    print(f"[dispatcher-full] Total experiments: {len(exps)}")
-    print(f"[dispatcher-full] Total jobs: {total_jobs}")
+    print(f"[dispatcher-full] Total specs: {len(exps)}")
+    print(f"[dispatcher-full] Total jobs (spec×seed): {total_jobs}")
     if n_gpus > 0:
         print(f"[dispatcher-full] CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')}")
         print(f"[dispatcher-full] Visible GPU count: {n_gpus}")
@@ -935,14 +1066,14 @@ if __name__ == "__main__":
     for gid in gpu_ids:
         print(f"[dispatcher-full] cuda:{gid} receives {len(jobs_by_gpu[gid])} jobs")
 
-    # Save job lists for workers
+    # Save job lists
     for gid in gpu_ids:
         jobs_file = f"gpu{gid}_jobs.json"
         with open(jobs_file, "w") as f:
             json.dump(_json_safe(jobs_by_gpu[gid]), f)
         print(f"[dispatcher-full] Wrote {jobs_file}")
 
-    # Launch workers (one per visible GPU; or one CPU worker if none)
+    # Launch one worker per visible GPU (or 1 CPU worker if none)
     procs = []
     for gid in gpu_ids:
         procs.append(subprocess.Popen([sys.executable, "-u", "worker_entry.py", str(gid)]))
