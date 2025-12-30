@@ -39,88 +39,151 @@ class Training:
     def __init__(
         self,
         exp_group=None,
+
+        # ---- core experiment flags ----
         curriculum_learning=True,
         multiclass=False,
         dataset_name="census_income",
+
+        # ---- class / bias ----
         minority_id=None,
         majority_id=None,
         third_id=None,
         bias_pct=0.18,
+
+        # ---- PCA / trajectory ----
         pca_components=2,
         traj_length=500,
         real_data_size=1500,
         total_episodes=1,
+
+        # ---- reward ----
         reward_mode="gauss_penalty",
+        lambda_schedule=(0.8, 0.8),
+
+        # ---- ENV hyperparams (NEW) ----
+        use_delta_actions=True,
+        delta_scale=0.10,
+        delta_clip=0.20,
+        pca_clip=None,
+        radius_clip=None,
+
+        # ---- misc ----
         seed=42,
-        device='cpu'
+        device="cpu",
     ):
-        self.exp_group=exp_group
+        # -----------------------------
+        # basic setup
+        # -----------------------------
+        self.exp_group = exp_group
         self.seed = seed
         self.device = torch.device(device)
-        if self.device.type == 'cuda':
+
+        if self.device.type == "cuda":
             torch.cuda.manual_seed_all(self.seed)
             torch.backends.cudnn.benchmark = True
-            torch.set_float32_matmul_precision('high')
-
-        self.bias_pct=bias_pct
-        self.pca_components = pca_components
-        self.reward_mode = reward_mode
-        self.lambda_schedule = (0.8, 0.8)
-        self.curriculum_learning = curriculum_learning
-        self.multiclass = multiclass
-        self.minority_id = minority_id
-        self.majority_id = majority_id
-        self.third_id = third_id
-        self.traj_length = traj_length
-        self.real_data_size = real_data_size
-        self.episodes = total_episodes
-
-        if self.curriculum_learning:
-            self.state_dim = 1 + 2 * self.pca_components   # frac_done + pca + editable_mask
-        else:
-            self.state_dim = 2
+            torch.set_float32_matmul_precision("high")
 
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
 
-        self.dataset = Dataset(dataset_name, multiclass=self.multiclass, minority_id=minority_id, majority_id=majority_id, third_id=third_id, pca_components=self.pca_components, seed=self.seed, device=self.device)
+        # -----------------------------
+        # experiment parameters
+        # -----------------------------
+        self.curriculum_learning = curriculum_learning
+        self.multiclass = multiclass
+        self.dataset_name = dataset_name
 
-        # FFNN (alpha/beta) config
+        self.minority_id = minority_id
+        self.majority_id = majority_id
+        self.third_id = third_id
+        self.bias_pct = bias_pct
+
+        self.pca_components = pca_components
+        self.traj_length = traj_length
+        self.real_data_size = real_data_size
+        self.episodes = total_episodes
+
+        self.reward_mode = reward_mode
+        self.lambda_schedule = lambda_schedule
+
+        # -----------------------------
+        # ENV hyperparams (stored for env creation)
+        # -----------------------------
+        self.use_delta_actions = use_delta_actions
+        self.delta_scale = delta_scale
+        self.delta_clip = delta_clip
+        self.pca_clip = pca_clip
+        self.radius_clip = radius_clip
+
+        # -----------------------------
+        # state dimensionality
+        # -----------------------------
+        if self.curriculum_learning:
+            # frac_done + pca + editable_mask
+            self.state_dim = 1 + 2 * self.pca_components
+        else:
+            self.state_dim = 2
+
+        # -----------------------------
+        # dataset
+        # -----------------------------
+        self.dataset = Dataset(
+            dataset_name,
+            multiclass=self.multiclass,
+            minority_id=self.minority_id,
+            majority_id=self.majority_id,
+            third_id=self.third_id,
+            pca_components=self.pca_components,
+            seed=self.seed,
+            device=self.device,
+        )
+
+        # -----------------------------
+        # FFNN (alpha / beta) config
+        # -----------------------------
         self.ffnn_config = {
-            'input_size': self.pca_components,            
-            'hidden_sizes': [32, 16],
-            'output_size': 3 if self.multiclass else 2,  # 3 for multiclass, 2 for binary
-            'learning_rate': 1e-3,
-            'batch_size': 64,           
-            'epochs': 10,                
-            'type': 'classification',
-            'classes': [0, 1, 2] if self.multiclass else [0, 1],
-            'device': self.device,
-            'seed': self.seed,
+            "input_size": self.pca_components,
+            "hidden_sizes": [32, 16],
+            "output_size": 3 if self.multiclass else 2,
+            "learning_rate": 1e-3,
+            "batch_size": 64,
+            "epochs": 10,
+            "type": "classification",
+            "classes": [0, 1, 2] if self.multiclass else [0, 1],
+            "device": self.device,
+            "seed": self.seed,
         }
 
+        # -----------------------------
         # REINFORCE config
+        # -----------------------------
         reinforce_config = {
-            'state_size': self.state_dim,          # <<< was 2
-            'action_size': self.pca_components,
-            'hidden_sizes': [64, 64],
-            'total_episodes': self.episodes,
-            'lr': 3e-4,
-            'gamma': 0.99,
-            'entropy_start': 1e-2,
-            'entropy_end': 0.0,
-            'seed': self.seed,
-            'device': self.device
+            "state_size": self.state_dim,
+            "action_size": self.pca_components,
+            "hidden_sizes": [64, 64],
+            "total_episodes": self.episodes,
+            "lr": 3e-4,
+            "gamma": 0.99,
+            "entropy_start": 1e-2,
+            "entropy_end": 0.0,
+            "seed": self.seed,
+            "device": self.device,
         }
 
-        self.dl_generator = torch.Generator(device='cpu').manual_seed(self.seed)
+        self.dl_generator = torch.Generator(device="cpu").manual_seed(self.seed)
 
-        # Agents
+        # -----------------------------
+        # agents
+        # -----------------------------
         self.agent = ReinforceAgent(**reinforce_config)
         self.alpha_model = FFNNAgent(**self.ffnn_config)
-        self.beta_model  = FFNNAgent(**self.ffnn_config)
+        self.beta_model = FFNNAgent(**self.ffnn_config)
 
-        self._corr_window = 40   
+        # -----------------------------
+        # buffers
+        # -----------------------------
+        self._corr_window = 40
         self._local_buf = deque(maxlen=self._corr_window)
         self._delta_buf = deque(maxlen=self._corr_window)
 
@@ -179,7 +242,7 @@ class Training:
         y_true = y_true.to(p1.device).float()
         return (p1 - y_true) ** 2  # in [0,1]
 
-        # Beta model F1 minority class score + local term (no EMA)
+    # Beta model F1 minority class score + local term (no EMA)
     def compute_reward(
         self,
         alpha_model, beta_model, stale_beta_model,   # stale_beta_model unused (kept for signature compat)
@@ -377,26 +440,49 @@ class Training:
         }
         return reward, diagnostics
 
-
     # ---------------- Training loop ----------------
     def __call__(self):
         start_time = time.time()
 
         run_stats = {
+            # ---- experiment identity ----
             "EXP_GROUP": self.exp_group,
-            "CURRICULUM_LEARNING": self.curriculum_learning,   # <<< CHANGED (already added by you)
+
+            # ---- core training flags ----
+            "CURRICULUM_LEARNING": self.curriculum_learning,
             "EPISODES": self.episodes,
+
+            # ---- data / trajectory ----
             "TRAJ_LENGTH": self.traj_length,
             "REAL_DATA_SIZE": self.real_data_size,
             "BIAS_PCT": self.bias_pct,
-            "lambda_schedule": self.lambda_schedule,
-            "seed": self.seed,
-            "pca_components": self.pca_components,
+
+            # ---- reward ----
             "reward_mode": self.reward_mode,
+            "lambda_schedule": self.lambda_schedule,
+
+            # ---- PCA / representation ----
+            "pca_components": self.pca_components,
+
+            # ---- class setup ----
             "minority_id": self.minority_id,
             "majority_id": self.majority_id,
             "third_id": self.third_id,
+
+            # ---- ENV dynamics (NEW – critical) ----
+            "use_delta_actions": self.use_delta_actions,
+            "delta_scale": self.delta_scale,
+            "delta_clip": self.delta_clip,
+            "pca_clip": self.pca_clip,
+            "radius_clip": self.radius_clip,
+
+            # ---- misc ----
+            "seed": self.seed,
+            "dataset_name": self.dataset_name,
+            "multiclass": self.multiclass,
+
         }
+
 
         # create beta factory once (so tracker can rehydrate best-beta for final test)
         beta_factory = lambda: FFNNAgent(**self.ffnn_config)
@@ -447,7 +533,7 @@ class Training:
             if self.curriculum_learning:
                 A = self.pca_components
                 start_dim = min(2, A)
-                max_dim = min(10, A)   # if A < 10, stop at A
+                max_dim = min(20, A)   # if A < 10, stop at A
 
                 ks = list(range(start_dim, max_dim + 1))  # [2,3,...,10]
                 num_stages = len(ks)
@@ -464,16 +550,24 @@ class Training:
                 curriculum=self.curriculum_learning,
                 target=1,
                 max_actions=self.traj_length,
+                total_episodes=self.episodes,
                 device=self.device,
                 seed=self.seed,
+
+                # PCA / curriculum
                 pca_components=self.pca_components,
                 pca_means=pca_means,
-                total_episodes=self.episodes,
                 curriculum_stages=curriculum_stages,
                 real_minority_samples=real_minority_samples,
+
+                # ---- NEW: delta-action + clipping controls ----
+                use_delta_actions=self.use_delta_actions,     # bool
+                delta_scale=self.delta_scale,                 # e.g. 0.10
+                delta_clip=self.delta_clip,                   # e.g. 0.20 or None
+                pca_clip=self.pca_clip,                       # e.g. None, 5.0, 8.0
+                use_radius_clip=(self.radius_clip is not None),
+                radius_clip=self.radius_clip,                 # e.g. None, 8.0, 10.0
             )
-
-
 
             # ---------------- Episodes ----------------
             for episode in range(self.episodes):
@@ -625,7 +719,6 @@ class Training:
                     ),
                 }
 
-
                 # Pull episode-level values from diagnostics
                 local_mean = float(diagnostics["local_reward"])
                 delta_val = float(diagnostics["delta_f1_val"])
@@ -694,41 +787,70 @@ class Training:
         print(f"Total time {time.time() - start_time:.2f}s")
         print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
 
+# ===============================================================
+# DISPATCHER (drop-in replacement for all non-Training code)
+# ===============================================================
+
+import json
+import subprocess
+import torch
+from copy import deepcopy
+from datetime import datetime
+
+
+# ---------------------------------------------------------------
+# utils
+# ---------------------------------------------------------------
 def _slug(s: str) -> str:
     import re
-    return re.sub(r'[^A-Za-z0-9_.-]+', '-', s).strip('-')
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", s).strip("-")
 
 
+# ---------------------------------------------------------------
+# run a single (spec, seed)
+# ---------------------------------------------------------------
 def run_one_experiment(spec, seed, device):
-    """
-    Run a single (spec, seed) job on the given device.
-
-    NOTE: exp_group is now taken from spec["exp_group"] so that all seeds for the
-    same experiment share the same folder.
-    """
     exp_group = spec["exp_group"]
 
-    print(f"[dispatcher] LAUNCH {spec['name']} (seed={seed}) "
-          f"on {device} · exp_group={exp_group}")
+    print(
+        f"[dispatcher] LAUNCH {spec['name']} "
+        f"(seed={seed}) on {device} · exp_group={exp_group}"
+    )
 
     trainer = Training(
         exp_group=exp_group,
         dataset_name=spec["dataset_name"],
         seed=seed,
         device=device,
-        reward_mode="local_gauss",
+
+        # reward
+        reward_mode=spec["reward_mode"],
+        lambda_schedule=spec["lambda_schedule"],
+
+        # dataset / labels
         multiclass=spec["multiclass"],
-        majority_id=spec["majority_id"],
         minority_id=spec["minority_id"],
+        majority_id=spec["majority_id"],
         third_id=spec["third_id"],
+
+        # data + PCA
         bias_pct=spec["bias_pct"],
         pca_components=spec["pca_components"],
         traj_length=spec["traj_length"],
         real_data_size=spec["real_data_size"],
-        curriculum_learning=spec.get("curriculum_learning", True),  # NEW: per-spec toggle
+        total_episodes=spec.get("total_episodes", 1),
+
+        # curriculum
+        curriculum_learning=spec.get("curriculum_learning", True),
+
+        # env hyperparams
+        use_delta_actions=spec.get("use_delta_actions", True),
+        delta_scale=spec.get("delta_scale", 0.10),
+        delta_clip=spec.get("delta_clip", 0.20),
+        pca_clip=spec.get("pca_clip", None),
+        radius_clip=spec.get("radius_clip", None),
     )
 
-    trainer.lambda_schedule = spec["lambda_schedule"]
     trainer()
 
     if torch.cuda.is_available() and "cuda" in device:
@@ -737,136 +859,161 @@ def run_one_experiment(spec, seed, device):
 
 
 # ---------------------------------------------------------------
-# FULL EXPERIMENT GRID (covers PCA, bias, dataset, direction)
+# GLOBAL SETTINGS
 # ---------------------------------------------------------------
+seeds   = [42, 123, 999]
+devices = ["cuda:0"]          # add "cuda:1", "cuda:2", ... if available
 
-seeds = [42, 123]
 
-# RQ1 — PCA component sweep
-pca_list = [10]
+# ---------------------------------------------------------------
+# BASELINE (single source of truth)
+# ---------------------------------------------------------------
+BASELINE = dict(
+    dataset_name="pamap2",
+    multiclass=False,
+    reward_mode="local_gauss",
 
-# RQ2 — Representation bias sweep
-bias_list = [0.35]
+    minority_id=13,
+    majority_id=12,
+    third_id=None,
 
-# RQ3 — Reward function
-reward_modes = ["local_gauss"]
+    bias_pct=0.35,
+    pca_components=10,
+    lambda_schedule=(0.8, 0.8),
 
-# RQ4 — Dataset comparison
-dataset_list = ["pamap2", "census_income"]
+    traj_length=2000,
+    real_data_size=3000,
+    total_episodes=6000,
 
-# Global training settings
-lambda_grid    = [(0.8, 0.8)]
+    curriculum_learning=True,
 
-TRAJ_LENGTH    = 2000
-REAL_DATA_SIZE = 3000
+    use_delta_actions=True,
+    delta_scale=0.10,
+    delta_clip=0.20,
+    pca_clip=None,
+    radius_clip=None,
+)
 
-# PAMAP2-specific (minority, majority) activity pairs
-pamap_sensor_pairs = [(13, 4), (13,12)]
+
+# ---------------------------------------------------------------
+# SWEEPS (as discussed)
+# ---------------------------------------------------------------
+ACTIVITY_PAIRS = [(4, 7), (2, 3), (9, 10)]
+LAMBDA_SWEEP   = [(0.5, 0.5),(0.2, 0.8)]
+PCA_SWEEP      = [14, 18]
+RATIO_SWEEP    = [(1000, 1500), (4000, 6000), (3000, 2000)]
+EP_LENGTHS     = [8000, 10000]
+
+DELTA_SCALES = [0.05, 0.20]
+DELTA_CLIPS  = [0.10, 0.40]
+PCA_CLIPS    = [None, 5, 8]
+RADIUS_CLIPS = [None, 8, 10]
+
+
+# ---------------------------------------------------------------
+# experiment construction (baseline + one change)
+# ---------------------------------------------------------------
+def _make_name(s):
+    return (
+        f"{s['dataset_name']}"
+        f"_PCA{s['pca_components']}"
+        f"_Bias{s['bias_pct']}"
+        f"_Min{s['minority_id']}_Maj{s['majority_id']}"
+        f"_Lam{s['lambda_schedule'][0]:.2f}-{s['lambda_schedule'][1]:.2f}"
+        f"_T{s['traj_length']}_R{s['real_data_size']}"
+        f"_DS{s.get('delta_scale')}"
+        f"_DC{s.get('delta_clip')}"
+        f"_PC{s.get('pca_clip')}"
+        f"_RC{s.get('radius_clip')}"
+        f"_CURR{int(s.get('curriculum_learning', True))}"
+    )
 
 
 def build_experiments():
-    """
-    Build the full experiment grid.
-
-    Each spec gets a unique exp_group that is shared across seeds.
-    """
     exps = []
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-    for dataset_name in dataset_list:
-        # dataset-specific class labels
-        if dataset_name == "pamap2":
-            pairs = pamap_sensor_pairs
-        else:
-            # census_income is binary {0, 1} → treat 1 as minority, 0 as majority
-            pairs = [(1, 0)]
+    base = deepcopy(BASELINE)
+    base_name = "BASE__" + _make_name(base)
+    base["name"] = base_name
+    base["exp_group"] = f"{timestamp}__{_slug(base_name)}"
+    exps.append(base)
 
-        for minority_id, majority_id in pairs:
-            for pca in pca_list:
-                for bias in bias_list:
-                    for reward_mode in reward_modes:
-                        for lam in lambda_grid:
+    def add_variant(tag, mutate_fn):
+        s = deepcopy(base)
+        mutate_fn(s)
+        s["name"] = f"{tag}__{_make_name(s)}"
+        s["exp_group"] = f"{timestamp}__{_slug(s['name'])}"
+        exps.append(s)
 
-                            name = (
-                                f"{dataset_name}_PCA{pca}_Bias{bias}"
-                                f"_Min{minority_id}_Maj{majority_id}"
-                                f"_Lam{lam[0]:.2f}-{lam[1]:.2f}"
-                                f"_T{TRAJ_LENGTH}_R{REAL_DATA_SIZE}"
-                            )
+    # curriculum off
+    add_variant("CURR_OFF", lambda s: s.update(curriculum_learning=False))
 
-                            exp_group = f"{timestamp}__{_slug(name)}"
+    # activity pairs
+    for mn, mj in ACTIVITY_PAIRS:
+        if (mn, mj) == (base["minority_id"], base["majority_id"]):
+            continue
+        add_variant(f"PAIR_{mn}_{mj}", lambda s, mn=mn, mj=mj: s.update(minority_id=mn, majority_id=mj))
 
-                            exps.append(dict(
-                                name=name,
-                                exp_group=exp_group,          # NEW: shared across seeds
-                                dataset_name=dataset_name,
-                                minority_id=minority_id,
-                                majority_id=majority_id,
-                                third_id=None,
-                                multiclass=False,
-                                bias_pct=bias,
-                                pca_components=pca,
-                                reward_mode=reward_mode,
-                                lambda_schedule=lam,
-                                traj_length=TRAJ_LENGTH,
-                                real_data_size=REAL_DATA_SIZE,
-                                curriculum_learning=True,   # default: curriculum ON
-                            ))
+    # lambda
+    for lam in LAMBDA_SWEEP:
+        if lam == base["lambda_schedule"]:
+            continue
+        add_variant(f"LAM_{lam[0]}_{lam[1]}", lambda s, lam=lam: s.update(lambda_schedule=lam))
+
+    # PCA
+    for pca in PCA_SWEEP:
+        if pca == base["pca_components"]:
+            continue
+        add_variant(f"PCA_{pca}", lambda s, pca=pca: s.update(pca_components=pca))
+
+    # ratio
+    for T, R in RATIO_SWEEP:
+        if (T, R) == (base["traj_length"], base["real_data_size"]):
+            continue
+        add_variant(f"RATIO_T{T}_R{R}", lambda s, T=T, R=R: s.update(traj_length=T, real_data_size=R))
+
+    # episode length only
+    for T in EP_LENGTHS:
+        if T == base["traj_length"]:
+            continue
+        add_variant(f"EP_LEN_{T}", lambda s, T=T: s.update(traj_length=T))
+
+    # env knobs
+    for v in DELTA_SCALES:
+        if v != base["delta_scale"]:
+            add_variant(f"DSCALE_{v}", lambda s, v=v: s.update(delta_scale=v))
+
+    for v in DELTA_CLIPS:
+        if v != base["delta_clip"]:
+            add_variant(f"DCLIP_{v}", lambda s, v=v: s.update(delta_clip=v))
+
+    for v in PCA_CLIPS:
+        if v != base["pca_clip"]:
+            add_variant(f"PCACLIP_{v}", lambda s, v=v: s.update(pca_clip=v))
+
+    for v in RADIUS_CLIPS:
+        if v != base["radius_clip"]:
+            add_variant(f"RCLIP_{v}", lambda s, v=v: s.update(radius_clip=v))
+
     return exps
 
 
-def build_test_experiments():
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    dataset_name = "census_income"
-    minority_id, majority_id = 1, 0
-    pca = 4
-    bias = 0.35
-    lam = (0.80, 0.8)
-
-    name = (
-        f"TEST_{dataset_name}_PCA{pca}_Bias{bias}"
-        f"_Min{minority_id}_Maj{majority_id}"
-        f"_Lam{lam[0]:.2f}-{lam[1]:.2f}_T500_R1000"
-    )
-    exp_group = f"{timestamp}__{_slug(name)}"
-
-    return [dict(
-        name=name,
-        exp_group=exp_group,
-        dataset_name=dataset_name,
-        minority_id=minority_id,
-        majority_id=majority_id,
-        third_id=None,
-        multiclass=False,
-        bias_pct=bias,
-        pca_components=pca,
-        reward_mode="local_gauss",
-        lambda_schedule=lam,
-        traj_length=500,     # shorter traj for quick test
-        real_data_size=1000, # smaller training set for speed
-        curriculum_learning=True,  # explicitly test curriculum
-    )]
-
-
 # ---------------------------------------------------------------
-# Parallel dispatch to cuda:0 and cuda:1, grouping seeds per spec
+# main
 # ---------------------------------------------------------------
 if __name__ == "__main__":
-    devices = ["cuda:0"]
+    USE_TEST = False
 
-    # Toggle this manually if you want a very small curriculum test run.
-    USE_TEST_EXPERIMENTS = False
-
-    if USE_TEST_EXPERIMENTS:
-        exps = build_test_experiments()
-        run_seeds = [42]      # single seed for quick sanity check
+    if USE_TEST:
+        exps = [deepcopy(BASELINE)]
+        exps[0]["name"] = "TEST_BASE"
+        exps[0]["exp_group"] = "TEST"
+        run_seeds = [42]
     else:
         exps = build_experiments()
-        run_seeds = seeds     # full seed set
+        run_seeds = seeds
 
-    # Assign each experiment spec to a GPU in round-robin,
-    # then expand to (spec, seed) jobs. This guarantees all
-    # seeds for a given spec run on the same GPU and share exp_group.
     jobs_by_gpu = {dev: [] for dev in devices}
 
     for i, spec in enumerate(exps):
@@ -874,26 +1021,20 @@ if __name__ == "__main__":
         for sd in run_seeds:
             jobs_by_gpu[dev].append((spec, sd))
 
-    gpu0_jobs = jobs_by_gpu[devices[0]]
-    gpu1_jobs = jobs_by_gpu[devices[1]]
+    total_jobs = sum(len(v) for v in jobs_by_gpu.values())
+    print(f"[dispatcher] Specs: {len(exps)} | Jobs: {total_jobs}")
 
-    print(f"[dispatcher-full] Total experiments: {len(exps)}")
-    print(f"[dispatcher-full] Total jobs: {len(gpu0_jobs) + len(gpu1_jobs)}")
-    print(f"[dispatcher-full] cuda:0 receives {len(gpu0_jobs)} jobs")
-    print(f"[dispatcher-full] cuda:1 receives {len(gpu1_jobs)} jobs")
+    for idx, dev in enumerate(devices):
+        path = f"gpu{idx}_jobs.json"
+        with open(path, "w") as f:
+            json.dump(jobs_by_gpu[dev], f)
+        print(f"[dispatcher] Wrote {path} ({len(jobs_by_gpu[dev])} jobs)")
 
+    procs = []
+    for idx in range(len(devices)):
+        procs.append(subprocess.Popen(["python", "worker_entry.py", str(idx)]))
 
-    # Save job lists for workers (spec dict + seed are JSON-serializable)
-    with open("gpu0_jobs.json", "w") as f:
-        json.dump(gpu0_jobs, f)
-    with open("gpu1_jobs.json", "w") as f:
-        json.dump(gpu1_jobs, f)
+    for p in procs:
+        p.wait()
 
-    # Launch workers
-    p0 = subprocess.Popen(["python", "worker_entry.py", "0"])
-    p1 = subprocess.Popen(["python", "worker_entry.py", "1"])
-
-    p0.wait()
-    p1.wait()
-
-    print("\n[dispatcher-full] ALL RUNS COMPLETE.")
+    print("\n[dispatcher] ALL RUNS COMPLETE.")
