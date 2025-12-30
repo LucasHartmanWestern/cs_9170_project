@@ -1,0 +1,45 @@
+Job started: Mon 29 Dec 2025 03:01:14 PM EST
+Host: rg31701
+Workdir: /home/epigou/links/projects/def-mcapretz/epigou/cs_9170_project
+CUDA_VISIBLE_DEVICES=0,1
+Python 3.12.4
+Mon Dec 29 15:01:15 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.195.03             Driver Version: 570.195.03     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100 80GB HBM3          Off |   00000000:CB:00.0 Off |                    0 |
+| N/A   43C    P0             73W /  700W |       0MiB /  81559MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA H100 80GB HBM3          Off |   00000000:DB:00.0 Off |                    0 |
+| N/A   42C    P0             69W /  700W |       0MiB /  81559MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+[dispatcher-full] Total experiments: 1
+[dispatcher-full] Total jobs: 1
+[dispatcher-full] CUDA_VISIBLE_DEVICES=0,1
+[dispatcher-full] Visible GPU count: 2
+[dispatcher-full] cuda:0 receives 1 jobs
+[dispatcher-full] cuda:1 receives 0 jobs
+[dispatcher-full] Wrote gpu0_jobs.json
+[dispatcher-full] Wrote gpu1_jobs.json
+[dispatcher] LAUNCH TEST_census_income_PCA4_Bias0.35_Min1_Maj0_Lam0.80-0.80_T500_R1000 (seed=42) on cuda:0 · exp_group=20251229150120__TEST_census_income_PCA4_Bias0.35_Min1_Maj0_Lam0.80-0.80_T500_R1000
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[Tracker] Experiment: EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291501_852b69c6
+[Tracker] Seed folder: training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291501_852b69c6/seed_42
+[Tracker] Run: 2025-12-29_15-01-27_seed42_1195009_7ff8db6f
+[Tracker] Metrics CSV: training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291501_852b69c6/seed_42/metrics.csv
+[Tracker] Mirroring console to: training_runs/EP1_PCA4_REWlocal_gauss_minID1_majID0_TRJ500_REAL1000_BIAS0.35_G202512291501_852b69c6/seed_42/console.log
