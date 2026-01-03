@@ -1,7 +1,6 @@
 # --- Imports ---
 
 # Standard library
-from audioop import bias
 import os
 import sys
 import time
@@ -72,12 +71,6 @@ class Training:
         # ---- misc ----
         seed=42,
         device='cpu',
-        lambda_schedule=(0.8, 0.8),
-        use_delta_actions=True,
-        delta_scale=0.10,
-        delta_clip=0.20,
-        pca_clip=None,
-        radius_clip=None
     ):
         self.exp_group = exp_group
         self.seed = seed
@@ -110,6 +103,15 @@ class Training:
             self.state_dim = 1 + 2 * self.pca_components
         else:
             self.state_dim = 2
+        # ---- ENV hyperparams (NEW) ----
+        self.use_delta_actions = use_delta_actions
+        self.delta_scale = delta_scale
+        self.delta_clip = delta_clip
+        self.pca_clip = pca_clip
+        self.radius_clip = radius_clip
+        from pathlib import Path
+        self.project_root = Path(__file__).resolve().parent
+
 
         # -----------------------------
         # dataset
@@ -738,39 +740,54 @@ class Training:
                 alpha_model=self.alpha_model,
                 x_test=x_theta_test,
                 y_test=y_theta_test,
-                f1_thresh=0.5,  # or a θ_val-fixed threshold
+                f1_thresh=0.5,
+
+                prefer_best_beta=True,
+                beta_model=self.beta_model,      # optional; best checkpoint will override if present
+
                 x_train=x_theta_train,
                 y_train=y_theta_train,
-                # Existing jitter baseline (β)
-                jitter_n=self.traj_length,  # match per-episode synthetic count
-                jitter_scale=0.20,          # 0.10–0.30 typical
-                # (A) α_raw_original on ORIGINAL TRAIN (unbiased) mapped to θ
+
+                # existing jitter baseline params (use defaults or override as needed)
+                jitter_n=None,
+                jitter_scale=0.20,
+
+                # NEW alpha toggles/params
                 run_alpha_raw_original=False,
-                # (B) α_same+REAL: add real minority from ORIGINAL TRAIN pool
                 run_alpha_plus_real=False,
-                alpha_plus_real_n=self.traj_length,
-                # (C) Alpha+CTGAN: add conditional CTGAN minority (trained in raw space)
+                alpha_plus_real_n=2000,
+
+                # NEW CTGAN baseline toggles/params
                 run_alpha_plus_ctgan=True,
-                alpha_plus_ctgan_n=self.traj_length,
-                ctgan_epochs=6000,
+                alpha_plus_ctgan_n=self.traj_length,   # or your chosen synth budget
+                ctgan_epochs=self.episodes,
                 cap_ctgan_train=None,
-                # Dataset settings for rebuilding the original pool
-                data_path=self.dataset.data_path,
+
+                # NEW CTABGAN baseline toggles/params
+                run_ctabgan=True,
+                alpha_plus_ctabgan_n=self.traj_length,  # same budget as CTGAN for fairness
+
+                # CTABGAN subprocess wiring (optional if you set defaults in signature)
+                ctab_python="/home/epigou/envs/ctabgan/bin/python",
+                ctab_repo="/home/epigou/CTAB-GAN-Plus-DP",
+                ctab_runner=str(self.project_root / "benchmarks" / "ctabgan" / "run_ctabgan.py"),
+
+                # Dataset rebuild params (must match CTGAN baseline rebuild)
+                data_path=None,  # set if needed, or rely on default
                 bias_pct=self.bias_pct,
                 val_frac=0.20,
                 test_frac=0.20,
                 train_size=self.real_data_size,
+
+                # additional CTABGAN batch/seed/pca-related params
+                batch_size=64,
+                pca_components=None,
+                seed=self.seed,
             )
+
 
         print(f"Total time {time.time() - start_time:.2f}s")
         print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
-
-# ===============================================================
-# DRAC-SAFE DISPATCHER: baseline anchor + isolated ablations
-# Replaces your dispatcher code (outside Training class)
-# ===============================================================
-
-
 
 # ---------------------------------------------------------------
 # utils
@@ -895,11 +912,11 @@ def run_one_experiment(spec, seed, device):
 seeds = [42, 123, 999]
 
 # Your agreed sweeps
-ACTIVITY_PAIRS = [(4, 7), (2, 3), (9, 10)]
-LAMBDA_SWEEP   = [(0.5, 0.5),(0.2, 0.8)]
-PCA_SWEEP      = [14, 18]
-RATIO_SWEEP    = [(1000, 1500), (4000, 6000), (3000, 2000)]
-EP_LENGTHS     = [8000, 10000]
+ACTIVITY_PAIRS = []
+LAMBDA_SWEEP   = [(0.2, 0.8), (0.3,0.3)]
+PCA_SWEEP      = [18]
+RATIO_SWEEP    = [(4000, 6000)]
+EP_LENGTHS     = [10000]
 
 DELTA_SCALES   = [0.05, 0.20]
 DELTA_CLIPS    = [0.10, 0.40]
@@ -1050,13 +1067,13 @@ def build_test_experiments():
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     s = deepcopy(BASELINE)
     s.update(
-        dataset_name="census_income",
-        minority_id=1,
-        majority_id=0,
-        pca_components=4,
-        traj_length=200,         # tiny
-        real_data_size=400,      # tiny
-        total_episodes=20,       # tiny
+        dataset_name="pamap2",
+        minority_id=12,
+        majority_id=13,
+        pca_components=10,
+        traj_length=2000,         # tiny
+        real_data_size=3000,      # tiny
+        total_episodes=6000,       # tiny
         lambda_schedule=(0.8, 0.8),
         reward_mode="local_gauss",
         curriculum_learning=True,
@@ -1074,7 +1091,7 @@ if __name__ == "__main__":
 
     if USE_TEST_EXPERIMENTS:
         exps = build_test_experiments()
-        run_seeds = [42]
+        run_seeds = [42,123,999 ]
     else:
         exps = build_experiments_baseline_plus_ablations()
         run_seeds = seeds

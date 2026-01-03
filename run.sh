@@ -2,9 +2,9 @@
 #SBATCH --job-name=adapt_rl
 #SBATCH --account=def-mcapretz
 #SBATCH --time=52:00:00
-#SBATCH --mem=32G
-#SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:2                   
+#SBATCH --mem=10G
+#SBATCH --cpus-per-task=2
+#SBATCH --gres=gpu:1                 
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 export TORCH_COMPILE_DISABLE=1
