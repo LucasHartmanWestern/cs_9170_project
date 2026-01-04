@@ -758,13 +758,13 @@ class Training:
                 alpha_plus_real_n=2000,
 
                 # NEW CTGAN baseline toggles/params
-                run_alpha_plus_ctgan=True,
+                run_alpha_plus_ctgan=False,
                 alpha_plus_ctgan_n=self.traj_length,   # or your chosen synth budget
                 ctgan_epochs=self.episodes,
                 cap_ctgan_train=None,
 
                 # NEW CTABGAN baseline toggles/params
-                run_ctabgan=True,
+                run_ctabgan=False,
                 alpha_plus_ctabgan_n=self.traj_length,  # same budget as CTGAN for fairness
 
                 # CTABGAN subprocess wiring (optional if you set defaults in signature)
