@@ -10,6 +10,10 @@ import hashlib
 from copy import deepcopy
 from datetime import datetime
 
+def _slug(s: str) -> str:
+    import re
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", s).strip("-")
+
 def _read_json(path: Path) -> dict:
     """
     Safe JSON reader. Returns {} on any error or if the file doesn't exist.
@@ -44,8 +48,8 @@ def _fingerprint_run_stats(
                 v = fmt(v)
             parts.append(f"{tag}{v}")
 
-    def add_literal(tag, value):
-        parts.append(f"{tag}{value}")
+    # NEW: include spec name early so it appears in the parent folder
+    add_key("SPEC", "SPEC_NAME", lambda s: _slug(str(s)))
 
     add_key("EP",    "EPISODES",       int)
     add_key("PCA",   "pca_components", int)
@@ -57,7 +61,9 @@ def _fingerprint_run_stats(
     add_key("REAL",  "REAL_DATA_SIZE", int)
     add_key("BIAS",  "BIAS_PCT",       lambda x: str(x).rstrip("0").rstrip(".") if isinstance(x, float) else x)
 
-    add_key("G",     "EXP_GROUP",      lambda s: str(s)[:12])
+    # OPTIONAL: keep a short group stamp, but don't truncate away useful info
+    # If EXP_GROUP already includes G2026..., keep just the time marker:
+    add_key("G", "EXP_GROUP", lambda s: str(s)[-13:])  # e.g., "__G202601061430"
 
     slug = "_".join(parts) if parts else "exp"
 
@@ -65,6 +71,7 @@ def _fingerprint_run_stats(
     h = hashlib.sha1(j).hexdigest()[:8]
     experiment_id = f"{slug}_{h}"
     return experiment_id, rs
+
 
 class _TeeLogger:
     def __init__(self, *streams):
