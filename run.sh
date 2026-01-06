@@ -37,9 +37,9 @@ nvidia-smi || true
 
 SPEC_DIR="experiment_specs"
 
-SPEC_A="${SPEC_DIR}/test_spec_A.json"
-SPEC_B="${SPEC_DIR}/test_spec_B.json"
-SPEC_C="${SPEC_DIR}/test_spec_C.json"
+SPEC_A="${SPEC_DIR}/testA.json"
+SPEC_B="${SPEC_DIR}/testB.json"
+SPEC_C="${SPEC_DIR}/testC.json"
 
 mkdir -p "${SPEC_DIR}/logs"
 
