@@ -11,7 +11,6 @@ set -euo pipefail
 export TORCH_COMPILE_DISABLE=1
 export TORCHDYNAMO_DISABLE=1
 
-# Prevent CPU oversubscription when running multiple Python processes
 export OMP_NUM_THREADS=2
 export MKL_NUM_THREADS=2
 export OPENBLAS_NUM_THREADS=2
@@ -29,14 +28,7 @@ source ~/envs/rl/bin/activate
 python -V
 nvidia-smi || true
 
-# --------------------------------------------------------------------
-# CONCURRENT RUNS ON A SINGLE GPU
-# Each main.py call runs: 1 spec file × all seeds in that JSON
-# Logs go to experiment_specs/ and are named after the spec
-# --------------------------------------------------------------------
-
 SPEC_DIR="experiment_specs"
-
 SPEC_A="${SPEC_DIR}/testA.json"
 SPEC_B="${SPEC_DIR}/testB.json"
 SPEC_C="${SPEC_DIR}/testC.json"
@@ -48,14 +40,14 @@ launch () {
   local NAME
   NAME="$(basename "$SPEC" .json)"
 
-  local OUT="experiment_specs/logs/${NAME}.out"
-  local ERR="experiment_specs/logs/${NAME}.err"
+  local OUT="${SPEC_DIR}/logs/${NAME}.out"
+  local ERR="${SPEC_DIR}/logs/${NAME}.err"
 
   echo "[batch] Launching ${SPEC} -> ${OUT} / ${ERR}"
 
   srun --exclusive -N1 -n1 -c2 \
-    python -u main.py --spec "$SPEC" --device cuda:0 \
-    1> "$OUT" 2> "$ERR" &
+    --output="$OUT" --error="$ERR" \
+    python -u main.py --spec "$SPEC" --device cuda:0 &
   echo $!
 }
 
