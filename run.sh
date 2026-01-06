@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=adapt_rl_pack
 #SBATCH --account=def-mcapretz
-#SBATCH --time=52:00:00
+#SBATCH --time=00:10:00
 #SBATCH --mem=10G
 #SBATCH --cpus-per-task=6
 #SBATCH --gres=gpu:1
