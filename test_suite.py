@@ -837,181 +837,186 @@ class TestSuite:
 
 
     # ---------------- Final test orchestrator ----------------
-    def log_final_test(self, alpha_model, x_test, y_test, f1_thresh: float = 0.5,
-                    prefer_best_beta: bool = True, beta_model=None,
-                    x_train=None, y_train=None,
-                    # existing jitter baseline params
-                    jitter_n=None, jitter_scale: float = 0.20,
-                    # NEW alpha toggles/params
-                    run_alpha_raw_original: bool = True,
-                    run_alpha_plus_real: bool = True,
-                    alpha_plus_real_n: int = 2000,
-                    # NEW CTGAN baseline toggles/params
-                    run_alpha_plus_ctgan: bool = True,
-                    alpha_plus_ctgan_n: int = 2000,
-                    ctgan_epochs: int = 300,
-                    cap_ctgan_train: int | None = None,
-                    # NEW CTABGAN baseline toggles/params
-                    run_ctabgan: bool = True,
-                    alpha_plus_ctabgan_n: int = 2000,
-                    # CTABGAN subprocess wiring
-                    ctab_python: str = "/home/epigou/envs/ctabgan/bin/python",
-                    ctab_repo: str = "/home/epigou/CTAB-GAN-Plus-DP",
-                    ctab_runner: str | None = None,
-                    # dataset settings used to rebuild original pool
-                    data_path: str = "census+income/adult.data",
-                    bias_pct: float = 0.20,
-                    val_frac: float = 0.20,
-                    test_frac: float = 0.20,
-                    train_size: int | None = None,
-                    # additional CTABGAN batch/seed/pca-related params
-                    batch_size: int = 64,
-                    pca_components: int = None,
-                    seed: int | None = None):
+    def log_final_test(
+        self, alpha_model, x_test, y_test, f1_thresh: float = 0.5,
+        prefer_best_beta: bool = True, beta_model=None,
+        x_train=None, y_train=None,
+        jitter_n=None, jitter_scale: float = 0.20,
+        run_alpha_raw_original: bool = True,
+        run_alpha_plus_real: bool = True,
+        alpha_plus_real_n: int = 2000,
+        run_alpha_plus_ctgan: bool = False,
+        alpha_plus_ctgan_n: int = 2000,
+        ctgan_epochs: int = 300,
+        cap_ctgan_train: int | None = None,
+        run_ctabgan: bool = False,
+        alpha_plus_ctabgan_n: int = 2000,
+        # CTABGAN subprocess wiring (default None)
+        ctab_python: str | None = None,
+        ctab_repo: str | None = None,
+        ctab_runner: str | None = None,
+        data_path: str = "census+income/adult.data",
+        bias_pct: float = 0.20,
+        val_frac: float = 0.20,
+        test_frac: float = 0.20,
+        train_size: int | None = None,
+        batch_size: int = 64,
+        pca_components: int | None = None,
+        seed: int | None = None
+    ):
+        """
+        End-of-run θ_test evaluation.
+        Also (optionally) trains/evaluates:
+        A) α_raw_original on original TRAIN (unbiased),
+        B) α_same+REAL on the passed train set + real minority points from original TRAIN,
+        C) α+CTGAN when supported by the dataset (skips otherwise).
+        """
+        beta_for_eval = None
+        if prefer_best_beta and self.beta_factory is not None and self.best_beta_path and self.best_beta_path.exists():
+            beta_for_eval = self.beta_factory()
+            state = torch.load(self.best_beta_path, map_location=x_test.device)
+            beta_for_eval.model.load_state_dict(state)
+            print(f"[TestSuite] Loaded best β weights from: {self.best_beta_path}")
+        elif beta_model is not None:
+            beta_for_eval = beta_model
+            print("[TestSuite] Using provided β (no best checkpoint found or factory missing).")
+        else:
+            print("[TestSuite] No β available for TEST evaluation (skipping β metrics).")
 
+        with torch.no_grad():
+            p1_alpha = self._p1_from_agent(alpha_model, x_test)
+            a_f1_min, a_f1_maj, a_f1_w, a_f1_macro = self._all_f1_from_probs(y_test, p1_alpha, f1_thresh)
+            a_brier = self._brier_mean(y_test, p1_alpha)
 
-            """
-            End-of-run θ_test evaluation.
-            Also (optionally) trains/evaluates:
-            A) α_raw_original on original TRAIN (unbiased),
-            B) α_same+REAL on the passed train set + real minority points from original TRAIN,
-            C) α+CTGAN when supported by the dataset (skips otherwise).
-            """
-            beta_for_eval = None
-            if prefer_best_beta and self.beta_factory is not None and self.best_beta_path and self.best_beta_path.exists():
-                beta_for_eval = self.beta_factory()
-                state = torch.load(self.best_beta_path, map_location=x_test.device)
-                beta_for_eval.model.load_state_dict(state)
-                print(f"[TestSuite] Loaded best β weights from: {self.best_beta_path}")
-            elif beta_model is not None:
-                beta_for_eval = beta_model
-                print("[TestSuite] Using provided β (no best checkpoint found or factory missing).")
+            if beta_for_eval is not None:
+                p1_beta = self._p1_from_agent(beta_for_eval, x_test)
+                b_f1_min, b_f1_maj, b_f1_w, b_f1_macro = self._all_f1_from_probs(y_test, p1_beta, f1_thresh)
+                b_brier = self._brier_mean(y_test, p1_beta)
             else:
-                print("[TestSuite] No β available for TEST evaluation (skipping β metrics).")
+                b_f1_min = b_f1_maj = b_f1_w = b_f1_macro = b_brier = float('nan')
 
-            with torch.no_grad():
-                p1_alpha = self._p1_from_agent(alpha_model, x_test)
-                a_f1_min, a_f1_maj, a_f1_w, a_f1_macro = self._all_f1_from_probs(y_test, p1_alpha, f1_thresh)
-                a_brier = self._brier_mean(y_test, p1_alpha)
+        # ----- built-in β baselines -----
+        # jitter_metrics = self.run_jitter_baseline(
+        #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
+        #     f1_thresh=f1_thresh, jitter_n=jitter_n, jitter_scale=jitter_scale, seed=seed
+        # ) if (x_train is not None and y_train is not None) else {}
 
-                if beta_for_eval is not None:
-                    p1_beta = self._p1_from_agent(beta_for_eval, x_test)
-                    b_f1_min, b_f1_maj, b_f1_w, b_f1_macro = self._all_f1_from_probs(y_test, p1_beta, f1_thresh)
-                    b_brier = self._brier_mean(y_test, p1_beta)
-                else:
-                    b_f1_min = b_f1_maj = b_f1_w = b_f1_macro = b_brier = float('nan')
+        # oversample_metrics = self.run_oversample_baseline(
+        #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
+        #     f1_thresh=f1_thresh, batch_size=32, seed=seed
+        # ) if (x_train is not None and y_train is not None) else {}
 
-            # ----- built-in β baselines -----
-            # jitter_metrics = self.run_jitter_baseline(
-            #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
-            #     f1_thresh=f1_thresh, jitter_n=jitter_n, jitter_scale=jitter_scale, seed=seed
-            # ) if (x_train is not None and y_train is not None) else {}
+        # undersample_metrics = self.run_undersample_baseline(
+        #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
+        #     f1_thresh=f1_thresh, batch_size=32, seed=seed
+        # ) if (x_train is not None and y_train is not None) else {}
 
-            # oversample_metrics = self.run_oversample_baseline(
-            #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
-            #     f1_thresh=f1_thresh, batch_size=32, seed=seed
-            # ) if (x_train is not None and y_train is not None) else {}
+        # # ----- NEW α baselines (dataset-driven) -----
+        # alpha_raworig_metrics = self.run_alpha_raw_original_train(
+        #     x_test=x_test, y_test=y_test,
+        #     data_path=data_path,  # ignored, for back-compat
+        #     bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac,
+        #     train_size=train_size, pca_components=int(x_test.shape[1]), batch_size=64, f1_thresh=f1_thresh
+        # ) if run_alpha_raw_original else {}
 
-            # undersample_metrics = self.run_undersample_baseline(
-            #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
-            #     f1_thresh=f1_thresh, batch_size=32, seed=seed
-            # ) if (x_train is not None and y_train is not None) else {}
+        # alpha_plusreal_metrics = self.run_alpha_same_train_plus_real_minority(
+        #     x_train_used=x_train, y_train_used=y_train, x_test=x_test, y_test=y_test,
+        #     real_add_n=int(alpha_plus_real_n),
+        #     data_path=data_path,  # ignored, for back-compat
+        #     bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac, train_size=train_size,
+        #     pca_components=int(x_train.shape[1]) if x_train is not None else int(x_test.shape[1]),
+        #     batch_size=64, f1_thresh=f1_thresh, seed=seed
+        # ) if (run_alpha_plus_real and x_train is not None and y_train is not None) else {}
 
-            # # ----- NEW α baselines (dataset-driven) -----
-            # alpha_raworig_metrics = self.run_alpha_raw_original_train(
-            #     x_test=x_test, y_test=y_test,
-            #     data_path=data_path,  # ignored, for back-compat
-            #     bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac,
-            #     train_size=train_size, pca_components=int(x_test.shape[1]), batch_size=64, f1_thresh=f1_thresh
-            # ) if run_alpha_raw_original else {}
-
-            # alpha_plusreal_metrics = self.run_alpha_same_train_plus_real_minority(
-            #     x_train_used=x_train, y_train_used=y_train, x_test=x_test, y_test=y_test,
-            #     real_add_n=int(alpha_plus_real_n),
-            #     data_path=data_path,  # ignored, for back-compat
-            #     bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac, train_size=train_size,
-            #     pca_components=int(x_train.shape[1]) if x_train is not None else int(x_test.shape[1]),
-            #     batch_size=64, f1_thresh=f1_thresh, seed=seed
-            # ) if (run_alpha_plus_real and x_train is not None and y_train is not None) else {}
-
-            alpha_ctgan_metrics = self.run_ctgan_baseline(
-                x_train_used=x_train, y_train_used=y_train, x_test=x_test, y_test=y_test,
-                data_path=data_path,  # ignored, for back-compat
-                bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac,
-                train_size=train_size, pca_components=int(x_train.shape[1]) if x_train is not None else int(x_test.shape[1]),
-                n_synth=int(alpha_plus_ctgan_n), ctgan_epochs=int(ctgan_epochs),
-                cap_ctgan_train=cap_ctgan_train, batch_size=64, f1_thresh=f1_thresh, seed=seed
-            ) if (run_alpha_plus_ctgan and x_train is not None and y_train is not None) else {}
-
-            ctabgan_metrics = self.run_ctabgan_baseline(
-                x_train_used=x_train, 
-                y_train_used=y_train, 
-                x_test=x_test, 
-                y_test=y_test,
-                data_path=data_path,                 # for back-compat/rebuilding pool like CTGAN
-                bias_pct=bias_pct, 
-                val_frac=val_frac, 
-                test_frac=test_frac,
-                train_size=train_size,
-                pca_components=int(x_train.shape[1]) if x_train is not None else int(x_test.shape[1]),
-                n_synth=int(alpha_plus_ctabgan_n),
-                batch_size=64,
-                f1_thresh=f1_thresh,
-                seed=seed,
-                ctab_python=ctab_python,
-                ctab_repo=ctab_repo,
-                ctab_runner=ctab_runner,
-            ) if (run_ctabgan and x_train is not None and y_train is not None) else {}
+        alpha_ctgan_metrics = self.run_ctgan_baseline(
+            x_train_used=x_train, y_train_used=y_train, x_test=x_test, y_test=y_test,
+            data_path=data_path,
+            bias_pct=bias_pct, val_frac=val_frac, test_frac=test_frac,
+            train_size=train_size,
+            pca_components=int(x_train.shape[1]) if x_train is not None else int(x_test.shape[1]),
+            n_synth=int(alpha_plus_ctgan_n), ctgan_epochs=int(ctgan_epochs),
+            cap_ctgan_train=cap_ctgan_train,
+            batch_size=int(batch_size),         # <-- CHANGED
+            f1_thresh=f1_thresh, seed=seed
+        ) if (run_alpha_plus_ctgan and x_train is not None and y_train is not None) else {}
 
 
-
-            # ----- Console summary -----
-            print("\n[TEST] Alpha -> F1(min)=%.4f | F1(maj)=%.4f | F1(weighted)=%.4f | F1(macro)=%.4f | Brier=%.4f"
-                % (a_f1_min, a_f1_maj, a_f1_w, a_f1_macro, a_brier))
-            if not np.isnan(b_f1_min):
-                print("[TEST] Beta  -> F1(min)=%.4f | F1(maj)=%.4f | F1(weighted)=%.4f | F1(macro)=%.4f | Brier=%.4f"
-                    % (b_f1_min, b_f1_maj, b_f1_w, b_f1_macro, b_brier))
+        ctabgan_metrics = {}
+        if run_ctabgan and x_train is not None and y_train is not None:
+            # If user didn't pass a runner path, you can require it (recommended).
+            if ctab_runner is None:
+                print("[TestSuite] CTABGAN requested but ctab_runner is None. Skipping CTABGAN baseline.")
             else:
-                print("[TestSuite] Beta  -> (no checkpoint/factory)")
+                ctabgan_metrics = self.run_ctabgan_baseline(
+                    x_train_used=x_train,
+                    y_train_used=y_train,
+                    x_test=x_test,
+                    y_test=y_test,
+                    data_path=data_path,
+                    bias_pct=bias_pct,
+                    val_frac=val_frac,
+                    test_frac=test_frac,
+                    train_size=train_size,
+                    pca_components=int(x_train.shape[1]) if x_train is not None else int(x_test.shape[1]),
+                    n_synth=int(alpha_plus_ctabgan_n),
+                    batch_size=int(batch_size),      # <-- CHANGED
+                    f1_thresh=f1_thresh,
+                    seed=seed,
+                    ctab_python=ctab_python,         # may be None; runner should use sys.executable
+                    ctab_repo=ctab_repo,             # may be None; runner can require it
+                    ctab_runner=ctab_runner,
+                )
 
-            # ----- Persist -----
-            seed_csv = self.seed_dir / "final_test_metrics.csv"
-            base_row = {
-                "timestamp": time.strftime("%Y-%m-%d_%H-%M-%S"),
-                "seed": str(self.seed),
-                "run_id": self.run_id,
-                "threshold": float(f1_thresh),
 
-                "alpha_f1_minority": a_f1_min,
-                "alpha_f1_majority": a_f1_maj,
-                "alpha_f1_weighted": a_f1_w,
-                "alpha_f1_macro": a_f1_macro,
-                "alpha_brier": a_brier,
 
-                "beta_f1_minority": b_f1_min,
-                "beta_f1_majority": b_f1_maj,
-                "beta_f1_weighted": b_f1_w,
-                "beta_f1_macro": b_f1_macro,
-                "beta_brier": b_brier,
-            }
 
-            row = dict(base_row)
-            for metrics_var in [
-                "jitter_metrics",
-                "oversample_metrics",
-                "undersample_metrics",
-                "alpha_raworig_metrics",
-                "alpha_plusreal_metrics",
-                "alpha_ctgan_metrics",
-                "ctabgan_metrics"
-            ]:
-                if metrics_var in locals() and locals()[metrics_var] is not None:
-                    row.update(locals()[metrics_var])
+        # ----- Console summary -----
+        print("\n[TEST] Alpha -> F1(min)=%.4f | F1(maj)=%.4f | F1(weighted)=%.4f | F1(macro)=%.4f | Brier=%.4f"
+            % (a_f1_min, a_f1_maj, a_f1_w, a_f1_macro, a_brier))
+        if not np.isnan(b_f1_min):
+            print("[TEST] Beta  -> F1(min)=%.4f | F1(maj)=%.4f | F1(weighted)=%.4f | F1(macro)=%.4f | Brier=%.4f"
+                % (b_f1_min, b_f1_maj, b_f1_w, b_f1_macro, b_brier))
+        else:
+            print("[TestSuite] Beta  -> (no checkpoint/factory)")
 
-            pd.DataFrame([row]).to_csv(seed_csv, mode="a", header=not seed_csv.exists(), index=False)
-            print(f"[TestSuite] Final test metrics appended to (seed): {seed_csv}")
+        # ----- Persist -----
+        seed_csv = self.seed_dir / "final_test_metrics.csv"
+        base_row = {
+            "timestamp": time.strftime("%Y-%m-%d_%H-%M-%S"),
+            "seed": str(self.seed),
+            "run_id": self.run_id,
+            "threshold": float(f1_thresh),
 
-            exp_csv = self.experiment_dir / "final_test_metrics.csv"
-            pd.DataFrame([row]).to_csv(exp_csv, mode="a", header=not exp_csv.exists(), index=False)
-            print(f"[TestSuite] Final test metrics appended to (experiment): {exp_csv}")
-            return row
+            "alpha_f1_minority": a_f1_min,
+            "alpha_f1_majority": a_f1_maj,
+            "alpha_f1_weighted": a_f1_w,
+            "alpha_f1_macro": a_f1_macro,
+            "alpha_brier": a_brier,
+
+            "beta_f1_minority": b_f1_min,
+            "beta_f1_majority": b_f1_maj,
+            "beta_f1_weighted": b_f1_w,
+            "beta_f1_macro": b_f1_macro,
+            "beta_brier": b_brier,
+        }
+
+        row = dict(base_row)
+        for metrics_var in [
+            "jitter_metrics",
+            "oversample_metrics",
+            "undersample_metrics",
+            "alpha_raworig_metrics",
+            "alpha_plusreal_metrics",
+            "alpha_ctgan_metrics",
+            "ctabgan_metrics"
+        ]:
+            if metrics_var in locals() and locals()[metrics_var] is not None:
+                row.update(locals()[metrics_var])
+
+        pd.DataFrame([row]).to_csv(seed_csv, mode="a", header=not seed_csv.exists(), index=False)
+        print(f"[TestSuite] Final test metrics appended to (seed): {seed_csv}")
+
+        exp_csv = self.experiment_dir / "final_test_metrics.csv"
+        pd.DataFrame([row]).to_csv(exp_csv, mode="a", header=not exp_csv.exists(), index=False)
+        print(f"[TestSuite] Final test metrics appended to (experiment): {exp_csv}")
+        return row

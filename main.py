@@ -33,7 +33,7 @@ def build_exp_group(spec_path: str, spec: dict) -> str:
     return f"SPEC_{_spec_id(spec_path, spec)}__G{ts}"
 
 def run_spec_all_seeds(spec_path: str, device: str):
-    from training import Training  # your existing Training class
+    from training import Training
 
     spec = _load_spec(spec_path)
 
@@ -42,7 +42,7 @@ def run_spec_all_seeds(spec_path: str, device: str):
     if not isinstance(seeds, list) or len(seeds) == 0:
         raise ValueError(f"spec['seeds'] must be a non-empty list. Got: {seeds}")
 
-    # One exp_group for all seeds => one parent folder
+    # One exp_group for all seeds
     exp_group = build_exp_group(spec_path, spec)
     spec_base = os.path.basename(spec_path)
     spec_name = os.path.splitext(spec_base)[0]
@@ -51,7 +51,7 @@ def run_spec_all_seeds(spec_path: str, device: str):
     print(f"[main] exp_group={exp_group}")
     print(f"[main] seeds={seeds}")
 
-    # Run all seeds sequentially (within this single main.py invocation)
+    # Run all seeds sequentially
     for seed in seeds:
         seed = int(seed)
         print(f"[main] ---- running seed={seed} ----")
@@ -77,13 +77,18 @@ def run_spec_all_seeds(spec_path: str, device: str):
             total_episodes=spec["total_episodes"],
 
             reward_mode=spec["reward_mode"],
-            lambda_schedule=tuple(spec["lambda_schedule"]),  # JSON list -> tuple
+            lambda_schedule=tuple(spec["lambda_schedule"]),
 
             use_delta_actions=spec.get("use_delta_actions", True),
             delta_scale=spec.get("delta_scale", 0.10),
             delta_clip=spec.get("delta_clip", 0.20),
             pca_clip=spec.get("pca_clip", None),
             radius_clip=spec.get("radius_clip", None),
+
+            ffnn=spec.get("ffnn"),
+            reinforce=spec.get("reinforce"),
+            curriculum=spec.get("curriculum"),
+            benchmarks=spec.get("benchmarks"),
         )
 
         trainer()

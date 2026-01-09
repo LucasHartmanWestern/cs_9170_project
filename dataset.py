@@ -42,14 +42,10 @@ class Dataset:
         num_cols: list[str]
 
     def _make_pca(self, n_components: int) -> PCA:
-        """
-        Single source of truth for PCA config.
-        Use the SAME config everywhere (splits + gan_view).
-        """
         return PCA(
             n_components=n_components,
             svd_solver="full",          # deterministic basis for same data
-            random_state=self.seed,     # deterministic for randomized solvers (still safe here)
+            random_state=self.seed,     # deterministic for randomized solvers 
         )
 
     def _fit_theta_transforms(
@@ -60,10 +56,6 @@ class Dataset:
         num_cols: list[str],
         pca_components: int,
     ):
-        """
-        Fits encoder + scaler + PCA on the biased TRAIN split only (no leakage),
-        with identical behavior across split_* and gan_view.
-        """
         try:
             encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
         except TypeError:
@@ -109,11 +101,11 @@ class Dataset:
         y_raw = np.where(X_df_raw["income"].isin(['>50K', '>50K.']), 1, 0).astype(int)
         X_df_raw = X_df_raw.drop(columns=["income"])
 
-        # Identify column types once (consistent across splits)
+        # Identify column types
         cat_cols = [c for c in X_df_raw.columns if X_df_raw[c].dtype.name in ['category', 'object', 'bool']]
         num_cols = [c for c in X_df_raw.columns if np.issubdtype(X_df_raw[c].dtype, np.number)]
 
-        # 2) Split raw into θ_train / θ_temp, then θ_val / θ_test (stratified)
+        # 2) Split raw into θ_train / θ_temp, then θ_val / θ_test
         X_train_df, X_temp_df, y_train, y_temp = train_test_split(
             X_df_raw, y_raw, test_size=(val_frac + test_frac),
             random_state=self.seed, stratify=y_raw
@@ -187,8 +179,7 @@ class Dataset:
         X_test_num = scaler.transform(X_test_biased_df[num_cols])  if len(num_cols) else np.empty((len(X_test_biased_df), 0))
         X_test_all = np.hstack([X_test_num, X_test_cat])
 
-        # 5) Fit PCA on θ_train only; transform val/test (no leakage)
-        # NEW (uses unified PCA config)
+        # 5) Fit PCA on θ_train only; transform val/test
         pca = self._make_pca(pca_components)
         X_train_pca = pca.fit_transform(X_train_all)
         X_val_pca   = pca.transform(X_val_all)
@@ -245,19 +236,14 @@ class Dataset:
         stats=("std", "rms"),
     ):
         """
-        PAMAP2 → (walking vs rope jumping) preprocessing.
-
-        Key updates vs previous version:
-        - Deterministic seeds: no rng.randint() used for bias/subsample/PCA.
-        - PCA config is consistent & deterministic (svd_solver="full", random_state=self.seed).
-        - Caches GAN view (unbiased TRAIN + fitted transforms) for apples-to-apples CTGAN/CTAB baselines.
+        PAMAP2
         """
         assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1, \
             "val_frac and test_frac must be in (0,1) and sum to < 1."
 
         rng = np.random.RandomState(self.seed)
 
-        # -------- constants / helpers --------
+        # constants / helpers 
         third_activity_id = self.third_id
         FS = 100
         WIN = int(win_seconds * FS)
@@ -281,7 +267,7 @@ class Dataset:
             m = re.search(r"subject(\d+)", Path(path).stem.lower())
             return m.group(1) if m else "unknown"
 
-        # -------- load all .dat --------
+        #load all .dat
         data_dir = Path(data_dir)
         files = []
         for sub in ["Protocol", "Optional", "protocol", "optional"]:
@@ -301,7 +287,7 @@ class Dataset:
             dfs.append(df)
         df = pd.concat(dfs, ignore_index=True)
 
-        # -------- choose activities & map labels --------
+        #choose activities & map labels
         include_third_label = self.multiclass
         keep_ids = (
             [self.MAJORITY_ID, self.MINORITY_ID]
@@ -315,14 +301,14 @@ class Dataset:
             mapping[third_activity_id] = 2
         df["y"] = df["activity_id"].map(mapping)
 
-        # -------- per-subject interpolation (avoid leakage) --------
+        #per-subject interpolation
         num = df.select_dtypes(include=[np.number]).columns.tolist()
         num = [c for c in num if c not in ("activity_id", "y")]
         df = df.sort_values(["subject_id", "timestamp"]).groupby("subject_id", group_keys=False).apply(
             lambda g: g.assign(**{c: g[c].interpolate(limit_direction="both") for c in num})
         )
 
-        # -------- base channels (heart + acc16g + gyro +/- mag) --------
+        #base channels (heart + acc16g + gyro +/- mag)
         keep_triplets = [("acc", ACC16), ("gyr", GYR)]
         if not drop_magnetometers:
             keep_triplets.append(("mag", MAG))
@@ -342,7 +328,7 @@ class Dataset:
 
         base_cols = ["heart_rate"] + base_cols
 
-        # -------- windowing → features --------
+        #windowing → features
         rows, labels, subjects = [], [], []
         df = df.sort_values(["subject_id", "timestamp"]).reset_index(drop=True)
 
@@ -378,7 +364,7 @@ class Dataset:
         y_all = np.asarray(labels, dtype=int)
         subj_all = np.asarray(subjects)
 
-        # -------- subject-aware split (train / val / test) --------
+        #subject-aware split (train / val / test)
         unique_subjects = np.unique(subj_all)
         rng.shuffle(unique_subjects)
 
@@ -407,7 +393,7 @@ class Dataset:
         y_val      = y_all[m_val]
         y_test     = y_all[m_test]
 
-        # -------- bias rope (class 1) inside each split --------
+        #bias (class 1) inside each split
         def apply_bias_rope(df_split, y_split, target_minority_pct, seed_local):
             dfb = df_split.copy()
             dfb["__y__"] = y_split
@@ -437,16 +423,16 @@ class Dataset:
 
         target_minority_pct = float(bias_pct)
 
-        # Deterministic seeds (no rng.randint)
+        # Deterministic seeds 
         seed_local = int(self.seed)
 
-        # Bias train/val/test (realistic: only biased data accessible)
+        # Bias train/val/test
         X_train_biased_df, y_train_biased = apply_bias_rope(X_train_df, y_train, target_minority_pct, seed_local)
         X_val_biased_df,   y_val_biased   = apply_bias_rope(X_val_df,   y_val,   target_minority_pct, seed_local)
         X_test_biased_df,  y_test_biased  = apply_bias_rope(X_test_df,  y_test,  target_minority_pct, seed_local)
 
 
-        # Optional: subsample TRAIN after biasing (deterministic)
+        #subsample TRAIN after biasing (deterministic)
         if train_size is not None and train_size < len(X_train_biased_df):
             X_train_biased_df, _, y_train_biased, _ = train_test_split(
                 X_train_biased_df,
@@ -456,14 +442,14 @@ class Dataset:
                 stratify=y_train_biased,
             )
 
-        # -------- scaler + PCA on TRAIN only --------
+        #scaler + PCA on TRAIN only
         meta_cols = ["subject_id"]
         feature_cols = [c for c in X_train_biased_df.columns if c not in meta_cols]
 
         scaler = StandardScaler()
         Xtr_z = scaler.fit_transform(X_train_biased_df[feature_cols].values)
 
-        # Deterministic PCA config (no rng.randint)
+        # Deterministic PCA config
         pca = PCA(n_components=pca_components, svd_solver="full", random_state=seed_local)
         Xtr_p = pca.fit_transform(Xtr_z)
 
@@ -484,25 +470,19 @@ class Dataset:
         y_val_theta   = torch.tensor(y_val_biased, dtype=torch.long, device=device)
         y_test_theta  = torch.tensor(y_test_biased, dtype=torch.long, device=device)
 
-        # -------- Cache GAN view for apples-to-apples CTGAN/CTAB baselines --------
-        # Train GAN on UNBIASED TRAIN, but map samples using transforms fit on BIASED TRAIN.
-        # We cache the exact objects used in this run.
+        # Cache GAN view for CTGAN/CTAB baselines
         try:
-            # store in a simple dict so you can expose it with get_gan_view()
             self._gan_view_cache = {
                 "supported": True,
                 "X_train_unbiased_df": X_train_df.copy(),
                 "y_train_unbiased": y_train.astype(int).copy(),
                 "scaler": scaler,
                 "pca": pca,
-                # PAMAP2 has no categorical cols in this feature table:
                 "cat_cols": [],
                 "num_cols": feature_cols,  # treat all as numeric
-                # for compatibility with CTGAN/CTAB mapping code:
                 "encoder": None,
             }
         except Exception:
-            # caching is optional; never break training
             pass
 
         # ---- Sanity logging ----
@@ -534,6 +514,7 @@ class Dataset:
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 
+    #Check if needed still
     def rebuild_original_train_pool_theta(
         self, *, bias_pct: float, val_frac: float, test_frac: float,
         train_size: int | None, pca_components: int, device: torch.device,

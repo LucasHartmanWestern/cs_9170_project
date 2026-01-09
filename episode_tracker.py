@@ -405,38 +405,39 @@ class EpisodeTracker:
         except Exception:
             pass
 
-    def log_final_test(self, alpha_model, x_test, y_test, f1_thresh: float = 0.5,
-                       prefer_best_beta: bool = True, beta_model=None,
-                       x_train=None, y_train=None,
-                       # existing jitter baseline params
-                       jitter_n=None, jitter_scale: float = 0.20,
-                       # NEW alpha toggles/params
-                       run_alpha_raw_original: bool = True,
-                       run_alpha_plus_real: bool = True,
-                       alpha_plus_real_n: int = 2000,
-                       # NEW CTGAN baseline toggles/params
-                       run_alpha_plus_ctgan: bool = True,
-                       alpha_plus_ctgan_n: int = 2000,
-                       ctgan_epochs: int = 300,
-                       cap_ctgan_train: int | None = None,
-                       # NEW CTABGAN baseline toggles/params
-                       run_ctabgan: bool = True,
-                       alpha_plus_ctabgan_n: int = 2000,
-                       # CTABGAN subprocess wiring
-                       ctab_python: str = "/home/epigou/envs/ctabgan/bin/python",
-                       ctab_repo: str = "/home/epigou/CTAB-GAN-Plus-DP",
-                       ctab_runner: str | None = None,
-                       # dataset settings used to rebuild original pool
-                       data_path: str = "census+income/adult.data",
-                       bias_pct: float = 0.20,
-                       val_frac: float = 0.20,
-                       test_frac: float = 0.20,
-                       train_size: int | None = None,
-                       # additional CTABGAN batch/seed/pca-related params
-                       batch_size: int = 64,
-                       pca_components: int = None,
-                       seed: int | None = None):
-
+    def log_final_test(
+        self, alpha_model, x_test, y_test, f1_thresh: float = 0.5,
+        prefer_best_beta: bool = True, beta_model=None,
+        x_train=None, y_train=None,
+        # existing jitter baseline params
+        jitter_n=None, jitter_scale: float = 0.20,
+        # alpha toggles/params
+        run_alpha_raw_original: bool = True,
+        run_alpha_plus_real: bool = True,
+        alpha_plus_real_n: int = 2000,
+        # CTGAN baseline toggles/params
+        run_alpha_plus_ctgan: bool = False,
+        alpha_plus_ctgan_n: int = 2000,
+        ctgan_epochs: int = 300,
+        cap_ctgan_train: int | None = None,
+        # CTABGAN baseline toggles/params
+        run_ctabgan: bool = False,
+        alpha_plus_ctabgan_n: int = 2000,
+        # CTABGAN subprocess wiring (IMPORTANT: default None)
+        ctab_python: str | None = None,
+        ctab_repo: str | None = None,
+        ctab_runner: str | None = None,
+        # dataset settings used to rebuild original pool
+        data_path: str = "census+income/adult.data",
+        bias_pct: float = 0.20,
+        val_frac: float = 0.20,
+        test_frac: float = 0.20,
+        train_size: int | None = None,
+        # additional CTABGAN batch/seed/pca-related params
+        batch_size: int = 64,
+        pca_components: int | None = None,
+        seed: int | None = None
+    ):
         tests = TestSuite(
             seed_dir=self.seed_dir,
             experiment_dir=self.experiment_dir,
@@ -457,36 +458,37 @@ class EpisodeTracker:
             beta_model=beta_model,
             x_train=x_train,
             y_train=y_train,
-            # existing jitter params
+            # jitter params
             jitter_n=jitter_n,
             jitter_scale=jitter_scale,
-            # NEW alpha toggles/params
+            # alpha toggles/params
             run_alpha_raw_original=run_alpha_raw_original,
             run_alpha_plus_real=run_alpha_plus_real,
             alpha_plus_real_n=alpha_plus_real_n,
-            # NEW CTGAN baseline toggles/params
+            # CTGAN
             run_alpha_plus_ctgan=run_alpha_plus_ctgan,
             alpha_plus_ctgan_n=alpha_plus_ctgan_n,
             ctgan_epochs=ctgan_epochs,
             cap_ctgan_train=cap_ctgan_train,
-            # NEW CTABGAN baseline toggles/params
+            # CTABGAN
             run_ctabgan=run_ctabgan,
             alpha_plus_ctabgan_n=alpha_plus_ctabgan_n,
-            # CTABGAN subprocess wiring
+            # CTABGAN wiring
             ctab_python=ctab_python,
             ctab_repo=ctab_repo,
             ctab_runner=ctab_runner,
-            # dataset settings for original pool rebuild
+            # dataset rebuild settings
             data_path=data_path,
             bias_pct=bias_pct,
             val_frac=val_frac,
             test_frac=test_frac,
             train_size=train_size,
-            # additional CTABGAN batch/seed/pca params
+            # pass through batch/pca/seed
             batch_size=batch_size,
             pca_components=pca_components,
-            seed=self.seed if seed is None else seed  # allow override
+            seed=self.seed if seed is None else seed
         )
+
 
 
 
