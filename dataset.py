@@ -12,10 +12,16 @@ class Dataset:
     DATASET_REGISTRY = {
         "census_income": {
             "data_path": "datasets/census+income/adult.data",
+            "protected_attributes": ["sex", "race", "age", "native-country"]
         },
         "pamap2": {
             "data_path": "datasets/PAMAP2_Dataset",
+            "protected_attributes": []
         },
+        "credit_card": {
+            "data_path":"datasets/default+of+credit+card+clients/default of credit card clients.xls",
+            "protected_attributes": ["SEX", "AGE"]
+        }
     }
     def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu"):
         self.dataset_name = dataset_name
@@ -26,6 +32,7 @@ class Dataset:
         self.seed = seed
         self.device = device
         self.data_path = self.DATASET_REGISTRY[dataset_name]["data_path"]
+        self.protected_attributes = self.DATASET_REGISTRY[self.dataset_name].get("protected_attributes", [])
         self.multiclass=multiclass
 
     from dataclasses import dataclass
@@ -72,23 +79,34 @@ class Dataset:
 
         return encoder, scaler, pca
 
-    def split_census_income(self, train_size=None, bias_pct=0.2,
-                    val_frac=0.20, test_frac=0.20, pca_components=2):
+    def split_census_income(
+            self,
+            train_size=None,
+            bias_pct=0.2,
+            val_frac=0.20,
+            test_frac=0.20,
+            pca_components=2,
+            drop_protected: bool = False,
+            protected_cols=None,
+            return_test_df: bool = False,
+            return_raw: bool = False,
+        ):
         """
         PIPELINE:
         1) Load raw data.
-        2) Split raw data into θ_train / θ_val / θ_test (stratified by the original labels).
-        3) Within each split, apply the *same bias* by downsampling the minority class:
-            - Keep all majority samples.
-            - bias pct is target pct
-            (We avoid any pre-split upsampling to prevent duplicates across splits.)
-        4) Fit OneHotEncoder + StandardScaler on θ_train *only*; transform θ_val and θ_test with those fitted transformers (no leakage).
-        5) Fit PCA on θ_train *only*; transform θ_val and θ_test with that PCA (no leakage).
-        6) Optionally subsample θ_train to a fixed size *after* biasing and before fitting PCA (still no leakage).
-        7) Return torch tensors for train/val/test on self.device.
+        2) (Optional) Drop protected attributes entirely.
+        3) Split raw data into θ_train / θ_val / θ_test (stratified by original labels).
+        4) Within each split, apply the *same bias* by downsampling the minority class.
+        5) Fit OneHotEncoder + StandardScaler on θ_train only; transform θ_val and θ_test (no leakage).
+        6) Fit PCA on θ_train only; transform θ_val and θ_test (no leakage).
+        7) Optionally subsample θ_train to a fixed size after biasing.
+        8) Return torch tensors for train/val/test on self.device.
         """
         assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1, \
             "val_frac and test_frac must be in (0,1) and sum to < 1."
+
+        if protected_cols is None:
+            protected_cols = ["sex", "race", "age", "native-country"]
 
         # 1) Load raw data
         data_path = self.data_path
@@ -97,15 +115,28 @@ class Dataset:
             "occupation", "relationship", "race", "sex", "capital-gain", "capital-loss",
             "hours-per-week", "native-country", "income"
         ]
-        X_df_raw = pd.read_csv(data_path, header=None, names=column_names, na_values="?", skipinitialspace=True)
-        y_raw = np.where(X_df_raw["income"].isin(['>50K', '>50K.']), 1, 0).astype(int)
+        X_df_raw = pd.read_csv(
+            data_path,
+            header=None,
+            names=column_names,
+            na_values="?",
+            skipinitialspace=True
+        )
+
+        y_raw = np.where(X_df_raw["income"].isin([">50K", ">50K."]), 1, 0).astype(int)
         X_df_raw = X_df_raw.drop(columns=["income"])
 
-        # Identify column types
-        cat_cols = [c for c in X_df_raw.columns if X_df_raw[c].dtype.name in ['category', 'object', 'bool']]
+        # 2) OPTIONAL: Drop protected attributes entirely (before splits/encoding/PCA)
+        if drop_protected:
+            drop_cols = [c for c in protected_cols if c in X_df_raw.columns]
+            if len(drop_cols) > 0:
+                X_df_raw = X_df_raw.drop(columns=drop_cols)
+
+        # Identify column types (after optional drop)
+        cat_cols = [c for c in X_df_raw.columns if X_df_raw[c].dtype.name in ["category", "object", "bool"]]
         num_cols = [c for c in X_df_raw.columns if np.issubdtype(X_df_raw[c].dtype, np.number)]
 
-        # 2) Split raw into θ_train / θ_temp, then θ_val / θ_test
+        # 3) Split raw into θ_train / θ_temp, then θ_val / θ_test
         X_train_df, X_temp_df, y_train, y_temp = train_test_split(
             X_df_raw, y_raw, test_size=(val_frac + test_frac),
             random_state=self.seed, stratify=y_raw
@@ -127,50 +158,46 @@ class Dataset:
             n_minor = len(df_minor)
 
             if n_minor == 0 or n_major == 0:
-                # Edge case: one class missing
                 df_biased = df
             else:
-                # compute how many minority to keep to hit target proportion
                 keep_minority = int(np.floor((target_minority_pct * n_major) / (1 - target_minority_pct)))
-
-                # cap to available samples
                 keep_minority = min(n_minor, max(1, keep_minority))
-
                 df_minor_biased = df_minor.sample(n=keep_minority, random_state=self.seed, replace=False)
-                df_biased = pd.concat([df_major, df_minor_biased], axis=0) \
-                            .sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
+                df_biased = (
+                    pd.concat([df_major, df_minor_biased], axis=0)
+                    .sample(frac=1.0, random_state=self.seed)
+                    .reset_index(drop=True)
+                )
 
             y_out = df_biased["__y__"].to_numpy(dtype=int)
             X_out = df_biased.drop(columns=["__y__"])
             return X_out, y_out
 
-        # 3) Apply same bias in each split (no cross-split duplication, distributions aligned)
-        target_minority_pct = bias_pct  # e.g., bias_pct=0.25 -> 25% of dataset is minority data
+        # 4) Apply same bias in each split
+        target_minority_pct = bias_pct
         X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, target_minority_pct)
         X_val_biased_df,   y_val_biased   = apply_bias(X_val_df,   y_val,   target_minority_pct)
         X_test_biased_df,  y_test_biased  = apply_bias(X_test_df,  y_test,  target_minority_pct)
 
-        # Optional: subsample θ_train to fixed size *after* biasing (stratified)
+        # Optional: subsample θ_train to fixed size after biasing
         if train_size is not None and train_size < len(X_train_biased_df):
             X_train_biased_df, _, y_train_biased, _ = train_test_split(
                 X_train_biased_df, y_train_biased,
                 train_size=train_size, random_state=self.seed, stratify=y_train_biased
             )
 
-        # 4) Fit encoder + scaler on θ_train only; transform val/test (no leakage)
+        # 5) Fit encoder + scaler on θ_train only; transform val/test (no leakage)
         try:
-            encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+            encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
         except TypeError:
-            encoder = OneHotEncoder(sparse=False, handle_unknown='ignore')
+            encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
 
-        scaler  = StandardScaler()
+        scaler = StandardScaler()
 
-        # Fit on train
         X_train_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_biased_df), 0))
         X_train_num = scaler.fit_transform(X_train_biased_df[num_cols])   if len(num_cols) else np.empty((len(X_train_biased_df), 0))
         X_train_all = np.hstack([X_train_num, X_train_cat])
 
-        # Transform val/test with the *fitted* encoder/scaler
         X_val_cat  = encoder.transform(X_val_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_val_biased_df), 0))
         X_val_num  = scaler.transform(X_val_biased_df[num_cols])  if len(num_cols) else np.empty((len(X_val_biased_df), 0))
         X_val_all  = np.hstack([X_val_num, X_val_cat])
@@ -179,14 +206,13 @@ class Dataset:
         X_test_num = scaler.transform(X_test_biased_df[num_cols])  if len(num_cols) else np.empty((len(X_test_biased_df), 0))
         X_test_all = np.hstack([X_test_num, X_test_cat])
 
-        # 5) Fit PCA on θ_train only; transform val/test
+        # 6) Fit PCA on θ_train only; transform val/test
         pca = self._make_pca(pca_components)
         X_train_pca = pca.fit_transform(X_train_all)
         X_val_pca   = pca.transform(X_val_all)
         X_test_pca  = pca.transform(X_test_all)
 
-
-        # 6) Convert to torch tensors on device
+        # 7) Convert to torch tensors on device
         X_train_theta = torch.tensor(X_train_pca, dtype=torch.float32, device=self.device)
         X_val_theta   = torch.tensor(X_val_pca,   dtype=torch.float32, device=self.device)
         X_test_theta  = torch.tensor(X_test_pca,  dtype=torch.float32, device=self.device)
@@ -205,6 +231,7 @@ class Dataset:
         log_distribution("TRAIN", y_train_biased)
         log_distribution("VAL",   y_val_biased)
         log_distribution("TEST",  y_test_biased)
+
         # Cache GAN view for apples-to-apples CTGAN/CTAB baselines
         try:
             self._gan_view_cache = {
@@ -216,11 +243,27 @@ class Dataset:
                 "pca": pca,
                 "cat_cols": list(cat_cols),
                 "num_cols": list(num_cols),
+                "drop_protected": bool(drop_protected),
+                "protected_cols": list(protected_cols),
             }
         except Exception:
             pass
 
+        if return_test_df:
+            return (
+                X_train_theta, X_val_theta, X_test_theta,
+                y_train_theta, y_val_theta, y_test_theta,
+                X_test_biased_df.copy()    # <--- raw df for group membership
+            )
+        if return_raw:
+            return (
+                X_train_theta, X_val_theta, X_test_theta,
+                y_train_theta, y_val_theta, y_test_theta,
+                X_test_biased_df.copy(), y_test_biased.copy()
+            )
+
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
 
     def split_pamap2(
         self,
@@ -504,6 +547,268 @@ class Dataset:
 
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
+    def split_credit_card(
+        self,
+        train_size=None,
+        bias_pct=0.20,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=2,
+        drop_protected: bool = False,
+        protected_cols = ["SEX", "AGE"],
+        return_test_df: bool = False,
+        return_raw: bool = False,
+        
+        # --- NEW: which protected attr to use for DP reward ---
+        dp_protected_col: str = "SEX",
+        # UCI credit card: SEX is often coded as 1/2. We map to 0/1 via (== sex_positive_value).
+        sex_positive_value: int = 2,
+    ):
+        """
+        Excel (.xls) format used by UCI "Default of Credit Card Clients":
+        - Row 1: X1..X23,Y headers
+        - Row 2: real feature names (LIMIT_BAL, SEX, ...)
+        - Data rows follow
+        Pipeline matches split_census_income: split -> bias per split -> fit transforms on train only -> PCA -> tensors.
+        Y = target, minority=1=did default
+        """
+        assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1, \
+            "val_frac and test_frac must be in (0,1) and sum to < 1."
+        if self.multiclass:
+            raise ValueError("credit_card dataset is binary only; set multiclass=False.")
+
+        if protected_cols is None:
+            protected_cols = ["SEX", "AGE"]
+
+        # -----------------------------
+        # 1) Load raw Excel + fix header
+        # -----------------------------
+        data_path = self.data_path
+
+        # Read with first row as column headers: X1..X23,Y
+        df = pd.read_excel(data_path, header=0)
+
+        # Second row contains the true names
+        # Example row: [ID, LIMIT_BAL, SEX, ..., PAY_AMT6, default payment next month]
+        true_names = df.iloc[0].tolist()
+
+        # Replace column names with true names
+        df.columns = [str(x).strip() for x in true_names]
+
+        # Drop the row we used for names
+        df = df.iloc[1:].reset_index(drop=True)
+
+        # Coerce to numeric where possible
+        for c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="ignore")
+
+        # Label column: usually "default payment next month"
+        label_col = None
+        for cand in ["default payment next month", "default payment next month ", "Y"]:
+            if cand in df.columns:
+                label_col = cand
+                break
+        if label_col is None:
+            # fallback: find a column that looks like the target from your screenshot
+            matches = [c for c in df.columns if "default" in c.lower() and "next" in c.lower()]
+            if matches:
+                label_col = matches[0]
+            else:
+                raise ValueError(f"Could not find label column. Columns: {list(df.columns)}")
+
+        # Drop ID if present
+        if "ID" in df.columns:
+            df = df.drop(columns=["ID"])
+
+        y_raw = df[label_col].astype(int).to_numpy()
+
+        if dp_protected_col not in df.columns:
+            raise ValueError(
+                f"dp_protected_col={dp_protected_col!r} not found in columns. "
+                f"Available: {list(df.columns)}"
+            )
+
+        A_df_raw = df[[dp_protected_col]].copy()
+        X_df_raw = df.drop(columns=[label_col])
+
+        uniq = set(np.unique(y_raw).tolist())
+        if not uniq.issubset({0, 1}):
+            raise ValueError(f"Expected binary labels {{0,1}} but got {sorted(list(uniq))}.")
+
+        # -----------------------------
+        # 2) Optional: drop protected
+        # -----------------------------
+        if drop_protected:
+            drop_cols = [c for c in protected_cols if c in X_df_raw.columns]
+            if drop_cols:
+                X_df_raw = X_df_raw.drop(columns=drop_cols)
+
+        # -----------------------------
+        # Column typing
+        # -----------------------------
+        # These are categorical by meaning (even if stored as ints)
+        cat_cols = [c for c in ["SEX", "EDUCATION", "MARRIAGE"] if c in X_df_raw.columns]
+        # Everything else numeric
+        num_cols = [c for c in X_df_raw.columns if c not in cat_cols]
+
+        # -----------------------------
+        # 3) Split raw -> train/val/test
+        # -----------------------------
+        X_train_df, X_temp_df, y_train, y_temp, A_train_df, A_temp_df = train_test_split(
+            X_df_raw, y_raw, A_df_raw,
+            test_size=(val_frac + test_frac),
+            random_state=self.seed,
+            stratify=y_raw
+        )
+
+        rel_test = test_frac / (val_frac + test_frac)
+        X_val_df, X_test_df, y_val, y_test, A_val_df, A_test_df = train_test_split(
+            X_temp_df, y_temp, A_temp_df,
+            test_size=rel_test,
+            random_state=self.seed,
+            stratify=y_temp
+        )
+
+        # -----------------------------
+        # 4) Apply same bias in each split
+        # -----------------------------
+        def apply_bias(df_split, y_split, a_split_df, target_minority_pct):
+            dfb = df_split.copy()
+            dfb["__y__"] = y_split
+
+            dfb["__a__"] = a_split_df[dp_protected_col].to_numpy()
+
+            maj = dfb[dfb["__y__"] == 0]
+            mino = dfb[dfb["__y__"] == 1]
+
+            if len(maj) == 0 or len(mino) == 0:
+                out = dfb
+            else:
+                keep_min = int(np.floor((target_minority_pct * len(maj)) / (1 - target_minority_pct)))
+                keep_min = min(len(mino), max(1, keep_min))
+                mino_b = mino.sample(n=keep_min, random_state=self.seed, replace=False)
+                out = pd.concat([maj, mino_b], axis=0).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
+
+            y_out = out["__y__"].to_numpy(dtype=int)
+
+            a_out_raw = out["__a__"].to_numpy()
+
+            # Map protected attribute to 0/1 for DP
+            if dp_protected_col == "SEX":
+                a_out = (a_out_raw.astype(int) == int(sex_positive_value)).astype(np.int64)
+            else:
+                # If you later use AGE, you should bucketize first; for now treat as binary by median split
+                med = np.median(a_out_raw.astype(float))
+                a_out = (a_out_raw.astype(float) >= med).astype(np.int64)
+
+            X_out = out.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        target_minority_pct = float(bias_pct)
+        X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, target_minority_pct)
+        X_val_biased_df,   y_val_biased,   a_val   = apply_bias(X_val_df,   y_val,   A_val_df,   target_minority_pct)
+        X_test_biased_df,  y_test_biased,  a_test  = apply_bias(X_test_df,  y_test,  A_test_df,  target_minority_pct)
+
+
+        # Optional subsample biased train
+        if train_size is not None and train_size < len(X_train_biased_df):
+            X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
+                X_train_biased_df, y_train_biased, a_train,
+                train_size=train_size,
+                random_state=self.seed,
+                stratify=y_train_biased
+            )
+
+
+        # -----------------------------
+        # 5) Fit encoder + scaler on train only
+        # -----------------------------
+        try:
+            encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        except TypeError:
+            encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
+
+        scaler = StandardScaler()
+
+        Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if cat_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])  if num_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_all = np.hstack([Xtr_num, Xtr_cat])
+
+        Xva_cat = encoder.transform(X_val_biased_df[cat_cols]) if cat_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_num = scaler.transform(X_val_biased_df[num_cols])  if num_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_all = np.hstack([Xva_num, Xva_cat])
+
+        Xte_cat = encoder.transform(X_test_biased_df[cat_cols]) if cat_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_num = scaler.transform(X_test_biased_df[num_cols])  if num_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_all = np.hstack([Xte_num, Xte_cat])
+
+        # -----------------------------
+        # 6) PCA on train only
+        # -----------------------------
+        pca = self._make_pca(pca_components)
+        Xtr_pca = pca.fit_transform(Xtr_all)
+        Xva_pca = pca.transform(Xva_all)
+        Xte_pca = pca.transform(Xte_all)
+
+        # -----------------------------
+        # 7) Torch tensors
+        # -----------------------------
+        X_train_theta = torch.tensor(Xtr_pca, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(Xva_pca, dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(Xte_pca, dtype=torch.float32, device=self.device)
+
+        y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_val_biased, dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_test_biased, dtype=torch.long, device=self.device)
+
+        self.a_train = torch.tensor(a_train, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_val,   dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        # ---- Logging ----
+        def log_dist(name, ysplit):
+            n = len(ysplit)
+            n1 = int(np.sum(ysplit == 1))
+            p1 = 100.0 * n1 / n if n else 0.0
+            print(f"[{name}] size={n}, minority={n1} ({p1:.2f}%)")
+        log_dist("TRAIN", y_train_biased)
+        log_dist("VAL",   y_val_biased)
+        log_dist("TEST",  y_test_biased)
+
+        # Cache GAN view (unbiased train + transforms)
+        try:
+            self._gan_view_cache = {
+                "supported": True,
+                "X_train_unbiased_df": X_train_df.copy(),
+                "y_train_unbiased": y_train.astype(int).copy(),
+                "encoder": encoder,
+                "scaler": scaler,
+                "pca": pca,
+                "cat_cols": list(cat_cols),
+                "num_cols": list(num_cols),
+                "drop_protected": bool(drop_protected),
+                "protected_cols": list(protected_cols),
+                "label_col": label_col,
+                "dp_protected_col": dp_protected_col,
+            }
+        except Exception:
+            pass
+
+        if return_test_df:
+            return (
+                X_train_theta, X_val_theta, X_test_theta,
+                y_train_theta, y_val_theta, y_test_theta,
+                X_test_biased_df.copy()
+            )
+        if return_raw:
+            return (
+                X_train_theta, X_val_theta, X_test_theta,
+                y_train_theta, y_val_theta, y_test_theta,
+                X_test_biased_df.copy(), y_test_biased.copy()
+            )
+
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
 
     def get_data_splits(self, **kwargs):
@@ -511,8 +816,11 @@ class Dataset:
             return self.split_census_income(**kwargs)
         elif self.dataset_name == "pamap2":
             return self.split_pamap2(**kwargs)
+        elif self.dataset_name == "credit_card":
+            return self.split_credit_card(**kwargs)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
+
 
     #Check if needed still
     def rebuild_original_train_pool_theta(
@@ -698,6 +1006,8 @@ class Dataset:
                     feats["subject_id"] = sid
                     rows.append(feats); labels.append(y_win); subjects.append(sid)
 
+
+
             feat_df = pd.DataFrame(rows).fillna(0.0)
             y_all   = np.asarray(labels, dtype=int)
             subj_all= np.asarray(subjects)
@@ -757,6 +1067,121 @@ class Dataset:
             X_pool_theta = torch.tensor(Xpool_p, dtype=torch.float32, device=device)
             y_pool_theta = torch.tensor(y_train_unbiased, dtype=torch.long, device=device)
             return X_pool_theta, y_pool_theta
+
+        elif self.dataset_name == "credit_card":
+            # ---- Credit Card Default (.xls with 2 header rows) ----
+            if include_third_label:
+                raise ValueError("credit_card is binary only; include_third_label must be False.")
+
+            # 1) Load Excel: first row X1..X23,Y; second row true names
+            df = pd.read_excel(self.data_path, header=0)
+
+            # second row contains real feature names
+            true_names = [str(x).strip() for x in df.iloc[0].tolist()]
+            df.columns = true_names
+            df = df.iloc[1:].reset_index(drop=True)
+
+            # coerce numeric where possible
+            for c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="ignore")
+
+            # 2) Identify label column
+            label_col = None
+            for cand in ["default payment next month", "default payment next month ", "Y"]:
+                if cand in df.columns:
+                    label_col = cand
+                    break
+            if label_col is None:
+                matches = [c for c in df.columns if "default" in c.lower() and "next" in c.lower()]
+                if matches:
+                    label_col = matches[0]
+                else:
+                    raise ValueError(f"Could not find label column in credit_card .xls. Columns: {list(df.columns)}")
+
+            # Drop ID if present
+            if "ID" in df.columns:
+                df = df.drop(columns=["ID"])
+
+            y_raw = df[label_col].astype(int).to_numpy()
+            X_df_raw = df.drop(columns=[label_col])
+
+            uniq = set(np.unique(y_raw).tolist())
+            if not uniq.issubset({0, 1}):
+                raise ValueError(f"Expected binary labels {{0,1}} but got {sorted(list(uniq))}.")
+
+            # 3) Split raw -> get UNBIASED TRAIN pool (same split logic as others)
+            X_train_df, X_temp_df, y_train, y_temp = train_test_split(
+                X_df_raw, y_raw, test_size=(val_frac + test_frac),
+                random_state=self.seed, stratify=y_raw
+            )
+            rel_test = test_frac / (val_frac + test_frac)
+            _X_val_df, _X_test_df, _y_val, _y_test = train_test_split(
+                X_temp_df, y_temp, test_size=rel_test,
+                random_state=self.seed, stratify=y_temp
+            )
+
+            # 4) Build TRAIN-biased for fitting transforms (minority = 1 = default)
+            def apply_bias(df_split, y_split, target_minority_pct):
+                dfb = df_split.copy()
+                dfb["__y__"] = y_split
+                maj = dfb[dfb["__y__"] == 0]
+                mino = dfb[dfb["__y__"] == 1]
+
+                if len(maj) == 0 or len(mino) == 0:
+                    out = dfb
+                else:
+                    keep_min = int(np.floor((target_minority_pct * len(maj)) / (1 - target_minority_pct)))
+                    keep_min = min(len(mino), max(1, keep_min))
+                    mino_b = mino.sample(n=keep_min, random_state=self.seed, replace=False)
+                    out = (
+                        pd.concat([maj, mino_b], axis=0)
+                        .sample(frac=1.0, random_state=self.seed)
+                        .reset_index(drop=True)
+                    )
+
+                y_out = out["__y__"].to_numpy(dtype=int)
+                X_out = out.drop(columns=["__y__"])
+                return X_out, y_out
+
+            X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, float(bias_pct))
+
+            # optional: subsample TRAIN after biasing
+            if train_size is not None and train_size < len(X_train_biased_df):
+                X_train_biased_df, _, y_train_biased, _ = train_test_split(
+                    X_train_biased_df, y_train_biased,
+                    train_size=train_size, random_state=self.seed, stratify=y_train_biased
+                )
+
+            # 5) Column typing (categorical by meaning)
+            cat_guess = ["SEX", "EDUCATION", "MARRIAGE"]
+            cat_cols = [c for c in cat_guess if c in X_train_biased_df.columns]
+            num_cols = [c for c in X_train_biased_df.columns if c not in cat_cols]
+
+            # 6) Fit transforms on TRAIN-biased; project UNBIASED TRAIN pool into θ-space
+            try:
+                encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+            except TypeError:
+                encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
+
+            scaler = StandardScaler()
+            pca = self._make_pca(pca_components)
+
+            Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_biased_df), 0))
+            Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])  if len(num_cols) else np.empty((len(X_train_biased_df), 0))
+            Xtr_all = np.hstack([Xtr_num, Xtr_cat])
+            _ = pca.fit_transform(Xtr_all)  # fit only
+
+            # Transform UNBIASED TRAIN pool
+            Xpool_cat = encoder.transform(X_train_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_df), 0))
+            Xpool_num = scaler.transform(X_train_df[num_cols])  if len(num_cols) else np.empty((len(X_train_df), 0))
+            Xpool_all = np.hstack([Xpool_num, Xpool_cat])
+            Xpool_pca = pca.transform(Xpool_all)
+
+            X_pool_theta = torch.tensor(Xpool_pca, dtype=torch.float32, device=device)
+            y_pool_theta = torch.tensor(y_train.astype(int), dtype=torch.long, device=device)
+            return X_pool_theta, y_pool_theta
+
+
 
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")

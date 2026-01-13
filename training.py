@@ -268,6 +268,50 @@ class Training:
     def brier_per_sample(self, y_true, p1):
         y_true = y_true.to(p1.device).float()
         return (p1 - y_true) ** 2  # in [0,1]
+        
+    # ---------------- helpers (external----------------
+    def _dp_diff_from_probs(self, a01: torch.Tensor, p1: torch.Tensor, thresh: float = 0.5) -> float:
+        """
+        Hard DP difference:
+        |P(ŷ=1|A=0) - P(ŷ=1|A=1)|
+        where ŷ = 1[p1 >= thresh]
+        """
+        a01 = a01.to(p1.device).long().view(-1)
+        yhat = (p1.view(-1) >= thresh).float()
+
+        g0 = (a01 == 0)
+        g1 = (a01 == 1)
+
+        # avoid NaNs if a group is missing
+        if g0.sum() == 0 or g1.sum() == 0:
+            return float("nan")
+
+        r0 = float(yhat[g0].mean().item())
+        r1 = float(yhat[g1].mean().item())
+        return abs(r0 - r1)
+
+    def _get_a_theta_val(self,  x_theta_val=None) -> torch.Tensor:
+        """
+        Retrieve protected group labels A for θ_val as a 0/1 tensor of shape [N].
+        `self` is the host object (usually 'self').
+
+        You should implement `_get_protected_from_theta_val` in your class OR set
+        `self.protected_theta_val` before training/eval.
+
+        If `x_theta_val` is required (for the method) you must supply it.
+        """
+        if hasattr(self, "_get_protected_from_theta_val") and x_theta_val is not None:
+            a = self._get_protected_from_theta_val(x_theta_val)
+            if a is not None:
+                return a
+        if hasattr(self, "protected_theta_val") and self.protected_theta_val is not None:
+            return self.protected_theta_val
+        raise ValueError(
+            "Fairness reward_mode requires protected group labels A for theta_val.\n"
+            "Provide either:\n"
+            "  - obj._get_protected_from_theta_val(x_theta_val) -> tensor [N] (0/1), OR\n"
+            "  - obj.protected_theta_val tensor [N] (0/1) cached on the class."
+        )
 
     # Beta model F1 minority class score + local term (no EMA)
     def compute_reward(
@@ -277,7 +321,6 @@ class Training:
         x_phi, y_phi,                                
         progress: float,                             
         f1_thresh: float = 0.5,
-
         # schedules / gates
         lambda_schedule=(0.30, 0.95),                # (start, end) across the run
 
@@ -293,14 +336,8 @@ class Training:
         - Global term: ΔF1minority on θ_val between beta and alpha.
         - Local term: Gaussian usefulness around 0.5 on Pα(y=1|x_phi).
         """
-        # ---------- Mode selection ----------
-        alias = {
-            "gauss_nopen": "local_gauss",
-            "gauss_penalty": "local_gauss_penalty",
-            "judge_conf": "local_gauss",
-        }
-        mode = alias.get(self.reward_mode, self.reward_mode)
-        valid = {"local_gauss", "local_gauss_penalty", "local_slices"}
+        mode = self.reward_mode
+        valid = {"local_gauss", "local_gauss_penalty", "fairness"}
         if mode not in valid:
             raise ValueError(f"reward_mode must be one of {valid}, got {self.reward_mode!r}")
 
@@ -344,6 +381,22 @@ class Training:
             delta_f1_majority = float(f1_majority_beta - f1_majority_alpha)
             delta_f1_weighted = float(f1_weighted_beta - f1_weighted_alpha)
 
+            # -------- fairness global objective (DP) --------
+            dp_alpha = float("nan")
+            dp_beta  = float("nan")
+            delta_dp = 0.0  # positive is good (DP reduced)
+            if mode == "fairness":
+                a_theta_val = self.dataset.a_val
+                dp_alpha = self._dp_diff_from_probs(a_theta_val, p1_alpha_val, thresh=f1_thresh)
+                dp_beta  = self._dp_diff_from_probs(a_theta_val, p1_beta_val,  thresh=f1_thresh)
+
+                # If NaN due to missing group, fall back to 0 improvement
+                if (dp_alpha != dp_alpha) or (dp_beta != dp_beta):  # NaN check without importing math
+                    delta_dp = 0.0
+                else:
+                    delta_dp = float(dp_alpha - dp_beta)  # improve if beta has lower DP_diff
+
+
             # ---- Local term on synthetic Φ----
             p = self._p1_from_agent(alpha_model, x_phi)  # P_alpha(y=1|x_phi) in [0,1]
 
@@ -360,7 +413,12 @@ class Training:
             score_local = torch.minimum(score_local_raw, cap_t)
 
             # ---- Combine global + local ----
-            base_reward = lambda_t * delta_f1_minority + (1.0 - lambda_t) * score_local  # [T]
+            if mode == "fairness":
+                global_term = delta_dp
+            else:
+                global_term = delta_f1_minority
+
+            base_reward = lambda_t * global_term + (1.0 - lambda_t) * score_local  # [T]
 
             # Penalty (optional mode)
             maj_violation = 0.0
@@ -421,9 +479,12 @@ class Training:
             pass
 
         diagnostics = {
-            "reward_mode": mode,
-            "global_reward": float(f1_minority_beta),     
-            "local_reward": mean_local,                   # mean local score
+            "global_reward": float(delta_dp) if mode == "fairness" else float(f1_minority_beta),
+            "global_dp_alpha": float(dp_alpha) if mode == "fairness" else None,
+            "global_dp_beta":  float(dp_beta) if mode == "fairness" else None,
+            "delta_dp": float(delta_dp) if mode == "fairness" else None,
+
+            "local_reward": mean_local,
             "f1_macro_beta": float(f1_macro_beta),
 
             # Details (existing)
@@ -508,6 +569,8 @@ class Training:
                     train_size=self.real_data_size,
                     bias_pct=self.bias_pct,
                     pca_components=self.pca_components,
+                    drop_protected=True,
+                    protected_cols=["age","sex", "race", "native-country"]  # keep age
                 )
             )
             minority_mask = (y_theta_train == 1)
