@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=adapt_rl_fair
 #SBATCH --account=def-mcapretz
-#SBATCH --time=06:00:00
+#SBATCH --time=18:00:00
 #SBATCH --mem=10G
 #SBATCH --cpus-per-task=6
 
