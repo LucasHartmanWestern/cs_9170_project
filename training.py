@@ -283,46 +283,23 @@ class Training:
         r1 = p1[g1].mean()
         return float(torch.abs(r0 - r1).item())
 
-    def _get_a_theta_val(self,  x_theta_val=None) -> torch.Tensor:
-        """
-        Retrieve protected group labels A for θ_val as a 0/1 tensor of shape [N].
-        `self` is the host object (usually 'self').
-
-        You should implement `_get_protected_from_theta_val` in your class OR set
-        `self.protected_theta_val` before training/eval.
-
-        If `x_theta_val` is required (for the method) you must supply it.
-        """
-        if hasattr(self, "_get_protected_from_theta_val") and x_theta_val is not None:
-            a = self._get_protected_from_theta_val(x_theta_val)
-            if a is not None:
-                return a
-        if hasattr(self, "protected_theta_val") and self.protected_theta_val is not None:
-            return self.protected_theta_val
-        raise ValueError(
-            "Fairness reward_mode requires protected group labels A for theta_val.\n"
-            "Provide either:\n"
-            "  - obj._get_protected_from_theta_val(x_theta_val) -> tensor [N] (0/1), OR\n"
-            "  - obj.protected_theta_val tensor [N] (0/1) cached on the class."
-        )
-
     # Beta model F1 minority class score + local term (no EMA)
     def compute_reward(
         self,
-        alpha_model, beta_model, stale_beta_model, 
+        alpha_model, beta_model,
         x_theta_val, y_theta_val,                    
         x_phi, y_phi,                                
         progress: float,                             
-        f1_thresh: float = 0.5,
-        # schedules / gates
-        lambda_schedule=(0.30, 0.95),                # (start, end) across the run
-
+        f1_thresh: float = 0.5,            # (start, end) across the run
         # hinge-penalty for majority/weighted scores (used only in *_penalty mode)
         epsilon_majority: float = 0.01,   # allow up to -1.0 pp on majority F1
         epsilon_weighted: float = 0.005,  # allow up to -0.5 pp on weighted F1
         c_majority: float = 0.30,         # penalty weight for majority violation
         c_weighted: float = 0.30,         # penalty weight for weighted violation
         class_mode: str = "binary",   # "binary" or "multiclass"
+        dp_scale: float = 50.0,
+        fairness_style: str = "improvement",
+        prev_dp_beta: float | None = None
     ):
         """
         Reward combines:
@@ -374,66 +351,102 @@ class Training:
             delta_f1_majority = float(f1_majority_beta - f1_majority_alpha)
             delta_f1_weighted = float(f1_weighted_beta - f1_weighted_alpha)
 
-            # -------- fairness global objective (DP) --------
-            dp_alpha = float("nan")
-            dp_beta  = float("nan")
-            delta_dp = 0.0  # positive is good
-            if mode == "fairness":
-                a_theta_val = self.dataset.a_val
-                assert len(self.dataset.a_val) == x_theta_val.shape[0], "a_val misaligned with x_theta_val"
-                print("a_val counts:", torch.bincount(self.dataset.a_val.long().cpu()))
+        # -------- fairness global objective (DP) --------
+        dp_alpha = float("nan")
+        dp_beta  = float("nan")
 
-                dp_alpha = self._dp_diff_from_probs(a_theta_val, p1_alpha_val, thresh=f1_thresh)
-                dp_beta  = self._dp_diff_from_probs(a_theta_val, p1_beta_val,  thresh=f1_thresh)
+        delta_dp = 0.0                 # dp_alpha - dp_beta
+        dp_improve = 0.0               # abs
 
-                # If NaN due to missing group, fall back to 0 improvement
-                if (dp_alpha != dp_alpha) or (dp_beta != dp_beta):  # NaN check without importing math
-                    delta_dp = 0.0
+        if mode == "fairness":
+            a_theta_val = self.dataset.a_val
+            assert len(a_theta_val) == x_theta_val.shape[0], "a_val misaligned with x_theta_val"
+
+            dp_alpha = self._dp_diff_from_probs(a_theta_val, p1_alpha_val, thresh=f1_thresh)
+            dp_beta  = self._dp_diff_from_probs(a_theta_val, p1_beta_val,  thresh=f1_thresh)
+
+            # NaN guard (missing group etc.)
+            if (dp_alpha != dp_alpha) or (dp_beta != dp_beta):
+                delta_dp = 0.0
+                dp_improve = 0.0
+            else:
+                dp_alpha = float(dp_alpha)
+                dp_beta  = float(dp_beta)
+
+                # model comparison: positive if beta reduced DP gap vs alpha
+                delta_dp = dp_alpha - dp_beta
+
+                # (2) time-improvement shaping: positive if DP gap shrinks this step
+                # Prefer using the caller-provided previous dp_beta; otherwise use a stored value.
+                if prev_dp_beta is None:
+                    prev = getattr(self, "_prev_dp_beta", None)
                 else:
-                    delta_dp = float(dp_alpha - dp_beta)  # improve if beta has lower DP_diff
+                    prev = prev_dp_beta
+
+                if prev is None or (prev != prev):   # None or NaN
+                    dp_improve = 0.0
+                else:
+                    prev = float(prev)
+                    dp_improve = abs(prev) - abs(dp_beta)
+
+                # store for next call (so you don’t have to thread prev_dp_beta everywhere)
+                self._prev_dp_beta = dp_beta
 
 
-            # ---- Local term on synthetic Φ----
-            p = self._p1_from_agent(alpha_model, x_phi)  # P_alpha(y=1|x_phi) in [0,1]
 
-            # Symmetric Gaussian around 0.5
-            m = torch.abs(p - 0.5)
-            score_gauss = torch.exp(-0.5 * (m / tau) ** 2)
-            score_local_raw = score_gauss.clone()
+        # ---- Local term on synthetic Φ----
+        p = self._p1_from_agent(alpha_model, x_phi)  # P_alpha(y=1|x_phi) in [0,1]
 
-            # Cap local score
-            LOCAL_CAP = 1.0
-            cap_t = torch.tensor(LOCAL_CAP, device=score_local_raw.device, dtype=score_local_raw.dtype)
-            over_mask = (score_local_raw > cap_t).float()
-            local_cap_frac = float(over_mask.mean().item())
-            score_local = torch.minimum(score_local_raw, cap_t)
+        # Symmetric Gaussian around 0.5
+        m = torch.abs(p - 0.5)
+        score_gauss = torch.exp(-0.5 * (m / tau) ** 2)
+        score_local_raw = score_gauss.clone()
 
-            # ---- Combine global + local ----
-            if mode == "fairness":
+        # Cap local score
+        LOCAL_CAP = 1.0
+        cap_t = torch.tensor(LOCAL_CAP, device=score_local_raw.device, dtype=score_local_raw.dtype)
+        over_mask = (score_local_raw > cap_t).float()
+        local_cap_frac = float(over_mask.mean().item())
+        score_local = torch.minimum(score_local_raw, cap_t)
+
+        # ---- Combine global + local ----
+        if mode == "fairness":
+            if fairness_style == "improvement":
+                global_term = dp_improve
+            elif fairness_style == "delta":
                 global_term = delta_dp
             else:
-                global_term = delta_f1_minority
+                raise ValueError("fairness_style must be 'improvement' or 'delta'")
+        else:
+            global_term = delta_f1_minority
 
-            base_reward = lambda_t * global_term + (1.0 - lambda_t) * score_local  # [T]
 
-            # Penalty (optional mode)
-            maj_violation = 0.0
-            wtd_violation = 0.0
-            penalty = 0.0
-            if mode == "local_gauss_penalty":
-                maj_violation = max(0.0, -(delta_f1_majority + epsilon_majority))
-                wtd_violation = max(0.0, -(delta_f1_weighted + epsilon_weighted))
-                penalty = c_majority * maj_violation + c_weighted * wtd_violation
+        if mode == "fairness":
+            global_term_scaled = dp_scale * float(global_term)
+        else:
+            global_term_scaled = float(global_term)
 
-            reward = base_reward - penalty
-            mean_local = float(score_local.mean().item())
+        base_reward = lambda_t * global_term_scaled + (1.0 - lambda_t) * score_local
 
-            # keep these around for diagnostics
-            alpha_wrong_rate = float(
-                ((p >= 0.5).float() != (y_phi.to(p.device).float())).float().mean().item()
-            )
-            judge_conf_mean = float(score_gauss.mean().item())
-            uncert_alpha_mean = float((1.0 - (2.0 * m).clamp(0, 1)).mean().item())
+
+        # Penalty (optional mode)
+        maj_violation = 0.0
+        wtd_violation = 0.0
+        penalty = 0.0
+        if mode == "local_gauss_penalty":
+            maj_violation = max(0.0, -(delta_f1_majority + epsilon_majority))
+            wtd_violation = max(0.0, -(delta_f1_weighted + epsilon_weighted))
+            penalty = c_majority * maj_violation + c_weighted * wtd_violation
+
+        reward = base_reward - penalty
+        mean_local = float(score_local.mean().item())
+
+        # keep these around for diagnostics
+        alpha_wrong_rate = float(
+            ((p >= 0.5).float() != (y_phi.to(p.device).float())).float().mean().item()
+        )
+        judge_conf_mean = float(score_gauss.mean().item())
+        uncert_alpha_mean = float((1.0 - (2.0 * m).clamp(0, 1)).mean().item())
 
         # Extra diagnostics: confidence, radius, and grad norm
         diag_mean_conf_all  = float("nan")
@@ -474,12 +487,9 @@ class Training:
             # keep NaNs but don't break training
             pass
 
-            if mode == "fairness":
-                global_obj = float(delta_dp)
-            else:
-                global_obj = float(delta_f1_minority)
+        global_obj = float(global_term_scaled)
 
-        global_obj = float(delta_dp) if mode == "fairness" else float(delta_f1_minority)
+
 
         diagnostics = {
             "global_obj": global_obj,
@@ -502,6 +512,10 @@ class Training:
             "dp_beta": dp_beta,
             "delta_dp": delta_dp,
             "diag_mean_abs_margin": float(torch.abs(p_diag - 0.5).mean().item()),
+            "dp_improve": dp_improve,
+            "dp_scale": dp_scale if mode == "fairness" else None,
+            "fairness_style": fairness_style if mode == "fairness" else None,
+
             # Penalty diagnostics
             "epsilon_majority": epsilon_majority if mode == "local_gauss_penalty" else None,
             "epsilon_weighted": epsilon_weighted if mode == "local_gauss_penalty" else None,
@@ -516,7 +530,8 @@ class Training:
             "diag_gen_radius_mean": diag_gen_radius_mean,      # mean PCA radius of generated samples
             "diag_grad_norm": diag_grad_norm,                  # mean ||∂ local reward / ∂x||
         }
-        return reward, diagnostics
+
+        return reward, diagnostics 
 
     # ---------------- Training loop ----------------
     def __call__(self):
@@ -681,8 +696,6 @@ class Training:
                 else:
                     state = env.reset()
 
-                # Reset beta to its initial snapshot each episode for a stable baseline
-                stale_beta_model = copy.deepcopy(self.beta_model)
                 self.beta_model.reset()
 
                 for t in range(self.traj_length):
@@ -721,14 +734,12 @@ class Training:
                 rewards, diagnostics = self.compute_reward(
                     self.alpha_model,
                     self.beta_model,
-                    stale_beta_model,
                     x_theta_val,
                     y_theta_val,
                     x_phi_t,
                     y_phi_t,
                     progress=progress,
                     f1_thresh=0.5,
-                    lambda_schedule=self.lambda_schedule,
                     class_mode=("multiclass" if self.multiclass else "binary"),
                 )
 
@@ -775,9 +786,10 @@ class Training:
 
                 local_mean = float(diagnostics["local_reward"])
                 if self.reward_mode == "fairness":
-                    delta_val = float(diagnostics.get("delta_dp", 0.0))
+                    delta_val = float(diagnostics.get("dp_improve", 0.0))  # not delta_dp
                 else:
                     delta_val = float(diagnostics["delta_f1_val"])
+
 
                 self._local_buf.append(local_mean)
                 self._delta_buf.append(delta_val)
