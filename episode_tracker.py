@@ -261,7 +261,9 @@ class EpisodeTracker:
 
         # console one-liner
         avg_r   = csv_row.get("reward.avg_reward", np.nan)
-        obj1    = csv_row.get("reward.obj1_f1_minority_beta", np.nan)
+        obj1 = csv_row.get("reward.obj1_global", np.nan)
+        if np.isnan(obj1):
+            obj1 = csv_row.get("reward.obj1_f1_minority_beta", np.nan)
         obj2    = csv_row.get("reward.obj2_local_useful_mean", np.nan)
         macro_f = csv_row.get("reward.macro_f1_beta", np.nan)
         print(f"[Tracker] Ep {episode_num:4d} | AvgR {avg_r:.4f} | Global {obj1:.4f} | Local_Avg {obj2:.4f} | F1_macro {macro_f:.4f}")
@@ -289,10 +291,13 @@ class EpisodeTracker:
             # legacy fallbacks
             legacy = {
                 "average_reward": "reward.avg_reward",
-                "obj1": "reward.obj1_f1_minority_beta",
+                "obj1": "reward.obj1_global",  # NEW preferred global objective
+                "obj1_global": "reward.obj1_global",
+                "obj1_f1_minority_beta": "reward.f1_minority_beta",  # if someone passes this
                 "obj2_mean": "reward.obj2_local_useful_mean",
                 "global_f1": "reward.macro_f1_beta",
             }
+
             mapped = legacy.get(key, "reward.avg_reward")
             v = flat_row.get(mapped, np.nan)
         try:
@@ -318,10 +323,17 @@ class EpisodeTracker:
         if avg_reward is not None or obj1 is not None or obj2_mean is not None or global_f1 is not None:
             flat_row = {
                 "reward.avg_reward": avg_reward,
+
+                # NEW canonical:
+                "reward.obj1_global": obj1,
+
+                # Back-compat:
                 "reward.obj1_f1_minority_beta": obj1,
+
                 "reward.obj2_local_useful_mean": obj2_mean,
                 "reward.macro_f1_beta": global_f1,
             }
+
         else:
             flat_row = getattr(self, "_last_flat_row", {})
 

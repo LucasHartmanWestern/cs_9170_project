@@ -3,8 +3,7 @@
 #SBATCH --account=def-mcapretz
 #SBATCH --time=06:00:00
 #SBATCH --mem=10G
-#SBATCH --cpus-per-task=2
-#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=6
 
 set -euo pipefail
 
@@ -29,9 +28,9 @@ python -V
 nvidia-smi || true
 
 SPEC_DIR="experiment_specs"
-SPEC_A="${SPEC_DIR}/fairCredit999.json"
-#SPEC_B="${SPEC_DIR}/testB.json"
-#SPEC_C="${SPEC_DIR}/testC.json"
+SPEC_A="${SPEC_DIR}/creditLambda06.json"
+SPEC_B="${SPEC_DIR}/creditLambda08.json"
+SPEC_C="${SPEC_DIR}/creditLambda04085.json"
 
 mkdir -p "${SPEC_DIR}/logs"
 
@@ -52,9 +51,9 @@ launch () {
 }
 
 PID1=$(launch "$SPEC_A")
-#PID2=$(launch "$SPEC_B")
-#PID3=$(launch "$SPEC_C")
+PID2=$(launch "$SPEC_B")
+PID3=$(launch "$SPEC_C")
 
-wait $PID1 #$PID2 $PID3
+wait $PID1 $PID2 $PID3
 
 echo "Job finished: $(date)"

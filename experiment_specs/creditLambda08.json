@@ -22,7 +22,7 @@
     "pca_clip": null,
     "radius_clip": null,
   
-    "seeds": [123],
+    "seeds": [42, 123, 999],
   
     "ffnn": {
       "hidden_sizes": [32, 16],

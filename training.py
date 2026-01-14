@@ -244,12 +244,14 @@ class Training:
 
     # ---------------- Reward helpers ----------------
     # Generic "get P(y=1|x)" from an FFNNAgent (alpha or beta)
-    def _p1_from_agent(self, agent, x):
+    def _p1_from_agent(self, agent, x, *, no_grad=True):
         agent.model.eval()
-        with torch.no_grad():
-            logits = agent.model(x)             # [N, 2]
-            probs  = torch.softmax(logits, -1)  # [N, 2]
-            return probs[..., 1]                # [N]
+        ctx = torch.no_grad() if no_grad else torch.enable_grad()
+        with ctx:
+            logits = agent.model(x)
+            probs  = torch.softmax(logits, -1)
+            return probs[..., 1]
+
 
     # Binary F1 for the positive class, from probabilities and a threshold
     def f1_from_probs(self, y_true, p1, threshold=0.5):
@@ -271,24 +273,15 @@ class Training:
         
     # ---------------- helpers (external----------------
     def _dp_diff_from_probs(self, a01: torch.Tensor, p1: torch.Tensor, thresh: float = 0.5) -> float:
-        """
-        Hard DP difference:
-        |P(ŷ=1|A=0) - P(ŷ=1|A=1)|
-        where ŷ = 1[p1 >= thresh]
-        """
         a01 = a01.to(p1.device).long().view(-1)
-        yhat = (p1.view(-1) >= thresh).float()
-
+        p1 = p1.view(-1)
         g0 = (a01 == 0)
         g1 = (a01 == 1)
-
-        # avoid NaNs if a group is missing
-        if g0.sum() == 0 or g1.sum() == 0:
+        if g0.sum()==0 or g1.sum()==0:
             return float("nan")
-
-        r0 = float(yhat[g0].mean().item())
-        r1 = float(yhat[g1].mean().item())
-        return abs(r0 - r1)
+        r0 = p1[g0].mean()
+        r1 = p1[g1].mean()
+        return float(torch.abs(r0 - r1).item())
 
     def _get_a_theta_val(self,  x_theta_val=None) -> torch.Tensor:
         """
@@ -342,7 +335,7 @@ class Training:
             raise ValueError(f"reward_mode must be one of {valid}, got {self.reward_mode!r}")
 
         # lambda schedule
-        lambda_start, lambda_end = lambda_schedule
+        lambda_start, lambda_end = self.lambda_schedule
         lambda_t = float(lambda_start + (lambda_end - lambda_start) * progress)
 
         if class_mode not in ("binary", "multiclass"):
@@ -384,9 +377,12 @@ class Training:
             # -------- fairness global objective (DP) --------
             dp_alpha = float("nan")
             dp_beta  = float("nan")
-            delta_dp = 0.0  # positive is good (DP reduced)
+            delta_dp = 0.0  # positive is good
             if mode == "fairness":
                 a_theta_val = self.dataset.a_val
+                assert len(self.dataset.a_val) == x_theta_val.shape[0], "a_val misaligned with x_theta_val"
+                print("a_val counts:", torch.bincount(self.dataset.a_val.long().cpu()))
+
                 dp_alpha = self._dp_diff_from_probs(a_theta_val, p1_alpha_val, thresh=f1_thresh)
                 dp_beta  = self._dp_diff_from_probs(a_theta_val, p1_beta_val,  thresh=f1_thresh)
 
@@ -474,15 +470,21 @@ class Training:
                     allow_unused=False,
                 )
                 diag_grad_norm = float(torch.linalg.norm(grad_x, dim=1).mean().item())
-        except Exception as e:
-            # If anything goes wrong, keep NaNs but don't break training
+        except Exception:
+            # keep NaNs but don't break training
             pass
 
+            if mode == "fairness":
+                global_obj = float(delta_dp)
+            else:
+                global_obj = float(delta_f1_minority)
+
+        global_obj = float(delta_dp) if mode == "fairness" else float(delta_f1_minority)
+
         diagnostics = {
-            "global_reward": float(delta_dp) if mode == "fairness" else float(f1_minority_beta),
-            "global_dp_alpha": float(dp_alpha) if mode == "fairness" else None,
-            "global_dp_beta":  float(dp_beta) if mode == "fairness" else None,
-            "delta_dp": float(delta_dp) if mode == "fairness" else None,
+            "global_obj": global_obj,
+            "f1_minority_beta": float(f1_minority_beta),
+            "f1_minority_alpha": float(f1_minority_alpha),
 
             "local_reward": mean_local,
             "f1_macro_beta": float(f1_macro_beta),
@@ -494,10 +496,12 @@ class Training:
             "delta_f1_val": delta_f1_minority,
             "delta_f1_majority": delta_f1_majority,
             "delta_f1_weighted": delta_f1_weighted,
-            "f1_minority_alpha": float(f1_minority_alpha),
             "f1_minority_beta_stale": 0,
             "local_cap_frac": local_cap_frac,
-
+            "dp_alpha": dp_alpha,
+            "dp_beta": dp_beta,
+            "delta_dp": delta_dp,
+            "diag_mean_abs_margin": float(torch.abs(p_diag - 0.5).mean().item()),
             # Penalty diagnostics
             "epsilon_majority": epsilon_majority if mode == "local_gauss_penalty" else None,
             "epsilon_weighted": epsilon_weighted if mode == "local_gauss_penalty" else None,
@@ -569,8 +573,8 @@ class Training:
                     train_size=self.real_data_size,
                     bias_pct=self.bias_pct,
                     pca_components=self.pca_components,
-                    drop_protected=True,
-                    protected_cols=["age","sex", "race", "native-country"]  # keep age
+                    drop_protected=False,
+                    protected_cols=self.dataset.protected_attributes
                 )
             )
             minority_mask = (y_theta_train == 1)
@@ -739,16 +743,23 @@ class Training:
 
                 reward_metrics = {
                     "avg_reward": float(torch.mean(rewards)),
-                    "obj1_f1_minority_beta": float(diagnostics["global_reward"]),
+                    "obj1_global": float(diagnostics["global_obj"]),
+                    "f1_minority_beta": float(diagnostics["f1_minority_beta"]),
                     "obj2_local_useful_mean": float(diagnostics["local_reward"]),
                     "macro_f1_beta": float(diagnostics["f1_macro_beta"]),
+
+                    # NEW: always present for header stability
+                    "dp_alpha": float(diagnostics.get("dp_alpha", float("nan"))),
+                    "dp_beta": float(diagnostics.get("dp_beta", float("nan"))),
+                    "delta_dp": float(diagnostics.get("delta_dp", float("nan"))),
                 }
+
 
                 new_reward_metrics = {
                     "judge_conf_mean": float(diagnostics.get("judge_conf_mean", float("nan"))),
                     "uncert_alpha_mean": float(diagnostics.get("uncert_alpha_mean", float("nan"))),
                     "alpha_wrong_rate": float(diagnostics.get("alpha_wrong_rate", float("nan"))),
-                    "corr_factor_mean": float(0.5 + 0.5 * diagnostics.get("alpha_wrong_rate", 0.0)),
+                    "alpha_wrong_rate_scaled": float(0.5 + 0.5 * diagnostics.get("alpha_wrong_rate", 0.0)),
                     "f1_minority_alpha": float(diagnostics["f1_minority_alpha"]),
                     "f1_minority_beta_stale": float(diagnostics["f1_minority_beta_stale"]),
                     "local_cap_frac": float(diagnostics["local_cap_frac"]),
@@ -756,20 +767,39 @@ class Training:
                     "diag_frac_mid_conf": float(diagnostics.get("diag_frac_mid_conf", float("nan"))),
                     "diag_gen_radius_mean": float(diagnostics.get("diag_gen_radius_mean", float("nan"))),
                     "diag_grad_norm": float(diagnostics.get("diag_grad_norm", float("nan"))),
+                    "diag_mean_abs_margin":float(diagnostics.get("diag_mean_abs_margin", float("nan"))),
+                    "dp_alpha": float(diagnostics.get("dp_alpha", float("nan"))),
+                    "dp_beta": float(diagnostics.get("dp_beta", float("nan"))),
+                    "delta_dp": float(diagnostics.get("delta_dp", 0.0)),
                 }
 
                 local_mean = float(diagnostics["local_reward"])
-                delta_val = float(diagnostics["delta_f1_val"])
+                if self.reward_mode == "fairness":
+                    delta_val = float(diagnostics.get("delta_dp", 0.0))
+                else:
+                    delta_val = float(diagnostics["delta_f1_val"])
 
                 self._local_buf.append(local_mean)
                 self._delta_buf.append(delta_val)
+
                 corr_local_delta = self._corr_local_delta()
 
                 alignment_metrics = {
-                    "delta_f1_val": delta_val,
+                    "delta_global": float(delta_val),   # delta_f1_minority OR delta_dp depending on mode
                     "corr_local_delta": float(corr_local_delta),
                     "curriculum_stage": int(env.current_stage),
                 }
+                lambda_start, lambda_end = self.lambda_schedule
+                lambda_t = float(lambda_start + (lambda_end - lambda_start) * progress)
+
+                alignment_metrics.update({
+                    "reward_mode": self.reward_mode,
+                    "lambda_t": lambda_t,
+                    "global_term_mag": abs(float(diagnostics["global_obj"])),
+                    "local_term_mag": float(diagnostics["local_reward"]),
+                    "global_contrib_est": lambda_t * abs(float(diagnostics["global_obj"])),
+                    "local_contrib_est": (1.0 - lambda_t) * float(diagnostics["local_reward"]),
+                })
 
                 avg_reward = torch.mean(rewards)
                 self.tracker.log_episode(
@@ -783,7 +813,7 @@ class Training:
                     x_syn=x_phi_t,
                     y_syn=y_phi_t,
                     avg_reward=float(avg_reward),
-                    obj1=float(diagnostics["global_reward"]),
+                    obj1=float(diagnostics["global_obj"]),
                     obj2_mean=float(diagnostics["local_reward"]),
                     global_f1=float(diagnostics["f1_macro_beta"]),
                     feature_names=[f"pca_{i}" for i in range(x_phi_t.shape[1])],
