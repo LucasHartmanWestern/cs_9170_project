@@ -1,0 +1,64 @@
+{
+    "dataset_name": "credit_card",
+    "multiclass": false,
+    "bias_pct": 0.5,
+  
+    "reward_mode": "fairness",
+    "lambda_schedule": [0.3, 0.95],
+    "minority_id": 1,
+    "majority_id": 0,
+    "third_id": null,
+  
+    "pca_components": 10,
+    "traj_length": 2000,
+    "real_data_size": 3000,
+    "total_episodes": 6000,
+  
+    "curriculum_learning": true,
+    "use_delta_actions": true,
+    "delta_scale": 0.10,
+    "delta_clip": 0.20,
+    "pca_clip": null,
+    "radius_clip": 3.0,
+  
+    "seeds": [42, 123, 999],
+  
+    "ffnn": {
+      "hidden_sizes": [32, 16],
+      "learning_rate": 0.001,
+      "batch_size": 64,
+      "epochs": 10
+    },
+  
+    "reinforce": {
+      "hidden_sizes": [64, 64],
+      "lr": 0.0003,
+      "gamma": 0.99,
+      "entropy_start": 0.02,
+      "entropy_end": 0.005
+  
+    },
+  
+    "curriculum": {
+      "start_dim": 2,
+      "max_dim_cap": 20,
+      "stage_count": 5,
+      "schedule": "linear"
+  
+    },
+  
+    "benchmarks": {
+      "run_ctgan": false,
+      "alpha_plus_ctgan_n": 2000,
+      "ctgan_epochs": 300,
+      "cap_ctgan_train": null,
+  
+      "run_ctabgan": false,
+      "alpha_plus_ctabgan_n": 2000,
+  
+      "ctab_python": null,
+      "ctab_repo": null
+  
+    }
+  }
+  

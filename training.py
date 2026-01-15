@@ -53,7 +53,7 @@ class Training:
         total_episodes=1,
 
         #reward
-        reward_mode="gauss_penalty",
+        reward_mode="fairness",
         lambda_schedule=(0.8, 0.8),
 
         #ENV hyperparams
@@ -94,9 +94,7 @@ class Training:
         self.minority_id = minority_id
         self.majority_id = majority_id
         self.third_id = third_id
-        self.bias_pct = bias_pct
 
-        self.pca_components = pca_components
         self.traj_length = traj_length
         self.real_data_size = real_data_size
         self.episodes = total_episodes
@@ -271,40 +269,160 @@ class Training:
         y_true = y_true.to(p1.device).float()
         return (p1 - y_true) ** 2  # in [0,1]
         
-    # ---------------- helpers (external----------------
-    def _dp_diff_from_probs(self, a01: torch.Tensor, p1: torch.Tensor, thresh: float = 0.5) -> float:
-        a01 = a01.to(p1.device).long().view(-1)
-        p1 = p1.view(-1)
-        g0 = (a01 == 0)
-        g1 = (a01 == 1)
-        if g0.sum()==0 or g1.sum()==0:
-            return float("nan")
-        r0 = p1[g0].mean()
-        r1 = p1[g1].mean()
-        return float(torch.abs(r0 - r1).item())
+    # ---------------- Fairness (Equal Opportunity) helpers ----------------
+
+    def _tpr_from_probs(self, a, y_true, p1, *, thresh=0.5, group_value=0):
+        """
+        True Positive Rate for a specific group:
+        TPR(a=g) = P(ŷ=1 | y=1, A=g)
+        Returns NaN if denominator is 0 (no positives for that group).
+        """
+        device = p1.device
+        a = torch.as_tensor(a, device=device).long()
+        y_true = y_true.to(device).long()
+        y_pred = (p1 >= thresh).long()
+
+        group_mask = (a == int(group_value))
+        pos_mask   = (y_true == 1)
+        denom_mask = group_mask & pos_mask
+
+        denom = denom_mask.sum().float()
+        if denom.item() == 0:
+            return torch.tensor(float("nan"), device=device)
+
+        tp = ((y_pred == 1) & denom_mask).sum().float()
+        return tp / (denom + 1e-8)
+
+    #Uses _tpr_from_probs
+    def _eo_gap_from_probs(self, a, y_true, p1, *, thresh=0.5, group0=0, group1=1):
+        """
+        Equal Opportunity gap:
+        ΔEO = |TPR(A=group0) - TPR(A=group1)|
+        Returns NaN if one of the groups has no positives (can't compute TPR).
+        """
+        tpr0 = self._tpr_from_probs(a, y_true, p1, thresh=thresh, group_value=group0)
+        tpr1 = self._tpr_from_probs(a, y_true, p1, thresh=thresh, group_value=group1)
+
+        # if either is NaN, return NaN
+        if (tpr0 != tpr0) or (tpr1 != tpr1):
+            return torch.tensor(float("nan"), device=p1.device)
+
+        return torch.abs(tpr0 - tpr1)
+
+    #Uses _tpr_from_probs
+    def _eo_signed_diff_from_probs(self, a, y_true, p1, *, thresh=0.5, group0=0, group1=1):
+        """
+        Signed difference (useful for debugging directionality):
+        TPR(group0) - TPR(group1)
+        """
+        tpr0 = self._tpr_from_probs(a, y_true, p1, thresh=thresh, group_value=group0)
+        tpr1 = self._tpr_from_probs(a, y_true, p1, thresh=thresh, group_value=group1)
+        if (tpr0 != tpr0) or (tpr1 != tpr1):
+            return torch.tensor(float("nan"), device=p1.device)
+        return (tpr0 - tpr1)
+
+    def init_disadvantaged_group(self, alpha_model, x_theta_val, y_theta_val, thresh=0.5):
+        with torch.no_grad():
+            p1 = self._p1_from_agent(alpha_model, x_theta_val)
+            y = y_theta_val.long()
+            a = self.dataset.a_val  # aligned with x_theta_val
+
+            tpr_g0 = self._tpr_from_probs(a, y, p1, thresh=thresh, group_value=0)
+            tpr_g1 = self._tpr_from_probs(a, y, p1, thresh=thresh, group_value=1)
+
+        # pick disadvantaged = lower TPR (handle NaNs defensively)
+        if (tpr_g0 != tpr_g0):  # NaN
+            disadv = 1
+        elif (tpr_g1 != tpr_g1):
+            disadv = 0
+        else:
+            disadv = 0 if float(tpr_g0) < float(tpr_g1) else 1
+
+        self.disadv_group_value = disadv
+        self.adv_group_value = 1 - disadv
+        self.disadv_tpr_alpha_g0 = float(tpr_g0) if (tpr_g0 == tpr_g0) else float("nan")
+        self.disadv_tpr_alpha_g1 = float(tpr_g1) if (tpr_g1 == tpr_g1) else float("nan")
+
+    def _nearest_anchor_dist(self, x: torch.Tensor, anchors: torch.Tensor, *, chunk=512) -> torch.Tensor:
+        """
+        Returns min Euclidean distance from each x[i] to any anchor.
+        x:       [T, A]
+        anchors: [N, A]
+        output:  [T]
+        VRAM-safe via chunking.
+        """
+        device = x.device
+        anchors = anchors.to(device)
+
+        T = x.shape[0]
+        out = torch.empty((T,), device=device, dtype=x.dtype)
+
+        # Precompute anchor norms for fast distance: ||x-a||^2 = ||x||^2 + ||a||^2 - 2 x·a
+        a2 = (anchors * anchors).sum(dim=1)  # [N]
+
+        for s in range(0, T, chunk):
+            xb = x[s:s+chunk]                # [b, A]
+            x2 = (xb * xb).sum(dim=1, keepdim=True)  # [b,1]
+            # squared distances: [b,N]
+            d2 = x2 + a2.unsqueeze(0) - 2.0 * (xb @ anchors.t())
+            d2 = torch.clamp(d2, min=0.0)
+            out[s:s+chunk] = torch.sqrt(d2.min(dim=1).values + 1e-12)
+
+        return out
+
+
+    def _diversity_penalty(self, x: torch.Tensor, *, max_pts=128, rho=0.5) -> torch.Tensor:
+        """
+        Scalar penalty high when samples are too similar.
+        Uses a subsample + gaussian similarity exp(-||xi-xj||^2/(2*rho^2)).
+        """
+        T = x.shape[0]
+        if T <= 1:
+            return torch.zeros((), device=x.device, dtype=x.dtype)
+
+        if T > max_pts:
+            idx = torch.linspace(0, T - 1, steps=max_pts, device=x.device).long()
+            Xd = x[idx]
+        else:
+            Xd = x
+
+        # Pairwise distances (M x M)
+        D = torch.cdist(Xd, Xd)
+        M = D.shape[0]
+        D = D + torch.eye(M, device=D.device, dtype=D.dtype) * 1e6  # ignore diagonal
+
+        rho_t = torch.tensor(float(rho), device=D.device, dtype=D.dtype)
+        sim = torch.exp(-0.5 * (D / (rho_t + 1e-8)) ** 2)
+        return sim.mean()
 
     # Beta model F1 minority class score + local term (no EMA)
     def compute_reward(
         self,
         alpha_model, beta_model,
-        x_theta_val, y_theta_val,                    
-        x_phi, y_phi,                                
-        progress: float,                             
-        f1_thresh: float = 0.5,            # (start, end) across the run
+        x_theta_val, y_theta_val,
+        x_phi, y_phi,
+        progress: float,
+        f1_thresh: float = 0.5,
         # hinge-penalty for majority/weighted scores (used only in *_penalty mode)
-        epsilon_majority: float = 0.01,   # allow up to -1.0 pp on majority F1
-        epsilon_weighted: float = 0.005,  # allow up to -0.5 pp on weighted F1
-        c_majority: float = 0.30,         # penalty weight for majority violation
-        c_weighted: float = 0.30,         # penalty weight for weighted violation
-        class_mode: str = "binary",   # "binary" or "multiclass"
-        dp_scale: float = 50.0,
-        fairness_style: str = "improvement",
-        prev_dp_beta: float | None = None
+        epsilon_majority: float = 0.01,
+        epsilon_weighted: float = 0.005,
+        c_majority: float = 0.30,
+        c_weighted: float = 0.30,
+        class_mode: str = "binary",
+        eo_scale: float = 50.0,
+
+        # --- local fairness objective weights / scales ---
+        w_anchor: float = 0.60,         # encourage closeness to disadv-group positives
+        w_hard: float = 0.30,           # encourage "hard positives" for alpha
+        w_div: float = 0.05,            # discourage mode collapse (too-similar samples)
+        sigma_anchor: float = 0.85,     # PCA-distance scale for anchor proximity
+        rho_div: float = 0.60,          # PCA-distance scale for diversity penalty
+        hard_margin: float = 0.65,      # p1 <= hard_margin is considered "hard" positive for alpha
     ):
         """
         Reward combines:
-        - Global term: ΔF1minority on θ_val between beta and alpha.
-        - Local term: Gaussian usefulness around 0.5 on Pα(y=1|x_phi).
+        - Global term
+        - Local term
         """
         mode = self.reward_mode
         valid = {"local_gauss", "local_gauss_penalty", "fairness"}
@@ -324,15 +442,15 @@ class Training:
         else:
             y_val_bin = (y_theta_val == 1).long()
 
-        # shared Gaussian width (also used in diagnostics)
+        # shared Gaussian width
         tau = 0.10
 
+    # ---------------- Global term on θ_val ----------------
         with torch.no_grad():
-            #Global term on θ_val 
             p1_alpha_val = self._p1_from_agent(alpha_model, x_theta_val)
             p1_beta_val  = self._p1_from_agent(beta_model,  x_theta_val)
 
-            # Minority / majority / macro (alpha vs beta)
+            # Minority / majority / macro
             f1_minority_alpha = self.f1_from_probs(y_val_bin, p1_alpha_val, f1_thresh)
             f1_minority_beta  = self.f1_from_probs(y_val_bin, p1_beta_val,  f1_thresh)
             f1_majority_alpha = self.f1_from_probs(1 - y_val_bin, 1 - p1_alpha_val, 1 - f1_thresh)
@@ -346,90 +464,147 @@ class Training:
             f1_weighted_alpha = pos_frac * float(f1_minority_alpha) + neg_frac * float(f1_majority_alpha)
             f1_weighted_beta  = pos_frac * float(f1_minority_beta)  + neg_frac * float(f1_majority_beta)
 
-            # Deltas 
+            # Deltas
             delta_f1_minority = float(f1_minority_beta - f1_minority_alpha)
             delta_f1_majority = float(f1_majority_beta - f1_majority_alpha)
             delta_f1_weighted = float(f1_weighted_beta - f1_weighted_alpha)
 
-        # -------- fairness global objective (DP) --------
-        dp_alpha = float("nan")
-        dp_beta  = float("nan")
-
-        delta_dp = 0.0                 # dp_alpha - dp_beta
-        dp_improve = 0.0               # abs
+        # -------- fairness global objective (EO) --------
+        eo_alpha = float("nan")
+        eo_beta  = float("nan")
+        delta_eo = 0.0                 # eo_alpha - eo_beta
+        tpr_alpha_g0 = float("nan")
+        tpr_alpha_g1 = float("nan")
+        tpr_beta_g0  = float("nan")
+        tpr_beta_g1  = float("nan")
+        eo_signed_beta = float("nan")
 
         if mode == "fairness":
             a_theta_val = self.dataset.a_val
             assert len(a_theta_val) == x_theta_val.shape[0], "a_val misaligned with x_theta_val"
 
-            dp_alpha = self._dp_diff_from_probs(a_theta_val, p1_alpha_val, thresh=f1_thresh)
-            dp_beta  = self._dp_diff_from_probs(a_theta_val, p1_beta_val,  thresh=f1_thresh)
+            eo_alpha_t = self._eo_gap_from_probs(
+                a_theta_val, y_val_bin, p1_alpha_val, thresh=f1_thresh, group0=0, group1=1
+            )
+            eo_beta_t  = self._eo_gap_from_probs(
+                a_theta_val, y_val_bin, p1_beta_val,  thresh=f1_thresh, group0=0, group1=1
+            )
 
-            # NaN guard (missing group etc.)
-            if (dp_alpha != dp_alpha) or (dp_beta != dp_beta):
-                delta_dp = 0.0
-                dp_improve = 0.0
+            # per-group TPRs (diagnostics)
+            tpr_a0 = self._tpr_from_probs(a_theta_val, y_val_bin, p1_alpha_val, thresh=f1_thresh, group_value=0)
+            tpr_a1 = self._tpr_from_probs(a_theta_val, y_val_bin, p1_alpha_val, thresh=f1_thresh, group_value=1)
+            tpr_b0 = self._tpr_from_probs(a_theta_val, y_val_bin, p1_beta_val,  thresh=f1_thresh, group_value=0)
+            tpr_b1 = self._tpr_from_probs(a_theta_val, y_val_bin, p1_beta_val,  thresh=f1_thresh, group_value=1)
+            eo_signed_b = self._eo_signed_diff_from_probs(a_theta_val, y_val_bin, p1_beta_val, thresh=f1_thresh, group0=0, group1=1)
+
+            if (eo_alpha_t != eo_alpha_t) or (eo_beta_t != eo_beta_t):
+                delta_eo = 0.0
             else:
-                dp_alpha = float(dp_alpha)
-                dp_beta  = float(dp_beta)
+                eo_alpha = float(eo_alpha_t)
+                eo_beta  = float(eo_beta_t)
+                delta_eo = eo_alpha - eo_beta
 
-                # model comparison: positive if beta reduced DP gap vs alpha
-                delta_dp = dp_alpha - dp_beta
+            if (tpr_a0 == tpr_a0): tpr_alpha_g0 = float(tpr_a0)
+            if (tpr_a1 == tpr_a1): tpr_alpha_g1 = float(tpr_a1)
+            if (tpr_b0 == tpr_b0): tpr_beta_g0  = float(tpr_b0)
+            if (tpr_b1 == tpr_b1): tpr_beta_g1  = float(tpr_b1)
+            if (eo_signed_b == eo_signed_b): eo_signed_beta = float(eo_signed_b)
 
-                # (2) time-improvement shaping: positive if DP gap shrinks this step
-                # Prefer using the caller-provided previous dp_beta; otherwise use a stored value.
-                if prev_dp_beta is None:
-                    prev = getattr(self, "_prev_dp_beta", None)
-                else:
-                    prev = prev_dp_beta
+        # ---------------- Local term on Φ ----------------
+        with torch.no_grad():
+            p = self._p1_from_agent(alpha_model, x_phi)
 
-                if prev is None or (prev != prev):   # None or NaN
-                    dp_improve = 0.0
-                else:
-                    prev = float(prev)
-                    dp_improve = abs(prev) - abs(dp_beta)
+        # Default placeholders for diagnostics
+        local_cap_frac = float("nan")
+        anchor_reward_mean = float("nan")
+        hard_reward_mean = float("nan")
+        div_pen_mean = float("nan")
+        min_anchor_dist_mean = float("nan")
+        min_anchor_dist_p50 = float("nan")
+        min_anchor_dist_p90 = float("nan")
+        anchors_used = 0
 
-                # store for next call (so you don’t have to thread prev_dp_beta everywhere)
-                self._prev_dp_beta = dp_beta
+        if mode in ("local_gauss", "local_gauss_penalty"):
+            #symmetric Gaussian around 0.5
+            m = torch.abs(p - 0.5)
+            score_gauss = torch.exp(-0.5 * (m / tau) ** 2)
+            score_local_raw = score_gauss.clone()
 
+            # Cap local score
+            LOCAL_CAP = 1.0
+            cap_t = torch.tensor(LOCAL_CAP, device=score_local_raw.device, dtype=score_local_raw.dtype)
+            over_mask = (score_local_raw > cap_t).float()
+            local_cap_frac = float(over_mask.mean().item())
+            score_local = torch.minimum(score_local_raw, cap_t)
 
+            judge_conf_mean = float(score_gauss.mean().item())
+            uncert_alpha_mean = float((1.0 - (2.0 * m).clamp(0, 1)).mean().item())
 
-        # ---- Local term on synthetic Φ----
-        p = self._p1_from_agent(alpha_model, x_phi)  # P_alpha(y=1|x_phi) in [0,1]
+        else:
+            # Fairness mode local objective (NO protected-attr forcing):
+            # local = w_anchor * anchor_prox + w_hard * hard_pos - w_div * diversity_pen
 
-        # Symmetric Gaussian around 0.5
-        m = torch.abs(p - 0.5)
-        score_gauss = torch.exp(-0.5 * (m / tau) ** 2)
-        score_local_raw = score_gauss.clone()
+            if not hasattr(self, "disadv_group_value"):
+                self.init_disadvantaged_group(alpha_model, x_theta_val, y_val_bin, thresh=f1_thresh)
 
-        # Cap local score
-        LOCAL_CAP = 1.0
-        cap_t = torch.tensor(LOCAL_CAP, device=score_local_raw.device, dtype=score_local_raw.dtype)
-        over_mask = (score_local_raw > cap_t).float()
-        local_cap_frac = float(over_mask.mean().item())
-        score_local = torch.minimum(score_local_raw, cap_t)
+            anchors = getattr(self, "disadv_pos_anchors", None)
 
-        # ---- Combine global + local ----
-        if mode == "fairness":
-            if fairness_style == "improvement":
-                global_term = dp_improve
-            elif fairness_style == "delta":
-                global_term = delta_dp
+            # --- anchor proximity ---
+            if anchors is None or anchors.numel() == 0:
+                anchors_used = 0
+                min_d = torch.full((x_phi.shape[0],), float("nan"), device=x_phi.device, dtype=x_phi.dtype)
+                anchor_reward = torch.zeros((x_phi.shape[0],), device=x_phi.device, dtype=x_phi.dtype)
             else:
-                raise ValueError("fairness_style must be 'improvement' or 'delta'")
-        else:
-            global_term = delta_f1_minority
+                anchors_used = int(anchors.shape[0])
+                min_d = self._nearest_anchor_dist(x_phi, anchors, chunk=512)  # [T]
+                sig = torch.tensor(float(sigma_anchor), device=min_d.device, dtype=min_d.dtype)
+                anchor_reward = torch.exp(-0.5 * (min_d / (sig + 1e-8)) ** 2)
+
+            # --- hard-positive reward (alpha finds these "hard") ---
+            hm = float(hard_margin)
+            hard_reward = ((hm - p) / max(hm, 1e-8)).clamp(0.0, 1.0)  # [T]
+
+            # --- diversity penalty (mode collapse) ---
+            div_pen = self._diversity_penalty(x_phi, max_pts=128, rho=rho_div)  # scalar
+
+            # combine
+            score_local = (
+                w_anchor * anchor_reward +
+                w_hard   * hard_reward -
+                w_div    * div_pen
+            ).clamp(0.0, 1.0)
+
+            # diagnostics
+            m = torch.abs(p - 0.5)
+            judge_conf_mean = float(torch.exp(-0.5 * (m / tau) ** 2).mean().item())
+            uncert_alpha_mean = float((1.0 - (2.0 * m).clamp(0, 1)).mean().item())
+            local_cap_frac = 0.0
+
+            anchor_reward_mean = float(anchor_reward.mean().item())
+            hard_reward_mean = float(hard_reward.mean().item())
+            div_pen_mean = float(div_pen.item()) if torch.is_tensor(div_pen) else float(div_pen)
+
+            if torch.isfinite(min_d).any():
+                md = min_d[torch.isfinite(min_d)]
+                min_anchor_dist_mean = float(md.mean().item())
+                try:
+                    min_anchor_dist_p50 = float(torch.quantile(md, 0.50).item())
+                    min_anchor_dist_p90 = float(torch.quantile(md, 0.90).item())
+                except Exception:
+                    pass
 
 
+        # ---------------- Combine global + local ----------------
         if mode == "fairness":
-            global_term_scaled = dp_scale * float(global_term)
+            global_term = eo_scale * float(delta_eo)
         else:
-            global_term_scaled = float(global_term)
+            global_term = float(delta_f1_minority)
 
-        base_reward = lambda_t * global_term_scaled + (1.0 - lambda_t) * score_local
+        # make local term per-step (score_local is [T])
+        base_reward = lambda_t * global_term + (1.0 - lambda_t) * score_local
 
 
-        # Penalty (optional mode)
+        # ---------------- Optional performance penalty ----------------
         maj_violation = 0.0
         wtd_violation = 0.0
         penalty = 0.0
@@ -441,14 +616,13 @@ class Training:
         reward = base_reward - penalty
         mean_local = float(score_local.mean().item())
 
-        # keep these around for diagnostics
+        # ---------------- Diagnostics ----------------
+        # alpha_wrong_rate is meaningful only if y_phi is aligned to the classifier target;
+        # you force y_phi=1, so this is essentially FN rate on generated positives.
         alpha_wrong_rate = float(
             ((p >= 0.5).float() != (y_phi.to(p.device).float())).float().mean().item()
         )
-        judge_conf_mean = float(score_gauss.mean().item())
-        uncert_alpha_mean = float((1.0 - (2.0 * m).clamp(0, 1)).mean().item())
 
-        # Extra diagnostics: confidence, radius, and grad norm
         diag_mean_conf_all  = float("nan")
         diag_frac_mid_conf  = float("nan")
         diag_gen_radius_mean = float("nan")
@@ -457,9 +631,9 @@ class Training:
         try:
             x_phi_det = x_phi.detach().clone().requires_grad_(True)
             with torch.enable_grad():
-                p_diag = self._p1_from_agent(alpha_model, x_phi_det)  # [T]
+                p_diag = self._p1_from_agent(alpha_model, x_phi_det, no_grad=False)  # [T]
 
-                # 1) confidence over generator samples: max(p, 1-p)
+                # confidence over generator samples: max(p, 1-p)
                 conf = torch.maximum(p_diag, 1.0 - p_diag)
                 diag_mean_conf_all = float(conf.mean().item())
 
@@ -467,14 +641,23 @@ class Training:
                 mid_band = ((p_diag >= 0.4) & (p_diag <= 0.6)).float()
                 diag_frac_mid_conf = float(mid_band.mean().item())
 
-                # 2) radial distance in PCA space for generator samples
+                # radial distance in PCA space for generator samples
                 radius = torch.linalg.norm(x_phi_det, dim=1)  # [T]
                 diag_gen_radius_mean = float(radius.mean().item())
 
-                # 3) gradient norm of local Gaussian reward w.r.t x
-                m_diag = torch.abs(p_diag - 0.5)
-                score_gauss_diag = torch.exp(-0.5 * (m_diag / tau) ** 2)
-                local_mean_diag = score_gauss_diag.mean()  # scalar
+                # gradient norm of local reward w.r.t x (use the mean local score)
+                if mode in ("local_gauss", "local_gauss_penalty"):
+                    m_diag = torch.abs(p_diag - 0.5)
+                    score_gauss_diag = torch.exp(-0.5 * (m_diag / tau) ** 2)
+                    local_mean_diag = score_gauss_diag.mean()
+                else:
+                    # fairness-local: rebuild differentiable local mean (approx)
+                    # NOTE: anchor distances via cdist are differentiable, but we computed them in no_grad above.
+                    # For diagnostics, use a simple differentiable proxy: hardness only.
+                    hm = float(hard_margin)
+                    hard_reward_diag = ((hm - p_diag) / max(hm, 1e-8)).clamp(0.0, 1.0)
+                    local_mean_diag = hard_reward_diag.mean()
+
                 grad_x, = torch.autograd.grad(
                     local_mean_diag,
                     x_phi_det,
@@ -484,54 +667,64 @@ class Training:
                 )
                 diag_grad_norm = float(torch.linalg.norm(grad_x, dim=1).mean().item())
         except Exception:
-            # keep NaNs but don't break training
+            p_diag = p  # keep something defined
             pass
 
-        global_obj = float(global_term_scaled)
-
-
-
         diagnostics = {
-            "global_obj": global_obj,
+            "global_obj": float(global_term),
             "f1_minority_beta": float(f1_minority_beta),
             "f1_minority_alpha": float(f1_minority_alpha),
-
-            "local_reward": mean_local,
+            "local_reward": float(mean_local),
             "f1_macro_beta": float(f1_macro_beta),
 
-            # Details (existing)
-            "judge_conf_mean": judge_conf_mean,
-            "uncert_alpha_mean": uncert_alpha_mean,
-            "alpha_wrong_rate": alpha_wrong_rate,
-            "delta_f1_val": delta_f1_minority,
-            "delta_f1_majority": delta_f1_majority,
-            "delta_f1_weighted": delta_f1_weighted,
-            "f1_minority_beta_stale": 0,
-            "local_cap_frac": local_cap_frac,
-            "dp_alpha": dp_alpha,
-            "dp_beta": dp_beta,
-            "delta_dp": delta_dp,
-            "diag_mean_abs_margin": float(torch.abs(p_diag - 0.5).mean().item()),
-            "dp_improve": dp_improve,
-            "dp_scale": dp_scale if mode == "fairness" else None,
-            "fairness_style": fairness_style if mode == "fairness" else None,
+            # legacy/local diagnostics
+            "judge_conf_mean": float(judge_conf_mean),
+            "uncert_alpha_mean": float(uncert_alpha_mean),
+            "alpha_wrong_rate": float(alpha_wrong_rate),
 
-            # Penalty diagnostics
+            "delta_f1_val": float(delta_f1_minority),
+            "delta_f1_majority": float(delta_f1_majority),
+            "delta_f1_weighted": float(delta_f1_weighted),
+            "f1_minority_beta_stale": 0.0,
+            "local_cap_frac": float(local_cap_frac) if local_cap_frac == local_cap_frac else float("nan"),
+
+            # fairness diagnostics
+            "eo_alpha": float(eo_alpha),
+            "eo_beta": float(eo_beta),
+            "delta_eo": float(delta_eo),
+            "eo_scale": float(eo_scale) if mode == "fairness" else None,
+            "tpr_alpha_g0": tpr_alpha_g0,
+            "tpr_alpha_g1": tpr_alpha_g1,
+            "tpr_beta_g0":  tpr_beta_g0,
+            "tpr_beta_g1":  tpr_beta_g1,
+            "eo_signed_beta": eo_signed_beta,
+
+            # fairness-local diagnostics
+            "anchors_used": int(anchors_used),
+            "anchor_reward_mean": float(anchor_reward_mean),
+            "hard_reward_mean": float(hard_reward_mean),
+            "div_pen_mean": float(div_pen_mean),
+            "min_anchor_dist_mean": float(min_anchor_dist_mean),
+            "min_anchor_dist_p50": float(min_anchor_dist_p50),
+            "min_anchor_dist_p90": float(min_anchor_dist_p90),
+
+            # penalty diagnostics
             "epsilon_majority": epsilon_majority if mode == "local_gauss_penalty" else None,
             "epsilon_weighted": epsilon_weighted if mode == "local_gauss_penalty" else None,
-            "penalty": penalty if mode == "local_gauss_penalty" else 0.0,
-            "maj_violation": maj_violation if mode == "local_gauss_penalty" else 0.0,
-            "wtd_violation": wtd_violation if mode == "local_gauss_penalty" else 0.0,
+            "penalty": float(penalty) if mode == "local_gauss_penalty" else 0.0,
+            "maj_violation": float(maj_violation) if mode == "local_gauss_penalty" else 0.0,
+            "wtd_violation": float(wtd_violation) if mode == "local_gauss_penalty" else 0.0,
             "corr_factor_mean": None,
 
             # extra diagnostic metrics
-            "diag_mean_conf_all": diag_mean_conf_all,          # avg max(p, 1-p) over generator samples
-            "diag_frac_mid_conf": diag_frac_mid_conf,          # fraction with p in [0.4, 0.6]
-            "diag_gen_radius_mean": diag_gen_radius_mean,      # mean PCA radius of generated samples
-            "diag_grad_norm": diag_grad_norm,                  # mean ||∂ local reward / ∂x||
+            "diag_mean_conf_all": float(diag_mean_conf_all),
+            "diag_frac_mid_conf": float(diag_frac_mid_conf),
+            "diag_gen_radius_mean": float(diag_gen_radius_mean),
+            "diag_grad_norm": float(diag_grad_norm),
+            "diag_mean_abs_margin": float(torch.abs(p_diag - 0.5).mean().item()) if torch.is_tensor(p_diag) else float("nan"),
         }
 
-        return reward, diagnostics 
+        return reward, diagnostics
 
     # ---------------- Training loop ----------------
     def __call__(self):
@@ -607,6 +800,27 @@ class Training:
             self.alpha_model = self.train_predictor_model(
                 self.alpha_model, x_theta_train, y_theta_train
             )
+            # lock disadvantaged group based on alpha on validation set
+            self.init_disadvantaged_group(self.alpha_model, x_theta_val, y_theta_val, thresh=0.5)
+
+            # Build anchor set: real TRAIN points that are (y=1) AND (a=disadvantaged group)
+            a_train = self.dataset.a_train  # torch tensor aligned with x_theta_train
+            disadv = int(self.disadv_group_value)
+
+            anchor_mask = (y_theta_train == 1) & (a_train == disadv)
+
+            anchors = x_theta_train[anchor_mask]
+
+            # Optional: cap anchors to keep distance calcs fast
+            MAX_ANCHORS = 2000
+            if anchors.shape[0] > MAX_ANCHORS:
+                g = torch.Generator(device="cpu").manual_seed(self.seed)
+                idx = torch.randperm(anchors.shape[0], generator=g)[:MAX_ANCHORS]
+                anchors = anchors[idx.to(anchors.device)]
+
+            self.disadv_pos_anchors = anchors.detach()  # [N, A]
+            print(f"Anchors: {self.disadv_pos_anchors.shape[0]} (disadv={disadv})")
+
             self.tracker.save_alpha_state_dict(
                 self.alpha_model, self.ffnn_config, self.pca_components
             )
@@ -753,16 +967,16 @@ class Training:
                 self.agent.learn_trajectory(states, actions, rewards, next_states, dones, episode)
 
                 reward_metrics = {
-                    "avg_reward": float(torch.mean(rewards)),
+                    "avg_reward": float(torch.mean(rewards).item()),
                     "obj1_global": float(diagnostics["global_obj"]),
                     "f1_minority_beta": float(diagnostics["f1_minority_beta"]),
                     "obj2_local_useful_mean": float(diagnostics["local_reward"]),
                     "macro_f1_beta": float(diagnostics["f1_macro_beta"]),
 
                     # NEW: always present for header stability
-                    "dp_alpha": float(diagnostics.get("dp_alpha", float("nan"))),
-                    "dp_beta": float(diagnostics.get("dp_beta", float("nan"))),
-                    "delta_dp": float(diagnostics.get("delta_dp", float("nan"))),
+                    "eo_alpha": float(diagnostics.get("eo_alpha", float("nan"))),
+                    "eo_beta": float(diagnostics.get("eo_beta", float("nan"))),
+                    "delta_eo": float(diagnostics.get("delta_eo", float("nan"))),
                 }
 
 
@@ -779,14 +993,14 @@ class Training:
                     "diag_gen_radius_mean": float(diagnostics.get("diag_gen_radius_mean", float("nan"))),
                     "diag_grad_norm": float(diagnostics.get("diag_grad_norm", float("nan"))),
                     "diag_mean_abs_margin":float(diagnostics.get("diag_mean_abs_margin", float("nan"))),
-                    "dp_alpha": float(diagnostics.get("dp_alpha", float("nan"))),
-                    "dp_beta": float(diagnostics.get("dp_beta", float("nan"))),
-                    "delta_dp": float(diagnostics.get("delta_dp", 0.0)),
+                    "eo_alpha": float(diagnostics.get("eo_alpha", float("nan"))),
+                    "eo_beta": float(diagnostics.get("eo_beta", float("nan"))),
+                    "delta_eo": float(diagnostics.get("delta_eo", 0.0)),
                 }
 
                 local_mean = float(diagnostics["local_reward"])
                 if self.reward_mode == "fairness":
-                    delta_val = float(diagnostics.get("dp_improve", 0.0))  # not delta_dp
+                    delta_val = float(diagnostics.get("delta_eo", 0.0))  # not delta_dp
                 else:
                     delta_val = float(diagnostics["delta_f1_val"])
 

@@ -22,9 +22,9 @@ source ~/envs/rl/bin/activate
 
 SPEC_DIR="experiment_specs"
 SPECS=(
-  "${SPEC_DIR}/creditLambda06.json"
-  "${SPEC_DIR}/creditLambda08.json"
-  "${SPEC_DIR}/creditLambda04085.json"
+  "${SPEC_DIR}/newCreditLambda1.json"
+  "${SPEC_DIR}/newCreditLambda05.json"
+  "${SPEC_DIR}/newCreditLambda08.json"
 )
 
 mkdir -p "${SPEC_DIR}/logs"

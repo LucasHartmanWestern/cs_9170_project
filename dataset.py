@@ -621,6 +621,11 @@ class Dataset:
             df = df.drop(columns=["ID"])
 
         y_raw = df[label_col].astype(int).to_numpy()
+        # sanity check label distribution (default should be ~20% in full dataset)
+        vals, cnts = np.unique(y_raw, return_counts=True)
+        print("Label distribution:", dict(zip(vals.tolist(), cnts.tolist())))
+        if set(vals.tolist()) != {0, 1}:
+            raise ValueError("Label parsing failed; y_raw not binary {0,1}")
 
         if dp_protected_col not in df.columns:
             raise ValueError(
