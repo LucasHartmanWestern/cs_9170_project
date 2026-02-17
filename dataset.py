@@ -119,6 +119,8 @@ class Dataset:
             protected_cols=None,
             return_test_df: bool = False,
             return_raw: bool = False,
+            bias_val: bool = True,
+            dp_protected_col: str = "sex",
         ):
         """
         PIPELINE:
@@ -155,6 +157,9 @@ class Dataset:
         y_raw = np.where(X_df_raw["income"].isin([">50K", ">50K."]), 1, 0).astype(int)
         X_df_raw = X_df_raw.drop(columns=["income"])
 
+        # Extract protected attribute for fairness metrics (before any dropping)
+        A_df_raw = X_df_raw[[dp_protected_col]].copy()
+
         # 2) OPTIONAL: Drop protected attributes entirely (before splits/encoding/PCA)
         if drop_protected:
             drop_cols = [c for c in protected_cols if c in X_df_raw.columns]
@@ -166,20 +171,25 @@ class Dataset:
         num_cols = [c for c in X_df_raw.columns if np.issubdtype(X_df_raw[c].dtype, np.number)]
 
         # 3) Split raw into θ_train / θ_temp, then θ_val / θ_test
-        X_train_df, X_temp_df, y_train, y_temp = train_test_split(
-            X_df_raw, y_raw, test_size=(val_frac + test_frac),
+        X_train_df, X_temp_df, y_train, y_temp, A_train_df, A_temp_df = train_test_split(
+            X_df_raw, y_raw, A_df_raw, test_size=(val_frac + test_frac),
             random_state=self.seed, stratify=y_raw
         )
         rel_test = test_frac / (val_frac + test_frac)
-        X_val_df, X_test_df, y_val, y_test = train_test_split(
-            X_temp_df, y_temp, test_size=rel_test,
+        X_val_df, X_test_df, y_val, y_test, A_val_df, A_test_df = train_test_split(
+            X_temp_df, y_temp, A_temp_df, test_size=rel_test,
             random_state=self.seed, stratify=y_temp
         )
 
+        # Helper: map protected attribute to 0/1
+        def _map_protected_census(a_series):
+            return (a_series.str.strip().str.lower() == "male").astype(np.int64).to_numpy()
+
         # Helper: apply the SAME bias inside a split (keep all majority; keep fraction of minority)
-        def apply_bias(df_split, y_split, target_minority_pct):
+        def apply_bias(df_split, y_split, a_split_df, target_minority_pct):
             df = df_split.copy()
             df["__y__"] = y_split
+            df["__a__"] = a_split_df[dp_protected_col].to_numpy()
             df_major = df[df["__y__"] == 0]
             df_minor = df[df["__y__"] == 1]
 
@@ -199,19 +209,25 @@ class Dataset:
                 )
 
             y_out = df_biased["__y__"].to_numpy(dtype=int)
-            X_out = df_biased.drop(columns=["__y__"])
-            return X_out, y_out
+            a_out = _map_protected_census(df_biased["__a__"])
+            X_out = df_biased.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
 
-        # 4) Apply same bias in each split
+        # 4) Apply bias: always train, conditionally val, never test
         target_minority_pct = bias_pct
-        X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, target_minority_pct)
-        X_val_biased_df,   y_val_biased   = apply_bias(X_val_df,   y_val,   target_minority_pct)
-        X_test_biased_df,  y_test_biased  = apply_bias(X_test_df,  y_test,  target_minority_pct)
+        X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, target_minority_pct)
+        if bias_val:
+            X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, target_minority_pct)
+        else:
+            X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
+            a_val = _map_protected_census(A_val_df[dp_protected_col])
+        X_test_biased_df, y_test_biased = X_test_df.copy().reset_index(drop=True), y_test.copy()
+        a_test = _map_protected_census(A_test_df[dp_protected_col])
 
         # Optional: subsample θ_train to fixed size after biasing
         if train_size is not None and train_size < len(X_train_biased_df):
-            X_train_biased_df, _, y_train_biased, _ = train_test_split(
-                X_train_biased_df, y_train_biased,
+            X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
+                X_train_biased_df, y_train_biased, a_train,
                 train_size=train_size, random_state=self.seed, stratify=y_train_biased
             )
 
@@ -250,6 +266,12 @@ class Dataset:
         y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=self.device)
         y_val_theta   = torch.tensor(y_val_biased,   dtype=torch.long, device=self.device)
         y_test_theta  = torch.tensor(y_test_biased,  dtype=torch.long, device=self.device)
+
+        # Store protected attributes for fairness metrics
+        self.a_train = torch.tensor(a_train, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_val,   dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
 
         # ---- Sanity check logging ----
         def log_distribution(name, y_split):
@@ -309,6 +331,7 @@ class Dataset:
         drop_magnetometers=True,
         use_vector_norms=True,
         stats=("std", "rms"),
+        bias_val: bool = True,
     ):
         """
         PAMAP2
@@ -501,17 +524,33 @@ class Dataset:
         # Deterministic seeds 
         seed_local = int(self.seed)
 
-        # Bias train/val/test
+        # Bias: always train, conditionally val, never test
         X_train_biased_df, y_train_biased = apply_bias_rope(X_train_df, y_train, target_minority_pct, seed_local)
-        X_val_biased_df,   y_val_biased   = apply_bias_rope(X_val_df,   y_val,   target_minority_pct, seed_local)
-        X_test_biased_df,  y_test_biased  = apply_bias_rope(X_test_df,  y_test,  target_minority_pct, seed_local)
+        if bias_val:
+            X_val_biased_df, y_val_biased = apply_bias_rope(X_val_df, y_val, target_minority_pct, seed_local)
+        else:
+            X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
+        X_test_biased_df, y_test_biased = X_test_df.copy().reset_index(drop=True), y_test.copy()
 
+
+        # Map subject_id → sex (0=female, 1=male) using PAMAP2 demographics
+        # Only subject 102 is female; all others (101, 103-109) are male
+        FEMALE_SUBJECTS = {"102"}
+        def _subject_to_sex(df_split):
+            return np.where(
+                df_split["subject_id"].isin(FEMALE_SUBJECTS), 0, 1
+            ).astype(np.int64)
+
+        a_train = _subject_to_sex(X_train_biased_df)
+        a_val   = _subject_to_sex(X_val_biased_df)
+        a_test  = _subject_to_sex(X_test_biased_df)
 
         #subsample TRAIN after biasing (deterministic)
         if train_size is not None and train_size < len(X_train_biased_df):
-            X_train_biased_df, _, y_train_biased, _ = train_test_split(
+            X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
                 X_train_biased_df,
                 y_train_biased,
+                a_train,
                 train_size=train_size,
                 random_state=seed_local,
                 stratify=y_train_biased,
@@ -542,6 +581,12 @@ class Dataset:
         y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=device)
         y_val_theta   = torch.tensor(y_val_biased, dtype=torch.long, device=device)
         y_test_theta  = torch.tensor(y_test_biased, dtype=torch.long, device=device)
+
+        # Store protected attributes for fairness metrics
+        self.a_train = torch.tensor(a_train, dtype=torch.long, device=device)
+        self.a_val   = torch.tensor(a_val,   dtype=torch.long, device=device)
+        self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=device)
+        self.dp_protected_col = "sex"
 
         # Cache GAN view for CTGAN/CTAB baselines
         try:
@@ -592,7 +637,8 @@ class Dataset:
         protected_cols = ["SEX", "AGE"],
         return_test_df: bool = False,
         return_raw: bool = False,
-        
+        bias_val: bool = True,
+
         # --- NEW: which protected attr to use for DP reward ---
         dp_protected_col: str = "SEX",
         # UCI credit card: SEX is often coded as 1/2. We map to 0/1 via (== sex_positive_value).
@@ -743,10 +789,25 @@ class Dataset:
             X_out = out.drop(columns=["__y__", "__a__"])
             return X_out, y_out, a_out
 
+        def _map_protected(a_raw):
+            """Map raw protected attribute values to 0/1."""
+            if dp_protected_col == "SEX":
+                return (a_raw.astype(int) == int(sex_positive_value)).astype(np.int64)
+            else:
+                med = np.median(a_raw.astype(float))
+                return (a_raw.astype(float) >= med).astype(np.int64)
+
         target_minority_pct = float(bias_pct)
         X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, target_minority_pct)
-        X_val_biased_df,   y_val_biased,   a_val   = apply_bias(X_val_df,   y_val,   A_val_df,   target_minority_pct)
-        X_test_biased_df,  y_test_biased,  a_test  = apply_bias(X_test_df,  y_test,  A_test_df,  target_minority_pct)
+        if bias_val:
+            X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, target_minority_pct)
+        else:
+            X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+            y_val_biased = y_val.copy()
+            a_val = _map_protected(A_val_df[dp_protected_col].to_numpy())
+        X_test_biased_df = X_test_df.copy().reset_index(drop=True)
+        y_test_biased = y_test.copy()
+        a_test = _map_protected(A_test_df[dp_protected_col].to_numpy())
 
 
         # Optional subsample biased train

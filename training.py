@@ -70,6 +70,10 @@ class Training:
         curriculum=None,   
         benchmarks=None,   
 
+        #feature space
+        use_pca=True,
+        bias_val=True,
+
         #misc
         seed=42,
         device='cpu',
@@ -92,6 +96,9 @@ class Training:
         self.multiclass = multiclass
         self.dataset_name = dataset_name
 
+        self.use_pca = use_pca
+        self.bias_val = bias_val
+
         self.minority_id = minority_id
         self.majority_id = majority_id
         self.third_id = third_id
@@ -100,8 +107,9 @@ class Training:
         self.real_data_size = real_data_size
         self.episodes = total_episodes
 
+        # state_dim and agent configs are finalized in __call__ after data loading
+        # (feature_dim may differ from pca_components when use_pca=False)
         if self.curriculum_learning:
-            # frac_done + pca + editable_mask
             self.state_dim = 1 + 2 * self.pca_components
         else:
             self.state_dim = 2
@@ -131,6 +139,7 @@ class Training:
             pca_components=self.pca_components,
             seed=self.seed,
             device=self.device,
+            use_pca=self.use_pca,
         )
 
         # Curriculum schedule config
@@ -199,10 +208,11 @@ class Training:
         reinforce_config["total_episodes"] = self.episodes
         reinforce_config["seed"] = self.seed
         reinforce_config["device"] = self.device
+        self.reinforce_config = reinforce_config
 
         self.dl_generator = torch.Generator(device="cpu").manual_seed(self.seed)
 
-        # agents
+        # agents (will be rebuilt in __call__ after feature_dim is known)
         self.agent = ReinforceAgent(**reinforce_config)
         self.alpha_model = FFNNAgent(**self.ffnn_config)
         self.beta_model = FFNNAgent(**self.ffnn_config)
@@ -534,16 +544,36 @@ class Training:
         ) as tracker:
             self.tracker = tracker
 
-            #Data splits 
+            #Data splits
             x_theta_train, x_theta_val, x_theta_test, y_theta_train, y_theta_val, y_theta_test = (
                 self.dataset.get_data_splits(
                     train_size=self.real_data_size,
                     bias_pct=self.bias_pct,
                     pca_components=self.pca_components,
                     drop_protected=False,
-                    protected_cols=self.dataset.protected_attributes
+                    protected_cols=self.dataset.protected_attributes,
+                    bias_val=self.bias_val,
                 )
             )
+
+            # Resolve actual feature dimension (may differ from pca_components when use_pca=False)
+            feature_dim = x_theta_train.shape[1]
+            self.pca_components = feature_dim
+
+            if self.curriculum_learning:
+                self.state_dim = 1 + 2 * feature_dim
+            else:
+                self.state_dim = 2
+
+            # Update configs and rebuild agents with correct dimensions
+            self.ffnn_config["input_size"] = feature_dim
+            self.reinforce_config["state_size"] = self.state_dim
+            self.reinforce_config["action_size"] = feature_dim
+
+            self.agent = ReinforceAgent(**self.reinforce_config)
+            self.alpha_model = FFNNAgent(**self.ffnn_config)
+            self.beta_model = FFNNAgent(**self.ffnn_config)
+
             minority_mask = (y_theta_train == 1)
             real_minority_samples = x_theta_train[minority_mask]
 
