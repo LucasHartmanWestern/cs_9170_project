@@ -47,6 +47,100 @@ class TestSuite:
         Works for both 0/1 and 0/1/2 inputs.
         """
         return (y == 1).to(dtype=torch.long, device=y.device)
+    # --- ADD THESE HELPERS INSIDE TestSuite (near your other metric helpers) ---
+
+    def _safe_rate(self, num: torch.Tensor, den: torch.Tensor) -> float:
+        """Return num/den as float, NaN if den==0."""
+        den_v = float(den.item()) if torch.is_tensor(den) else float(den)
+        if den_v <= 0:
+            return float("nan")
+        return float((num.float() / den.float()).item())
+
+    def _fairness_from_probs(self, y_true: torch.Tensor, p1: torch.Tensor, a: torch.Tensor, threshold: float = 0.5):
+        """
+        Fairness metrics on rope-vs-rest (binary):
+        - DP diff: |P(ŷ=1|a=0) - P(ŷ=1|a=1)|
+        - EO (Equal Opportunity) TPR diff: |TPR(a=0) - TPR(a=1)|
+        - EOd (Equalized Odds) max diff: max(|TPR diff|, |FPR diff|)
+        Also returns groupwise rates for debugging.
+
+        Notes:
+        - Assumes binary protected attribute a in {0,1}. Anything else -> coerced to {0,1} by (a!=0).
+        - If a group has no samples / no positives / no negatives -> corresponding rate is NaN.
+        """
+        device = p1.device
+        y_bin = self._to_binary_rope_vs_rest(y_true).to(device=device).long()
+        y_hat = (p1 >= float(threshold)).to(device=device).long()
+
+        a = torch.as_tensor(a, device=device).long()
+        # coerce to {0,1} robustly
+        a01 = (a != 0).long()
+
+        out = {}
+
+        def mask_g(g: int):
+            return (a01 == int(g))
+
+        # --- DP: P(y_hat=1 | a=g) ---
+        dp_rates = {}
+        for g in (0, 1):
+            m = mask_g(g)
+            den = m.sum()
+            num = ((y_hat == 1) & m).sum()
+            dp_rates[g] = self._safe_rate(num, den)
+
+        # --- TPR/FPR per group ---
+        tpr = {}
+        fpr = {}
+        for g in (0, 1):
+            m = mask_g(g)
+
+            pos = m & (y_bin == 1)
+            neg = m & (y_bin == 0)
+
+            tp = ((y_hat == 1) & pos).sum()
+            fn = ((y_hat == 0) & pos).sum()
+            fp = ((y_hat == 1) & neg).sum()
+            tn = ((y_hat == 0) & neg).sum()
+
+            tpr[g] = self._safe_rate(tp, tp + fn)
+            fpr[g] = self._safe_rate(fp, fp + tn)
+
+        # diffs (absolute)
+        def abs_diff(x, y):
+            if np.isnan(x) or np.isnan(y):
+                return float("nan")
+            return float(abs(x - y))
+
+        dp_diff = abs_diff(dp_rates[0], dp_rates[1])
+        tpr_diff = abs_diff(tpr[0], tpr[1])
+        fpr_diff = abs_diff(fpr[0], fpr[1])
+
+        eod_max = float("nan")
+        if not np.isnan(tpr_diff) and not np.isnan(fpr_diff):
+            eod_max = float(max(tpr_diff, fpr_diff))
+
+        # pack
+        out["dp_rate_g0"] = dp_rates[0]
+        out["dp_rate_g1"] = dp_rates[1]
+        out["dp_diff"] = dp_diff
+
+        out["tpr_g0"] = tpr[0]
+        out["tpr_g1"] = tpr[1]
+        out["eo_tpr_diff"] = tpr_diff
+
+        out["fpr_g0"] = fpr[0]
+        out["fpr_g1"] = fpr[1]
+        out["eod_fpr_diff"] = fpr_diff
+        out["eod_max_diff"] = eod_max
+
+        # (optional) also provide "avg" equalized-odds gap
+        if not np.isnan(tpr_diff) and not np.isnan(fpr_diff):
+            out["eod_avg_diff"] = float(0.5 * (tpr_diff + fpr_diff))
+        else:
+            out["eod_avg_diff"] = float("nan")
+
+        return out
 
 
     def _p1_from_agent(self, agent, x):
@@ -862,7 +956,8 @@ class TestSuite:
         train_size: int | None = None,
         batch_size: int = 64,
         pca_components: int | None = None,
-        seed: int | None = None
+        seed: int | None = None,
+        a_test: torch.Tensor | None = None,   # <--- NEW
     ):
         """
         End-of-run θ_test evaluation.
@@ -894,7 +989,26 @@ class TestSuite:
                 b_brier = self._brier_mean(y_test, p1_beta)
             else:
                 b_f1_min = b_f1_maj = b_f1_w = b_f1_macro = b_brier = float('nan')
-
+        # --- NEW: fairness metrics (DP / EO / EOd) for alpha and beta ---
+        if a_test is None:
+            print("[TestSuite] a_test (protected attribute) not provided; fairness metrics will be NaN in final_test_metrics.csv")
+            alpha_fair = {
+                "dp_diff": float("nan"),
+                "eo_tpr_diff": float("nan"),
+                "eod_max_diff": float("nan"),
+                "eod_avg_diff": float("nan"),
+                "dp_rate_g0": float("nan"), "dp_rate_g1": float("nan"),
+                "tpr_g0": float("nan"), "tpr_g1": float("nan"),
+                "fpr_g0": float("nan"), "fpr_g1": float("nan"),
+                "eod_fpr_diff": float("nan"),
+            }
+            beta_fair = dict(alpha_fair)
+        else:
+            alpha_fair = self._fairness_from_probs(y_test, p1_alpha, a_test, threshold=f1_thresh)
+            if p1_beta is not None:
+                beta_fair = self._fairness_from_probs(y_test, p1_beta, a_test, threshold=f1_thresh)
+            else:
+                beta_fair = {k: float("nan") for k in alpha_fair.keys()}
         # ----- built-in β baselines -----
         # jitter_metrics = self.run_jitter_baseline(
         #     x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test,
@@ -998,7 +1112,30 @@ class TestSuite:
             "beta_f1_weighted": b_f1_w,
             "beta_f1_macro": b_f1_macro,
             "beta_brier": b_brier,
-        }
+            # --- NEW fairness (alpha) ---
+            "alpha_dp_diff": alpha_fair["dp_diff"],
+            "alpha_eo_tpr_diff": alpha_fair["eo_tpr_diff"],
+            "alpha_eod_max_diff": alpha_fair["eod_max_diff"],
+            "alpha_eod_avg_diff": alpha_fair["eod_avg_diff"],
+            "alpha_dp_rate_g0": alpha_fair["dp_rate_g0"],
+            "alpha_dp_rate_g1": alpha_fair["dp_rate_g1"],
+            "alpha_tpr_g0": alpha_fair["tpr_g0"],
+            "alpha_tpr_g1": alpha_fair["tpr_g1"],
+            "alpha_fpr_g0": alpha_fair["fpr_g0"],
+            "alpha_fpr_g1": alpha_fair["fpr_g1"],
+
+            # --- NEW fairness (beta) ---
+            "beta_dp_diff": beta_fair["dp_diff"],
+            "beta_eo_tpr_diff": beta_fair["eo_tpr_diff"],
+            "beta_eod_max_diff": beta_fair["eod_max_diff"],
+            "beta_eod_avg_diff": beta_fair["eod_avg_diff"],
+            "beta_dp_rate_g0": beta_fair["dp_rate_g0"],
+            "beta_dp_rate_g1": beta_fair["dp_rate_g1"],
+            "beta_tpr_g0": beta_fair["tpr_g0"],
+            "beta_tpr_g1": beta_fair["tpr_g1"],
+            "beta_fpr_g0": beta_fair["fpr_g0"],
+            "beta_fpr_g1": beta_fair["fpr_g1"],
+            }
 
         row = dict(base_row)
         for metrics_var in [

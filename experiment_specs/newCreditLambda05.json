@@ -12,7 +12,7 @@
     "pca_components": 10,
     "traj_length": 2000,
     "real_data_size": 3000,
-    "total_episodes": 10000,
+    "total_episodes": 6000,
   
     "curriculum_learning": true,
     "use_delta_actions": true,

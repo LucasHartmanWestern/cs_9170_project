@@ -162,14 +162,25 @@ class FFNNAgent:
                 # move to device
                 batch_features = batch_features.to(self.device)
                 batch_targets  = batch_targets .to(self.device)
-
                 # forward + loss
-                outputs = self.model(batch_features).squeeze(-1)
+                outputs = self.model(batch_features)
+                if self.type == "regression":
+                    outputs = outputs.squeeze(-1)
+                else:
+                    batch_targets = batch_targets.long()
                 loss = self.criterion(outputs, batch_targets)
+
+
 
                 # backward + step
                 self.optimizer.zero_grad()
+                if not torch.isfinite(loss):
+                    raise RuntimeError("FFNN loss became non-finite")
                 loss.backward()
+                for p in self.model.parameters():
+                    if p.grad is not None and not torch.isfinite(p.grad).all():
+                        raise RuntimeError("FFNN grads became non-finite")
+
                 self.optimizer.step()
 
                 epoch_loss += loss.item()

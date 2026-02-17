@@ -23,7 +23,7 @@ class Dataset:
             "protected_attributes": ["SEX", "AGE"]
         }
     }
-    def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu"):
+    def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False):
         self.dataset_name = dataset_name
         self.MINORITY_ID = minority_id
         self.MAJORITY_ID = majority_id
@@ -34,6 +34,7 @@ class Dataset:
         self.data_path = self.DATASET_REGISTRY[dataset_name]["data_path"]
         self.protected_attributes = self.DATASET_REGISTRY[self.dataset_name].get("protected_attributes", [])
         self.multiclass=multiclass
+        self.use_pca = bool(use_pca)
 
     from dataclasses import dataclass
 
@@ -47,6 +48,34 @@ class Dataset:
         pca: PCA
         cat_cols: list[str]
         num_cols: list[str]
+
+    def _to_theta(
+        self,
+        X_train_all: np.ndarray,
+        X_val_all: np.ndarray,
+        X_test_all: np.ndarray,
+        *,
+        pca_components: int,
+    ):
+        """
+        Map engineered features -> theta space.
+        If use_pca=False: identity mapping (raw engineered features).
+        If use_pca=True: PCA fitted on TRAIN only.
+
+        Returns:
+            X_train_theta, X_val_theta, X_test_theta, pca_or_none
+        """
+        if not getattr(self, "use_pca", False):
+            return X_train_all, X_val_all, X_test_all, None
+        d = X_train_all.shape[1]
+        k = min(int(pca_components), int(d))
+
+        pca = self._make_pca(k)
+        X_train_theta = pca.fit_transform(X_train_all)
+        X_val_theta   = pca.transform(X_val_all)
+        X_test_theta  = pca.transform(X_test_all)
+        
+        return X_train_theta, X_val_theta, X_test_theta, pca
 
     def _make_pca(self, n_components: int) -> PCA:
         return PCA(
@@ -206,16 +235,17 @@ class Dataset:
         X_test_num = scaler.transform(X_test_biased_df[num_cols])  if len(num_cols) else np.empty((len(X_test_biased_df), 0))
         X_test_all = np.hstack([X_test_num, X_test_cat])
 
-        # 6) Fit PCA on θ_train only; transform val/test
-        pca = self._make_pca(pca_components)
-        X_train_pca = pca.fit_transform(X_train_all)
-        X_val_pca   = pca.transform(X_val_all)
-        X_test_pca  = pca.transform(X_test_all)
+        # 6) Map to θ-space (PCA if enabled; otherwise identity)
+        X_train_theta_np, X_val_theta_np, X_test_theta_np, pca = self._to_theta(
+            X_train_all, X_val_all, X_test_all,
+            pca_components=pca_components
+        )
 
         # 7) Convert to torch tensors on device
-        X_train_theta = torch.tensor(X_train_pca, dtype=torch.float32, device=self.device)
-        X_val_theta   = torch.tensor(X_val_pca,   dtype=torch.float32, device=self.device)
-        X_test_theta  = torch.tensor(X_test_pca,  dtype=torch.float32, device=self.device)
+        X_train_theta = torch.tensor(X_train_theta_np, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_val_theta_np,   dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_test_theta_np,  dtype=torch.float32, device=self.device)
+
 
         y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=self.device)
         y_val_theta   = torch.tensor(y_val_biased,   dtype=torch.long, device=self.device)
@@ -240,7 +270,9 @@ class Dataset:
                 "y_train_unbiased": y_train.astype(int).copy(),
                 "encoder": encoder,
                 "scaler": scaler,
-                "pca": pca,
+                "pca": pca,                  # None if use_pca=False
+                "use_pca": self.use_pca,
+                "pca_components": int(pca_components),
                 "cat_cols": list(cat_cols),
                 "num_cols": list(num_cols),
                 "drop_protected": bool(drop_protected),
@@ -491,23 +523,21 @@ class Dataset:
 
         scaler = StandardScaler()
         Xtr_z = scaler.fit_transform(X_train_biased_df[feature_cols].values)
+        Xval_z = scaler.transform(X_val_biased_df[feature_cols].values)
+        Xtest_z = scaler.transform(X_test_biased_df[feature_cols].values)
 
-        # Deterministic PCA config
-        pca = PCA(n_components=pca_components, svd_solver="full", random_state=seed_local)
-        Xtr_p = pca.fit_transform(Xtr_z)
-
-        def transform(df_split):
-            Xz = scaler.transform(df_split[feature_cols].values)
-            return pca.transform(Xz)
-
-        Xval_p = transform(X_val_biased_df)
-        Xtest_p = transform(X_test_biased_df)
+        # Map to θ-space (PCA if enabled; otherwise identity)
+        X_train_theta_np, X_val_theta_np, X_test_theta_np, pca = self._to_theta(
+            Xtr_z, Xval_z, Xtest_z,
+            pca_components=pca_components
+        )
 
         # -------- tensors on device --------
         device = self.device
-        X_train_theta = torch.tensor(Xtr_p, dtype=torch.float32, device=device)
-        X_val_theta   = torch.tensor(Xval_p, dtype=torch.float32, device=device)
-        X_test_theta  = torch.tensor(Xtest_p, dtype=torch.float32, device=device)
+        X_train_theta = torch.tensor(X_train_theta_np, dtype=torch.float32, device=device)
+        X_val_theta   = torch.tensor(X_val_theta_np,   dtype=torch.float32, device=device)
+        X_test_theta  = torch.tensor(X_test_theta_np,  dtype=torch.float32, device=device)
+
 
         y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=device)
         y_val_theta   = torch.tensor(y_val_biased, dtype=torch.long, device=device)
@@ -543,7 +573,11 @@ class Dataset:
         log_counts("TRAIN", y_train_biased)
         log_counts("VAL",   y_val_biased)
         log_counts("TEST",  y_test_biased)
-        print(f"PCA comps: {Xtr_p.shape[1]} | Features in: {len(feature_cols)} | Classes: {sorted(np.unique(y_train_biased))}")
+        print(
+            f"use_pca={self.use_pca} | theta_dim={X_train_theta.shape[1]} | "
+            f"features_in={len(feature_cols)} | classes={sorted(np.unique(y_train_biased))}"
+        )
+
 
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
@@ -748,19 +782,20 @@ class Dataset:
         Xte_all = np.hstack([Xte_num, Xte_cat])
 
         # -----------------------------
-        # 6) PCA on train only
+        # 6) Map to θ-space (PCA if enabled; otherwise identity)
         # -----------------------------
-        pca = self._make_pca(pca_components)
-        Xtr_pca = pca.fit_transform(Xtr_all)
-        Xva_pca = pca.transform(Xva_all)
-        Xte_pca = pca.transform(Xte_all)
+        X_train_theta_np, X_val_theta_np, X_test_theta_np, pca = self._to_theta(
+            Xtr_all, Xva_all, Xte_all,
+            pca_components=pca_components
+        )
 
         # -----------------------------
         # 7) Torch tensors
         # -----------------------------
-        X_train_theta = torch.tensor(Xtr_pca, dtype=torch.float32, device=self.device)
-        X_val_theta   = torch.tensor(Xva_pca, dtype=torch.float32, device=self.device)
-        X_test_theta  = torch.tensor(Xte_pca, dtype=torch.float32, device=self.device)
+        X_train_theta = torch.tensor(X_train_theta_np, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_val_theta_np,   dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_test_theta_np,  dtype=torch.float32, device=self.device)
+
 
         y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=self.device)
         y_val_theta   = torch.tensor(y_val_biased, dtype=torch.long, device=self.device)
@@ -789,7 +824,9 @@ class Dataset:
                 "y_train_unbiased": y_train.astype(int).copy(),
                 "encoder": encoder,
                 "scaler": scaler,
-                "pca": pca,
+                "pca": pca,                  # None if use_pca=False
+                "use_pca": self.use_pca,
+                "pca_components": int(pca_components),
                 "cat_cols": list(cat_cols),
                 "num_cols": list(num_cols),
                 "drop_protected": bool(drop_protected),
@@ -895,19 +932,22 @@ class Dataset:
             except TypeError:
                 encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
             scaler = StandardScaler()
-            pca = self._make_pca(pca_components)
-
             Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_biased_df),0))
             Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])   if len(num_cols) else np.empty((len(X_train_biased_df),0))
             Xtr_all = np.hstack([Xtr_num, Xtr_cat])
-            _ = pca.fit_transform(Xtr_all)  # fit only
 
             Xpool_cat = encoder.transform(X_train_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_df),0))
             Xpool_num = scaler.transform(X_train_df[num_cols])  if len(num_cols) else np.empty((len(X_train_df),0))
             Xpool_all = np.hstack([Xpool_num, Xpool_cat])
-            Xpool_pca = pca.transform(Xpool_all)
 
-            X_pool_theta = torch.tensor(Xpool_pca, dtype=torch.float32, device=device)
+            # Fit/identity on biased train, then transform pool consistently
+            _, _, Xpool_theta_np, pca = self._to_theta(
+                Xtr_all, Xtr_all, Xpool_all,
+                pca_components=pca_components
+            )
+
+            X_pool_theta = torch.tensor(Xpool_theta_np, dtype=torch.float32, device=device)
+
             y_pool_theta = torch.tensor(y_train,   dtype=torch.long,   device=device)
             return X_pool_theta, y_pool_theta
 
@@ -1063,13 +1103,22 @@ class Dataset:
             feature_cols = [c for c in X_train_biased_df.columns if c != "subject_id"]
             scaler = StandardScaler()
             Xtr_z  = scaler.fit_transform(X_train_biased_df[feature_cols].values)
-            pca    = PCA(n_components=pca_components, svd_solver="full", random_state=self.seed)
-            _      = pca.fit_transform(Xtr_z)  # fit only
 
-            Xpool_z  = scaler.transform(X_train_unbiased_df[feature_cols].values)
-            Xpool_p  = pca.transform(Xpool_z)
+            # Fit scaler on TRAIN-biased
+            scaler = StandardScaler()
+            Xtr_z = scaler.fit_transform(X_train_biased_df[feature_cols].values)
 
-            X_pool_theta = torch.tensor(Xpool_p, dtype=torch.float32, device=device)
+            # Transform pool
+            Xpool_z = scaler.transform(X_train_unbiased_df[feature_cols].values)
+
+            # Use shared theta mapping (PCA or identity)
+            _, _, Xpool_theta_np, pca = self._to_theta(
+                Xtr_z, Xtr_z, Xpool_z,
+                pca_components=pca_components
+            )
+
+            X_pool_theta = torch.tensor(Xpool_theta_np, dtype=torch.float32, device=device)
+
             y_pool_theta = torch.tensor(y_train_unbiased, dtype=torch.long, device=device)
             return X_pool_theta, y_pool_theta
 
@@ -1169,20 +1218,22 @@ class Dataset:
                 encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
 
             scaler = StandardScaler()
-            pca = self._make_pca(pca_components)
-
-            Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_biased_df), 0))
-            Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])  if len(num_cols) else np.empty((len(X_train_biased_df), 0))
+            Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_biased_df),0))
+            Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])   if len(num_cols) else np.empty((len(X_train_biased_df),0))
             Xtr_all = np.hstack([Xtr_num, Xtr_cat])
-            _ = pca.fit_transform(Xtr_all)  # fit only
 
-            # Transform UNBIASED TRAIN pool
-            Xpool_cat = encoder.transform(X_train_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_df), 0))
-            Xpool_num = scaler.transform(X_train_df[num_cols])  if len(num_cols) else np.empty((len(X_train_df), 0))
+            Xpool_cat = encoder.transform(X_train_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_df),0))
+            Xpool_num = scaler.transform(X_train_df[num_cols])  if len(num_cols) else np.empty((len(X_train_df),0))
             Xpool_all = np.hstack([Xpool_num, Xpool_cat])
-            Xpool_pca = pca.transform(Xpool_all)
 
-            X_pool_theta = torch.tensor(Xpool_pca, dtype=torch.float32, device=device)
+            # Fit/identity on biased train, then transform pool consistently
+            _, _, Xpool_theta_np, pca = self._to_theta(
+                Xtr_all, Xtr_all, Xpool_all,
+                pca_components=pca_components
+            )
+
+            X_pool_theta = torch.tensor(Xpool_theta_np, dtype=torch.float32, device=device)
+
             y_pool_theta = torch.tensor(y_train.astype(int), dtype=torch.long, device=device)
             return X_pool_theta, y_pool_theta
 

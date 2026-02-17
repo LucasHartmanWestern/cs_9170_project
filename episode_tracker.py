@@ -10,6 +10,21 @@ import hashlib
 from copy import deepcopy
 from datetime import datetime
 
+
+
+class _TeeLogger:
+    def __init__(self, *streams):
+        self.streams = streams
+    def write(self, data: str):
+        for s in self.streams:
+            s.write(data)
+            if data.endswith("\n"):
+                s.flush()
+    def flush(self):
+        for s in self.streams:
+            s.flush()
+
+
 def _slug(s: str) -> str:
     import re
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", s).strip("-")
@@ -73,22 +88,26 @@ def _fingerprint_run_stats(
     return experiment_id, rs
 
 
-class _TeeLogger:
-    def __init__(self, *streams):
-        self.streams = streams
-    def write(self, data: str):
-        for s in self.streams:
-            s.write(data)
-            if data.endswith("\n"):
-                s.flush()
-    def flush(self):
-        for s in self.streams:
-            s.flush()
-
 def _flatten_with_prefix(prefix: str, d: dict):
     # Return dict with "prefix.key" -> value. Safe on None.
     d = d or {}
     return {f"{prefix}.{k}": v for k, v in d.items()}
+
+def _flatten_nested(d: dict, *, sep: str = ".", prefix: str = "") -> dict:
+    """
+    Recursively flatten nested dicts:
+      {"global":{"a":1}, "x":2} -> {"global.a":1, "x":2}
+    Lists/tuples are kept as-is (stringified later by pandas if needed).
+    """
+    out = {}
+    d = d or {}
+    for k, v in d.items():
+        kk = f"{prefix}{sep}{k}" if prefix else str(k)
+        if isinstance(v, dict):
+            out.update(_flatten_nested(v, sep=sep, prefix=kk))
+        else:
+            out[kk] = v
+    return out
 
 class EpisodeTracker:
     def __init__(self, run_stats: dict, dataset, save_dir: str = "runs",
@@ -203,28 +222,32 @@ class EpisodeTracker:
         if self._header_written:
             return
 
-        # stable order: episode, wall_seconds, grouped by prefix
         keys = list(flat_row.keys())
+
         def sort_key(k):
-            if   k.startswith("reward."): g = 0
-            elif k.startswith("ema."):    g = 1
-            elif k.startswith("newr."):   g = 2
-            elif k.startswith("align."):  g = 3
-            else:                         g = 9
+            # new canonical groups from diagnostics
+            if   k.startswith("global."):   g = 0
+            elif k.startswith("utility."):  g = 1
+            elif k.startswith("fairness."): g = 2
+            elif k.startswith("local."):    g = 3
+            elif k.startswith("extra."):    g = 4
+            elif k.startswith("align."):    g = 5
+            elif k.startswith("meta."):     g = 6
+            else:                           g = 9
             return (g, k)
+
         keys_sorted = sorted(keys, key=sort_key)
 
         self._csv_columns = ["episode", "wall_seconds"] + keys_sorted
 
-        # write header with a fresh open; no persistent handle
         self.seed_dir.mkdir(parents=True, exist_ok=True)
         with open(self.csv_path, "w", encoding="utf-8", newline="") as fh:
             fh.write(",".join(self._csv_columns) + "\n")
 
         self._header_written = True
 
-        # save chosen header for reference
         with open(self.seed_dir / "metrics_header.json", "w", encoding="utf-8") as f:
+            import json
             json.dump({"columns": self._csv_columns}, f, indent=2)
 
         print(f"[Tracker] CSV header written with {len(self._csv_columns)} columns.")
@@ -241,99 +264,107 @@ class EpisodeTracker:
             row[k] = v
         return row
 
-    def log_episode(self, episode_num, reward_metrics, new_reward_metrics, alignment_metrics):
+    # --- inside EpisodeTracker class, replace log_episode with this version ---
+    def log_episode(self, episode_num: int, diagnostics: dict, alignment_metrics: dict | None = None, extra_metrics: dict | None = None):
         """
-        All metric dicts are flattened into:
-        reward.*, ema.*, newr.*, align.* columns.
-        Header is decided on the first call from the keys present.
+        Accepts the diagnostics dict returned by compute_reward() directly.
+
+        - diagnostics: expected nested dict with groups like global/utility/fairness/local/extra
+        - alignment_metrics: optional dict (will be stored under align.*)
+        - extra_metrics: optional dict for anything else you want (stored under meta.*)
         """
+        alignment_metrics = alignment_metrics or {}
+        extra_metrics = extra_metrics or {}
+
         flat = {}
-        flat.update(_flatten_with_prefix("reward", reward_metrics))
-        flat.update(_flatten_with_prefix("newr", new_reward_metrics))
-        flat.update(_flatten_with_prefix("align", alignment_metrics))
+        flat.update(_flatten_nested(diagnostics))                       # global.*, utility.*, fairness.*, local.*, extra.*
+        flat.update(_flatten_with_prefix("align", alignment_metrics))   # align.*
+        flat.update(_flatten_with_prefix("meta", extra_metrics))        # meta.* (optional)
 
         # first-use header
         self._ensure_header(flat)
 
         # write row
         csv_row = self._row_for_csv(episode_num, flat)
-        self.episode_rewards.append(float(csv_row.get("reward.avg_reward", np.nan)))
 
-        # console one-liner
-        avg_r   = csv_row.get("reward.avg_reward", np.nan)
-        obj1 = csv_row.get("reward.obj1_global", np.nan)
-        if np.isnan(obj1):
-            obj1 = csv_row.get("reward.obj1_f1_minority_beta", np.nan)
-        obj2    = csv_row.get("reward.obj2_local_useful_mean", np.nan)
-        macro_f = csv_row.get("reward.macro_f1_beta", np.nan)
-        print(f"[Tracker] Ep {episode_num:4d} | AvgR {avg_r:.4f} | Global {obj1:.4f} | Local_Avg {obj2:.4f} | F1_macro {macro_f:.4f}")
+        # cache avg reward if present
+        # (your compute_reward diagnostics doesn't include avg_reward; caller can pass via extra_metrics if desired)
+        # so we store the compare metric value later from flat row anyway.
+        self.episode_rewards.append(float(csv_row.get("meta.avg_reward", np.nan)))
 
-        # append using the file PATH (not a handle)
+        # console one-liner (updated to lean keys)
+        avg_r   = csv_row.get("meta.avg_reward", np.nan)
+        g_obj   = csv_row.get("global.global_obj", np.nan)
+        l_mean  = csv_row.get("global.local_reward", np.nan)
+        f1m     = csv_row.get("utility.f1_macro_beta", np.nan)
+        worst   = csv_row.get("fairness.worst_loss_beta", np.nan)
+
+        # print a reasonable line even if avg_reward wasn't provided
+        if np.isnan(avg_r):
+            print(f"[Tracker] Ep {episode_num:4d} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
+        else:
+            print(f"[Tracker] Ep {episode_num:4d} | AvgR {avg_r:.4f} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
+
         pd.DataFrame([csv_row]).to_csv(self.csv_path, mode="a", header=False, index=False)
 
-        # no flush needed since we don't hold a handle
         self._since_last_flush = 0
-
-        # stash last flat row for compare_metric & maybe_save_synthetic convenience
         self._last_flat_row = flat
 
 
+    # --- inside EpisodeTracker class, update legacy metric mapping to new keys (optional but recommended) ---
     def _metric_from_flat_row(self, flat_row: dict):
         """
-        Compare by any column name. Back-compat:
-        - if compare_metric matches a key in flat_row, use it
-        - else if legacy names are used, map them
+        Compare by any column name. Back-compat mapping updated for new diagnostics keys.
         """
         key = self.compare_metric
         if key in flat_row:
             v = flat_row[key]
         else:
-            # legacy fallbacks
             legacy = {
-                "average_reward": "reward.avg_reward",
-                "obj1": "reward.obj1_global",  # NEW preferred global objective
-                "obj1_global": "reward.obj1_global",
-                "obj1_f1_minority_beta": "reward.f1_minority_beta",  # if someone passes this
-                "obj2_mean": "reward.obj2_local_useful_mean",
-                "global_f1": "reward.macro_f1_beta",
-            }
+                # old
+                "average_reward": "meta.avg_reward",
+                "reward.avg_reward": "meta.avg_reward",
 
-            mapped = legacy.get(key, "reward.avg_reward")
+                # new preferred
+                "global_obj": "global.global_obj",
+                "local_reward": "global.local_reward",
+                "worst_loss_beta": "fairness.worst_loss_beta",
+                "macro_f1_beta": "utility.f1_macro_beta",
+                "f1_minority_beta": "utility.f1_minority_beta",
+
+                # some old names you used previously
+                "obj1": "global.global_obj",
+                "obj2_mean": "global.local_reward",
+                "global_f1": "utility.f1_macro_beta",
+            }
+            mapped = legacy.get(key, "meta.avg_reward")
             v = flat_row.get(mapped, np.nan)
+
         try:
             return float(v)
         except Exception:
             return -float("inf")
 
-    def maybe_save_synthetic(self, episode_num, x_syn, y_syn,
-                             avg_reward=None, obj1=None, obj2_mean=None, global_f1=None,
-                             feature_names=None, beta_model=None):
+    # --- inside EpisodeTracker class, update maybe_save_synthetic to not require obj1/obj2/etc ---
+    def maybe_save_synthetic(
+        self,
+        episode_num,
+        x_syn,
+        y_syn,
+        *,
+        feature_names=None,
+        beta_model=None,
+        metrics_flat_override: dict | None = None,
+    ):
         """
-        Save snapshot every ckpt_every episodes and update 'best' if metric improves.
-
-        Backward compatible:
-          - If avg_reward/obj1/obj2_mean/global_f1 are provided, we build a tiny flat-row
-            under reward.* keys.
-          - If not provided and log_episode has been called, we use the last flat row.
+        New behavior:
+        - Uses `metrics_flat_override` if provided (expects already-flat dict keys like "global.global_obj")
+        - Else uses self._last_flat_row from log_episode()
         """
-        # Decide if we need to save anything first (avoid conversions when not saving)
         save_snap = (episode_num % self.ckpt_every == 0)
 
-        # Build a metric row to evaluate compare_metric
-        if avg_reward is not None or obj1 is not None or obj2_mean is not None or global_f1 is not None:
-            flat_row = {
-                "reward.avg_reward": avg_reward,
-
-                # NEW canonical:
-                "reward.obj1_global": obj1,
-
-                # Back-compat:
-                "reward.obj1_f1_minority_beta": obj1,
-
-                "reward.obj2_local_useful_mean": obj2_mean,
-                "reward.macro_f1_beta": global_f1,
-            }
-
+        if metrics_flat_override is not None:
+            flat_row = dict(metrics_flat_override)
         else:
             flat_row = getattr(self, "_last_flat_row", {})
 
@@ -341,7 +372,7 @@ class EpisodeTracker:
         is_best = metric_val > self.best_metric
 
         if not (save_snap or is_best):
-            return  # nothing to do
+            return
 
         # Convert to numpy once
         if hasattr(x_syn, "detach"): x_syn = x_syn.detach().cpu().numpy()
@@ -349,7 +380,7 @@ class EpisodeTracker:
         x_syn = np.asarray(x_syn)
         y_syn = np.asarray(y_syn).reshape(-1)
 
-        # Periodic snapshot (NPZ always; CSV optionally)
+        # Periodic snapshot
         if save_snap:
             snap_npz = self.snap_dir / f"synthetic_ep{episode_num:04d}.npz"
             np.savez_compressed(snap_npz, x=x_syn, y=y_syn)
@@ -362,11 +393,11 @@ class EpisodeTracker:
                 df.to_csv(snap_csv, index=False)
             print(f"[Tracker] Saved snapshot: ep{episode_num:04d}")
 
-        # Best-so-far checkpoint (synthetic + optional model weights)
+        # Best-so-far
         if is_best:
+            import json, time, torch
             self.best_metric = metric_val
 
-            # Save best synthetic (NPZ + CSV + meta)
             np.savez_compressed(self.best_npz_path, x=x_syn, y=y_syn)
             if feature_names is None:
                 feature_names = [f"pca_{i}" for i in range(x_syn.shape[1])]
@@ -382,7 +413,6 @@ class EpisodeTracker:
                 }, f, indent=2)
             print(f"[Tracker] New BEST synthetic (by {self.compare_metric}: {metric_val:.6f}) saved.")
 
-            # Also save BEST beta model weights if provided
             if beta_model is not None:
                 torch.save(beta_model.model.state_dict(), self.best_beta_path)
                 with open(self.best_beta_meta, "w") as f:
@@ -448,7 +478,8 @@ class EpisodeTracker:
         # additional CTABGAN batch/seed/pca-related params
         batch_size: int = 64,
         pca_components: int | None = None,
-        seed: int | None = None
+        seed: int | None = None,
+        a_test: torch.Tensor | None = None,   # <--- NEW
     ):
         tests = TestSuite(
             seed_dir=self.seed_dir,
@@ -498,12 +529,9 @@ class EpisodeTracker:
             # pass through batch/pca/seed
             batch_size=batch_size,
             pca_components=pca_components,
-            seed=self.seed if seed is None else seed
+            seed=self.seed if seed is None else seed,
+            a_test=a_test
         )
-
-
-
-
 
     def save_alpha_state_dict(self, alpha_model, config=None, n_pca_components=None):
         """
