@@ -935,7 +935,10 @@ class Dataset:
         if self.dataset_name == "census_income":
             return self.split_census_income(**kwargs)
         elif self.dataset_name == "pamap2":
-            return self.split_pamap2(**kwargs)
+            # split_pamap2 doesn't accept drop_protected / protected_cols
+            pamap_kwargs = {k: v for k, v in kwargs.items()
+                           if k not in ("drop_protected", "protected_cols")}
+            return self.split_pamap2(**pamap_kwargs)
         elif self.dataset_name == "credit_card":
             return self.split_credit_card(**kwargs)
         else:
