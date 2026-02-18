@@ -74,7 +74,7 @@ def load_adult(path="census+income/adult.data"):
     return X, y
 
 def split_bias(
-    X_df_raw, y_raw, seed, val_frac=0.20, test_frac=0.20, bias_pct=0.20
+    X_df_raw, y_raw, seed, val_frac=0.20, test_frac=0.20, bias_pct=None
 ):
     assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
 
@@ -106,9 +106,14 @@ def split_bias(
         X_out = biased.drop(columns=["__y__"])
         return X_out, y_out
 
-    Xtr_b, ytr_b = apply_bias(X_train_df, y_train, bias_pct)
-    Xv_b,  yv_b  = apply_bias(X_val_df,   y_val,   bias_pct)
-    Xte_b, yte_b = apply_bias(X_test_df,  y_test,  bias_pct)
+    if bias_pct is not None:
+        Xtr_b, ytr_b = apply_bias(X_train_df, y_train, bias_pct)
+        Xv_b,  yv_b  = apply_bias(X_val_df,   y_val,   bias_pct)
+        Xte_b, yte_b = apply_bias(X_test_df,  y_test,  bias_pct)
+    else:
+        Xtr_b, ytr_b = X_train_df.copy(), y_train.copy()
+        Xv_b,  yv_b  = X_val_df.copy(),   y_val.copy()
+        Xte_b, yte_b = X_test_df.copy(),  y_test.copy()
 
     return (X_train_df, y_train), (Xtr_b, ytr_b), (Xv_b, yv_b), (Xte_b, yte_b)
 
@@ -203,7 +208,10 @@ def rebuild_transforms_and_pool(
         X_out = biased.drop(columns=["__y__"])
         return X_out, y_out
 
-    X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, bias_pct)
+    if bias_pct is not None:
+        X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, bias_pct)
+    else:
+        X_train_biased_df, y_train_biased = X_train_df.copy(), y_train.copy()
 
     # Optional cap on biased TRAIN before fitting transforms
     if train_size is not None and train_size < len(X_train_biased_df):
@@ -371,7 +379,7 @@ def sample_conditional_minority(
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_path", type=str, default="census+income/adult.data")
-    ap.add_argument("--bias_pct", type=float, default=0.35, help="Target minority share inside each split after biasing")
+    ap.add_argument("--bias_pct", type=float, default=None, help="Target minority share inside each split after biasing (None = no bias)")
     ap.add_argument("--val_frac", type=float, default=0.20)
     ap.add_argument("--test_frac", type=float, default=0.20)
     ap.add_argument("--train_size", type=int, default=None, help="Optional cap on BIASED θ_train size (stratified)")

@@ -70,7 +70,7 @@ def run_spec_all_seeds(spec_path: str, device: str):
             majority_id=spec.get("majority_id"),
             third_id=spec.get("third_id"),
 
-            bias_pct=spec["bias_pct"],
+            bias_pct=spec.get("bias_pct"),
             pca_components=spec["pca_components"],
             traj_length=spec["traj_length"],
             real_data_size=spec["real_data_size"],
@@ -92,6 +92,8 @@ def run_spec_all_seeds(spec_path: str, device: str):
             reinforce=spec.get("reinforce"),
             curriculum=spec.get("curriculum"),
             benchmarks=spec.get("benchmarks"),
+
+            gen_both_classes=spec.get("gen_both_classes", False),
         )
 
         trainer()

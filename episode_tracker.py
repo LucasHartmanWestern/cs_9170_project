@@ -201,6 +201,7 @@ class EpisodeTracker:
 
         # --- Per-seed synthetic checkpoint paths ---
         self.best_metric = -float("inf")
+        self._phase_best = {}  # per-phase best metric tracking
         self.snap_dir = self.seed_dir / "synthetic_snapshots"
         self.snap_dir.mkdir(exist_ok=True)
         self.best_meta_path = self.seed_dir / "best_synthetic.json"
@@ -355,11 +356,15 @@ class EpisodeTracker:
         feature_names=None,
         beta_model=None,
         metrics_flat_override: dict | None = None,
+        phase_label: str | None = None,
     ):
         """
-        New behavior:
-        - Uses `metrics_flat_override` if provided (expects already-flat dict keys like "global.global_obj")
-        - Else uses self._last_flat_row from log_episode()
+        Save synthetic data checkpoints.
+
+        When phase_label is set (e.g. "phase1_class1", "phase2_class0"):
+        - Uses phase-specific paths: best_synthetic_{phase_label}.npz, etc.
+        - Tracks per-phase best metric independently via self._phase_best[phase_label]
+        When phase_label is None: existing behavior (backward compatible).
         """
         save_snap = (episode_num % self.ckpt_every == 0)
 
@@ -369,7 +374,23 @@ class EpisodeTracker:
             flat_row = getattr(self, "_last_flat_row", {})
 
         metric_val = self._metric_from_flat_row(flat_row)
-        is_best = metric_val > self.best_metric
+
+        # Determine best-metric tracking and file paths based on phase_label
+        if phase_label is not None:
+            phase_best = self._phase_best.get(phase_label, -float("inf"))
+            is_best = metric_val > phase_best
+            npz_path = self.seed_dir / f"best_synthetic_{phase_label}.npz"
+            csv_path = self.seed_dir / f"best_synthetic_{phase_label}.csv"
+            meta_path = self.seed_dir / f"best_synthetic_{phase_label}.json"
+            beta_path = self.seed_dir / f"best_beta_state_dict_{phase_label}.pt"
+            beta_meta = self.seed_dir / f"best_beta_meta_{phase_label}.json"
+        else:
+            is_best = metric_val > self.best_metric
+            npz_path = self.best_npz_path
+            csv_path = self.best_csv_path
+            meta_path = self.best_meta_path
+            beta_path = self.best_beta_path
+            beta_meta = self.best_beta_meta
 
         if not (save_snap or is_best):
             return
@@ -382,48 +403,56 @@ class EpisodeTracker:
 
         # Periodic snapshot
         if save_snap:
-            snap_npz = self.snap_dir / f"synthetic_ep{episode_num:04d}.npz"
+            suffix = f"_{phase_label}" if phase_label else ""
+            snap_npz = self.snap_dir / f"synthetic_ep{episode_num:04d}{suffix}.npz"
             np.savez_compressed(snap_npz, x=x_syn, y=y_syn)
             if self.snapshot_csv:
                 if feature_names is None:
                     feature_names = [f"pca_{i}" for i in range(x_syn.shape[1])]
                 df = pd.DataFrame(x_syn, columns=feature_names)
                 df["target"] = y_syn
-                snap_csv = self.snap_dir / f"synthetic_ep{episode_num:04d}.csv"
+                snap_csv = self.snap_dir / f"synthetic_ep{episode_num:04d}{suffix}.csv"
                 df.to_csv(snap_csv, index=False)
-            print(f"[Tracker] Saved snapshot: ep{episode_num:04d}")
+            print(f"[Tracker] Saved snapshot: ep{episode_num:04d}{suffix}")
 
         # Best-so-far
         if is_best:
             import json, time, torch
-            self.best_metric = metric_val
 
-            np.savez_compressed(self.best_npz_path, x=x_syn, y=y_syn)
+            if phase_label is not None:
+                self._phase_best[phase_label] = metric_val
+            else:
+                self.best_metric = metric_val
+
+            np.savez_compressed(npz_path, x=x_syn, y=y_syn)
             if feature_names is None:
                 feature_names = [f"pca_{i}" for i in range(x_syn.shape[1])]
             df_best = pd.DataFrame(x_syn, columns=feature_names)
             df_best["target"] = y_syn
-            df_best.to_csv(self.best_csv_path, index=False)
-            with open(self.best_meta_path, "w") as f:
+            df_best.to_csv(csv_path, index=False)
+            with open(meta_path, "w") as f:
                 json.dump({
                     "episode": episode_num,
                     "metric": self.compare_metric,
                     "metric_value": metric_val,
+                    "phase_label": phase_label,
                     "updated_at": time.strftime("%Y-%m-%d_%H-%M-%S")
                 }, f, indent=2)
-            print(f"[Tracker] New BEST synthetic (by {self.compare_metric}: {metric_val:.6f}) saved.")
+            label_str = f" [{phase_label}]" if phase_label else ""
+            print(f"[Tracker] New BEST synthetic{label_str} (by {self.compare_metric}: {metric_val:.6f}) saved.")
 
             if beta_model is not None:
-                torch.save(beta_model.model.state_dict(), self.best_beta_path)
-                with open(self.best_beta_meta, "w") as f:
+                torch.save(beta_model.model.state_dict(), beta_path)
+                with open(beta_meta, "w") as f:
                     json.dump({
                         "episode": episode_num,
                         "metric": self.compare_metric,
                         "metric_value": metric_val,
+                        "phase_label": phase_label,
                         "updated_at": time.strftime("%Y-%m-%d_%H-%M-%S"),
-                        "checkpoint": str(self.best_beta_path.name)
+                        "checkpoint": str(beta_path.name)
                     }, f, indent=2)
-                print(f"[Tracker] BEST β weights saved -> {self.best_beta_path}")
+                print(f"[Tracker] BEST β weights{label_str} saved -> {beta_path}")
 
     def summary_path(self): return str(self.seed_dir)
 
@@ -471,7 +500,7 @@ class EpisodeTracker:
         ctab_runner: str | None = None,
         # dataset settings used to rebuild original pool
         data_path: str = "census+income/adult.data",
-        bias_pct: float = 0.20,
+        bias_pct = None,
         val_frac: float = 0.20,
         test_frac: float = 0.20,
         train_size: int | None = None,

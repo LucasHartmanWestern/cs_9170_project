@@ -111,7 +111,7 @@ class Dataset:
     def split_census_income(
             self,
             train_size=None,
-            bias_pct=0.2,
+            bias_pct=None,
             val_frac=0.20,
             test_frac=0.20,
             pca_components=2,
@@ -213,12 +213,18 @@ class Dataset:
             X_out = df_biased.drop(columns=["__y__", "__a__"])
             return X_out, y_out, a_out
 
-        # 4) Apply bias: always train, conditionally val, never test
-        target_minority_pct = bias_pct
-        X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, target_minority_pct)
-        if bias_val:
-            X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, target_minority_pct)
+        # 4) Apply bias: always train (if bias_pct set), conditionally val, never test
+        if bias_pct is not None:
+            target_minority_pct = bias_pct
+            X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, target_minority_pct)
+            if bias_val:
+                X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, target_minority_pct)
+            else:
+                X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
+                a_val = _map_protected_census(A_val_df[dp_protected_col])
         else:
+            X_train_biased_df, y_train_biased = X_train_df.copy().reset_index(drop=True), y_train.copy()
+            a_train = _map_protected_census(A_train_df[dp_protected_col])
             X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
             a_val = _map_protected_census(A_val_df[dp_protected_col])
         X_test_biased_df, y_test_biased = X_test_df.copy().reset_index(drop=True), y_test.copy()
@@ -322,7 +328,7 @@ class Dataset:
     def split_pamap2(
         self,
         train_size=None,
-        bias_pct=0.20,
+        bias_pct=None,
         val_frac=0.20,
         test_frac=0.20,
         pca_components=6,
@@ -519,16 +525,19 @@ class Dataset:
             X_out = out.drop(columns=["__y__"])
             return X_out, y_out
 
-        target_minority_pct = float(bias_pct)
-
-        # Deterministic seeds 
+        # Deterministic seeds
         seed_local = int(self.seed)
 
-        # Bias: always train, conditionally val, never test
-        X_train_biased_df, y_train_biased = apply_bias_rope(X_train_df, y_train, target_minority_pct, seed_local)
-        if bias_val:
-            X_val_biased_df, y_val_biased = apply_bias_rope(X_val_df, y_val, target_minority_pct, seed_local)
+        # Bias: always train (if bias_pct set), conditionally val, never test
+        if bias_pct is not None:
+            target_minority_pct = float(bias_pct)
+            X_train_biased_df, y_train_biased = apply_bias_rope(X_train_df, y_train, target_minority_pct, seed_local)
+            if bias_val:
+                X_val_biased_df, y_val_biased = apply_bias_rope(X_val_df, y_val, target_minority_pct, seed_local)
+            else:
+                X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
         else:
+            X_train_biased_df, y_train_biased = X_train_df.copy().reset_index(drop=True), y_train.copy()
             X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
         X_test_biased_df, y_test_biased = X_test_df.copy().reset_index(drop=True), y_test.copy()
 
@@ -629,7 +638,7 @@ class Dataset:
     def split_credit_card(
         self,
         train_size=None,
-        bias_pct=0.20,
+        bias_pct=None,
         val_frac=0.20,
         test_frac=0.20,
         pca_components=2,
@@ -797,11 +806,19 @@ class Dataset:
                 med = np.median(a_raw.astype(float))
                 return (a_raw.astype(float) >= med).astype(np.int64)
 
-        target_minority_pct = float(bias_pct)
-        X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, target_minority_pct)
-        if bias_val:
-            X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, target_minority_pct)
+        if bias_pct is not None:
+            target_minority_pct = float(bias_pct)
+            X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, target_minority_pct)
+            if bias_val:
+                X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, target_minority_pct)
+            else:
+                X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+                y_val_biased = y_val.copy()
+                a_val = _map_protected(A_val_df[dp_protected_col].to_numpy())
         else:
+            X_train_biased_df = X_train_df.copy().reset_index(drop=True)
+            y_train_biased = y_train.copy()
+            a_train = _map_protected(A_train_df[dp_protected_col].to_numpy())
             X_val_biased_df = X_val_df.copy().reset_index(drop=True)
             y_val_biased = y_val.copy()
             a_val = _map_protected(A_val_df[dp_protected_col].to_numpy())
@@ -927,7 +944,7 @@ class Dataset:
 
     #Check if needed still
     def rebuild_original_train_pool_theta(
-        self, *, bias_pct: float, val_frac: float, test_frac: float,
+        self, *, bias_pct: float | None, val_frac: float, test_frac: float,
         train_size: int | None, pca_components: int, device: torch.device,
         include_third_label: bool = False, third_activity_id: int = 13,
     ):
@@ -980,8 +997,11 @@ class Dataset:
                 X_out = out.drop(columns=["__y__"])
                 return X_out, y_out
 
-            # TRAIN-biased for fitting transforms
-            X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, bias_pct)
+            # TRAIN-biased for fitting transforms (skip bias if bias_pct is None)
+            if bias_pct is not None:
+                X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, bias_pct)
+            else:
+                X_train_biased_df, y_train_biased = X_train_df.copy(), y_train.copy()
             if train_size is not None and train_size < len(X_train_biased_df):
                 X_train_biased_df, _, y_train_biased, _ = train_test_split(
                     X_train_biased_df, y_train_biased,
@@ -1151,9 +1171,12 @@ class Dataset:
                 X_out = out.drop(columns=["__y__"])
                 return X_out, y_out
 
-            X_train_biased_df, y_train_biased = apply_bias_rope(
-                X_train_unbiased_df, y_train_unbiased, float(bias_pct)
-            )
+            if bias_pct is not None:
+                X_train_biased_df, y_train_biased = apply_bias_rope(
+                    X_train_unbiased_df, y_train_unbiased, float(bias_pct)
+                )
+            else:
+                X_train_biased_df, y_train_biased = X_train_unbiased_df.copy(), y_train_unbiased.copy()
             if train_size is not None and train_size < len(X_train_biased_df):
                 X_train_biased_df, _, y_train_biased, _ = train_test_split(
                     X_train_biased_df, y_train_biased,
@@ -1258,7 +1281,10 @@ class Dataset:
                 X_out = out.drop(columns=["__y__"])
                 return X_out, y_out
 
-            X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, float(bias_pct))
+            if bias_pct is not None:
+                X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, float(bias_pct))
+            else:
+                X_train_biased_df, y_train_biased = X_train_df.copy(), y_train.copy()
 
             # optional: subsample TRAIN after biasing
             if train_size is not None and train_size < len(X_train_biased_df):

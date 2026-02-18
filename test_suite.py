@@ -522,7 +522,7 @@ class TestSuite:
         x_test, y_test,
         *,
         data_path: str = "census+income/adult.data",  # kept for drop-in compatibility (unused)
-        bias_pct: float = 0.20,
+        bias_pct = None,
         val_frac: float = 0.20,
         test_frac: float = 0.20,
         train_size: int | None = None,
@@ -583,7 +583,7 @@ class TestSuite:
         *,
         real_add_n: int = 2000,
         data_path: str = "census+income/adult.data",  # kept for drop-in compatibility (unused)
-        bias_pct: float = 0.20,
+        bias_pct = None,
         val_frac: float = 0.20,
         test_frac: float = 0.20,
         train_size: int | None = None,
@@ -663,7 +663,7 @@ class TestSuite:
         x_test: torch.Tensor, y_test: torch.Tensor,
         *,
         data_path: str = "census+income/adult.data",  # kept for drop-in compatibility (unused)
-        bias_pct: float = 0.20,
+        bias_pct = None,
         val_frac: float = 0.20,
         test_frac: float = 0.20,
         train_size: int | None = None,
@@ -786,7 +786,7 @@ class TestSuite:
         x_test: torch.Tensor, y_test: torch.Tensor,
         *,
         data_path: str = "census+income/adult.data",  # kept for drop-in compatibility (unused)
-        bias_pct: float = 0.20,
+        bias_pct = None,
         val_frac: float = 0.20,
         test_frac: float = 0.20,
         train_size: int | None = None,
@@ -950,7 +950,7 @@ class TestSuite:
         ctab_repo: str | None = None,
         ctab_runner: str | None = None,
         data_path: str = "census+income/adult.data",
-        bias_pct: float = 0.20,
+        bias_pct = None,
         val_frac: float = 0.20,
         test_frac: float = 0.20,
         train_size: int | None = None,

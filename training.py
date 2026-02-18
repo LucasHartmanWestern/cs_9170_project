@@ -45,7 +45,7 @@ class Training:
         minority_id=None,
         majority_id=None,
         third_id=None,
-        bias_pct=0.18,
+        bias_pct=None,
 
         #PCA / trajectory
         pca_components=2,
@@ -74,6 +74,9 @@ class Training:
         use_pca=True,
         bias_val=True,
 
+        #two-phase generation
+        gen_both_classes=False,
+
         #misc
         seed=42,
         device='cpu',
@@ -88,6 +91,7 @@ class Training:
             torch.backends.cudnn.benchmark = True
             torch.set_float32_matmul_precision("high")
 
+        self.gen_both_classes = gen_both_classes
         self.bias_pct = bias_pct
         self.pca_components = pca_components
         self.reward_mode = reward_mode
@@ -495,6 +499,175 @@ class Training:
         return reward, diagnostics
 
 
+    # ---------------- Single-phase episode loop ----------------
+    def _run_phase(
+        self,
+        *,
+        target_class: int,
+        env,
+        agent,
+        x_theta_train,
+        y_theta_train,
+        x_theta_val,
+        y_theta_val,
+        prior_synthetic: tuple | None,   # (x_syn, y_syn) from earlier phase
+        phase_label: str,                 # "phase1_class1" or "phase2_class0"
+    ) -> tuple:
+        """Run a full episode loop for one phase. Returns (best_x_syn, best_y_syn) tensors."""
+        # Clear correlation buffers at start of each phase
+        self._local_buf.clear()
+        self._delta_buf.clear()
+
+        best_phase_reward = -float("inf")
+        best_x_syn = None
+        best_y_syn = None
+
+        print(f"\n{'='*60}")
+        print(f"[Phase] Starting {phase_label} | target_class={target_class} | episodes={self.episodes}")
+        print(f"{'='*60}")
+
+        for episode in range(self.episodes):
+            A = self.pca_components
+            if self.curriculum_learning:
+                D = 1 + A + A
+            else:
+                D = 2
+
+            # Pre-allocate GPU tensors
+            states = torch.zeros((self.traj_length, D), dtype=torch.float32, device=self.device)
+            actions = torch.zeros((self.traj_length, A), dtype=torch.float32, device=self.device)
+            next_states = torch.zeros((self.traj_length, D), dtype=torch.float32, device=self.device)
+            dones = torch.zeros(self.traj_length, dtype=torch.bool, device=self.device)
+
+            x_syn_tensor = torch.zeros((self.traj_length, A), dtype=torch.float32, device=self.device)
+            y_syn_tensor = torch.zeros(self.traj_length, dtype=torch.long, device=self.device)
+
+            # Reset env — pass episode index so curriculum can schedule stages
+            if self.curriculum_learning:
+                state = env.reset(episode_idx=episode)
+            else:
+                state = env.reset()
+
+            self.beta_model.reset()
+
+            for t in range(self.traj_length):
+                action = agent.predict(state)
+                next_state, done, info = env.step(action, (t + 1))
+
+                states[t] = state
+                actions[t] = action
+                next_states[t] = next_state
+                dones[t] = done
+
+                if self.curriculum_learning:
+                    pca_sample = info.get("current_pca", action)
+                else:
+                    pca_sample = action
+
+                x_syn_tensor[t] = pca_sample
+                y_syn_tensor[t] = info["sampled_target"]
+
+                state = next_state
+                if done:
+                    break
+
+            T = t + 1 if done else self.traj_length
+            x_phi_t = x_syn_tensor[:T]
+            y_phi_t = y_syn_tensor[:T]
+
+            # Train beta on hybrid (real + prior_synthetic + current_synthetic)
+            parts_x = [x_theta_train]
+            parts_y = [y_theta_train]
+            if prior_synthetic is not None:
+                parts_x.append(prior_synthetic[0])
+                parts_y.append(prior_synthetic[1])
+            parts_x.append(x_phi_t)
+            parts_y.append(y_phi_t)
+            x_hybrid = torch.cat(parts_x)
+            y_hybrid = torch.cat(parts_y)
+            self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
+
+            progress = (episode + 1) / self.episodes
+
+            # Rewards
+            rewards, diagnostics = self.compute_reward(
+                self.alpha_model,
+                self.beta_model,
+                x_theta_val,
+                y_theta_val,
+                x_phi_t,
+                y_phi_t,
+                progress=progress,
+                f1_thresh=0.5,
+                class_mode=("multiclass" if self.multiclass else "binary"),
+            )
+
+            # Truncate episode tensors and learn
+            states = states[:T]
+            actions = actions[:T]
+            next_states = next_states[:T]
+            dones = dones[:T]
+            rewards = rewards[:T]
+
+            agent.learn_trajectory(states, actions, rewards, next_states, dones, episode)
+
+            # alignment metrics
+            g = diagnostics.get("global", {})
+            f = diagnostics.get("fairness", {})
+
+            local_mean = float(g.get("local_reward", float("nan")))
+            if self.reward_mode == "fairness":
+                delta_val = float(-f.get("worst_loss_beta", float("nan")))
+            else:
+                delta_val = float("nan")
+
+            self._local_buf.append(local_mean)
+            self._delta_buf.append(delta_val)
+
+            corr_local_delta = self._corr_local_delta()
+
+            lambda_start, lambda_end = self.lambda_schedule
+            lambda_t = float(lambda_start + (lambda_end - lambda_start) * progress)
+
+            alignment_metrics = {
+                "delta_global": float(delta_val),
+                "corr_local_delta": float(corr_local_delta),
+                "curriculum_stage": int(env.current_stage),
+                "reward_mode": self.reward_mode,
+                "lambda_t": float(lambda_t),
+                "global_term_mag": abs(float(g.get("global_obj", 0.0))),
+                "local_term_mag": float(g.get("local_reward", 0.0)),
+                "global_contrib_est": float(lambda_t) * abs(float(g.get("global_obj", 0.0))),
+                "local_contrib_est": (1.0 - float(lambda_t)) * float(g.get("local_reward", 0.0)),
+            }
+            avg_reward = float(torch.mean(rewards).item())
+            meta_metrics = {"avg_reward": avg_reward, "phase": phase_label}
+
+            self.tracker.log_episode(
+                episode + 1,
+                diagnostics=diagnostics,
+                alignment_metrics=alignment_metrics,
+                extra_metrics=meta_metrics,
+            )
+
+            self.tracker.maybe_save_synthetic(
+                episode_num=episode + 1,
+                x_syn=x_phi_t,
+                y_syn=y_phi_t,
+                feature_names=[f"pca_{i}" for i in range(x_phi_t.shape[1])],
+                beta_model=self.beta_model,
+                phase_label=phase_label,
+            )
+
+            # Track best in-memory for return
+            if avg_reward > best_phase_reward:
+                best_phase_reward = avg_reward
+                best_x_syn = x_phi_t.detach().clone()
+                best_y_syn = y_phi_t.detach().clone()
+
+        print(f"[Phase] Finished {phase_label} | best avg_reward={best_phase_reward:.4f}")
+        return (best_x_syn, best_y_syn)
+
     # ---------------- Training loop ----------------
     def __call__(self):
         start_time = time.time()
@@ -529,6 +702,7 @@ class Training:
             "radius_clip": self.radius_clip,
 
             "seed": self.seed,
+            "gen_both_classes": self.gen_both_classes,
         }
 
         # create beta factory once (so tracker can rehydrate best-beta for final test)
@@ -670,159 +844,113 @@ class Training:
             else:
                 curriculum_stages = None
 
-            env = Environment(
-                curriculum=self.curriculum_learning,
-                target=1,
-                max_actions=self.traj_length,
-                total_episodes=self.episodes,
-                device=self.device,
-                seed=self.seed,
+            # Helper to build an Environment with given target class and seed samples
+            def _make_env(target, seed_samples):
+                return Environment(
+                    curriculum=self.curriculum_learning,
+                    target=target,
+                    max_actions=self.traj_length,
+                    total_episodes=self.episodes,
+                    device=self.device,
+                    seed=self.seed,
+                    pca_components=self.pca_components,
+                    pca_means=pca_means,
+                    curriculum_stages=curriculum_stages,
+                    real_minority_samples=seed_samples,
+                    use_delta_actions=self.use_delta_actions,
+                    delta_scale=self.delta_scale,
+                    delta_clip=self.delta_clip,
+                    pca_clip=self.pca_clip,
+                    use_radius_clip=(self.radius_clip is not None),
+                    radius_clip=self.radius_clip,
+                )
 
-                # PCA / curriculum
-                pca_components=self.pca_components,
-                pca_means=pca_means,
-                curriculum_stages=curriculum_stages,
-                real_minority_samples=real_minority_samples,
+            # === Phase 1: target=1 (minority) ===
+            phase1_env = _make_env(target=1, seed_samples=real_minority_samples)
 
-                #delta-action + clipping controls 
-                use_delta_actions=self.use_delta_actions,
-                delta_scale=self.delta_scale,
-                delta_clip=self.delta_clip,
-                pca_clip=self.pca_clip,
-                use_radius_clip=(self.radius_clip is not None),
-                radius_clip=self.radius_clip,
+            best_syn_1 = self._run_phase(
+                target_class=1,
+                env=phase1_env,
+                agent=self.agent,
+                x_theta_train=x_theta_train,
+                y_theta_train=y_theta_train,
+                x_theta_val=x_theta_val,
+                y_theta_val=y_theta_val,
+                prior_synthetic=None,
+                phase_label="phase1_class1",
             )
 
-            # ---------------- Episodes Loop ----------------
-            for episode in range(self.episodes):
-                A = self.pca_components
-                if self.curriculum_learning:
-                    D = 1 + A + A
-                else:
-                    D = 2
+            best_syn_0 = None
+            if self.gen_both_classes:
+                # === Phase 2: target=0 (majority) ===
+                # Build anchors: y=0 & a=disadvantaged
+                anchor_mask_0 = (y_theta_train == 0) & (a_train == disadv)
+                anchors_0 = x_theta_train[anchor_mask_0]
+                MAX_ANCHORS = 2000
+                if anchors_0.shape[0] > MAX_ANCHORS:
+                    g = torch.Generator(device="cpu").manual_seed(self.seed)
+                    idx = torch.randperm(anchors_0.shape[0], generator=g)[:MAX_ANCHORS]
+                    anchors_0 = anchors_0[idx.to(anchors_0.device)]
+                self.disadv_pos_anchors = anchors_0.detach()
+                print(f"Phase 2 anchors: {self.disadv_pos_anchors.shape[0]} (y=0 & disadv={disadv})")
 
-                # Pre-allocate GPU tensors
-                states = torch.zeros((self.traj_length, D), dtype=torch.float32, device=self.device)
-                actions = torch.zeros((self.traj_length, A), dtype=torch.float32, device=self.device)
-                next_states = torch.zeros((self.traj_length, D), dtype=torch.float32, device=self.device)
-                dones = torch.zeros(self.traj_length, dtype=torch.bool, device=self.device)
+                # Seed samples for env.reset() — majority class
+                real_majority_samples = x_theta_train[y_theta_train == 0]
 
-                x_syn_tensor = torch.zeros((self.traj_length, A), dtype=torch.float32, device=self.device)
-                y_syn_tensor = torch.zeros(self.traj_length, dtype=torch.long, device=self.device)
+                # Fresh RL agent for phase 2
+                phase2_agent = ReinforceAgent(**self.reinforce_config)
 
-                # Reset env — pass episode index so curriculum can schedule stages
-                if self.curriculum_learning:
-                    state = env.reset(episode_idx=episode)
-                else:
-                    state = env.reset()
+                # Fresh beta model for phase 2
+                self.beta_model = FFNNAgent(**self.ffnn_config)
 
-                self.beta_model.reset()
+                phase2_env = _make_env(target=0, seed_samples=real_majority_samples)
 
-                for t in range(self.traj_length):
-                    action = self.agent.predict(state)
-                    next_state, done, info = env.step(action, (t + 1))
-
-                    states[t] = state
-                    actions[t] = action
-                    next_states[t] = next_state
-                    dones[t] = done
-
-                    if self.curriculum_learning:
-                        pca_sample = info.get("current_pca", action)
-                    else:
-                        pca_sample = action
-
-                    x_syn_tensor[t] = pca_sample
-                    y_syn_tensor[t] = info["sampled_target"]
-
-                    state = next_state
-                    if done:
-                        break
-
-                T = t + 1 if done else self.traj_length
-                x_phi_t = x_syn_tensor[:T]
-                y_phi_t = y_syn_tensor[:T]
-
-                # Train beta on hybrid (real + synthetic for this episode)
-                x_hybrid = torch.cat([x_theta_train, x_phi_t])
-                y_hybrid = torch.cat([y_theta_train, y_phi_t])
-                self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
-
-                progress = (episode + 1) / self.episodes
-
-                # Rewards
-                rewards, diagnostics = self.compute_reward(
-                    self.alpha_model,
-                    self.beta_model,
-                    x_theta_val,
-                    y_theta_val,
-                    x_phi_t,
-                    y_phi_t,
-                    progress=progress,
-                    f1_thresh=0.5,
-                    class_mode=("multiclass" if self.multiclass else "binary"),
+                best_syn_0 = self._run_phase(
+                    target_class=0,
+                    env=phase2_env,
+                    agent=phase2_agent,
+                    x_theta_train=x_theta_train,
+                    y_theta_train=y_theta_train,
+                    x_theta_val=x_theta_val,
+                    y_theta_val=y_theta_val,
+                    prior_synthetic=best_syn_1,
+                    phase_label="phase2_class0",
                 )
 
-                # Truncate episode tensors and learn
-                states = states[:T]
-                actions = actions[:T]
-                next_states = next_states[:T]
-                dones = dones[:T]
-                rewards = rewards[:T]
+            # === Final test ===
+            if self.gen_both_classes and best_syn_0 is not None and best_syn_1 is not None:
+                # Train a fresh beta on real + best_syn_1 + best_syn_0
+                combined_beta = FFNNAgent(**self.ffnn_config)
+                parts_x = [x_theta_train, best_syn_1[0], best_syn_0[0]]
+                parts_y = [y_theta_train, best_syn_1[1], best_syn_0[1]]
+                x_combined = torch.cat(parts_x)
+                y_combined = torch.cat(parts_y)
+                combined_beta = self.train_predictor_model(combined_beta, x_combined, y_combined)
 
-                self.agent.learn_trajectory(states, actions, rewards, next_states, dones, episode)
-
-                # alignment metrics (keep your curriculum + corr tracking)
-                g = diagnostics.get("global", {})
-                f = diagnostics.get("fairness", {})
-
-                local_mean = float(g.get("local_reward", float("nan")))
-                if self.reward_mode == "fairness":
-                    delta_val = float(-f.get("worst_loss_beta", float("nan")))   # "bigger is better"
-                else:
-                    delta_val = float("nan")
-
-                self._local_buf.append(local_mean)
-                self._delta_buf.append(delta_val)
-
-                corr_local_delta = self._corr_local_delta()
-
-                lambda_start, lambda_end = self.lambda_schedule
-                lambda_t = float(lambda_start + (lambda_end - lambda_start) * progress)
-
-                alignment_metrics = {
-                    "delta_global": float(delta_val),
-                    "corr_local_delta": float(corr_local_delta),
-                    "curriculum_stage": int(env.current_stage),
-                    "reward_mode": self.reward_mode,
-                    "lambda_t": float(lambda_t),
-                    "global_term_mag": abs(float(g.get("global_obj", 0.0))),
-                    "local_term_mag": float(g.get("local_reward", 0.0)),
-                    "global_contrib_est": float(lambda_t) * abs(float(g.get("global_obj", 0.0))),
-                    "local_contrib_est": (1.0 - float(lambda_t)) * float(g.get("local_reward", 0.0)),
-                }
-                # pass avg_reward as meta (so it appears in CSV + printing)
-                avg_reward = float(torch.mean(rewards).item())
-                meta_metrics = {"avg_reward": avg_reward}
-
-                # log directly
-                self.tracker.log_episode(
-                    episode + 1,
-                    diagnostics=diagnostics,
-                    alignment_metrics=alignment_metrics,
-                    extra_metrics=meta_metrics,
+                # Overwrite best_beta_state_dict.pt with the combined-trained beta
+                torch.save(
+                    combined_beta.model.state_dict(),
+                    self.tracker.best_beta_path,
                 )
+                print(f"[Combined] Saved combined beta -> {self.tracker.best_beta_path}")
 
-                # save synthetic using last logged row (no need to pass obj1/obj2/etc)
-                self.tracker.maybe_save_synthetic(
-                    episode_num=episode + 1,
-                    x_syn=x_phi_t,
-                    y_syn=y_phi_t,
-                    feature_names=[f"pca_{i}" for i in range(x_phi_t.shape[1])],
-                    beta_model=self.beta_model,
+                # Save combined synthetic
+                combined_npz_path = self.tracker.seed_dir / "best_synthetic_combined.npz"
+                x_all_syn = torch.cat([best_syn_1[0], best_syn_0[0]])
+                y_all_syn = torch.cat([best_syn_1[1], best_syn_0[1]])
+                np.savez_compressed(
+                    combined_npz_path,
+                    x=x_all_syn.detach().cpu().numpy(),
+                    y=y_all_syn.detach().cpu().numpy(),
                 )
+                print(f"[Combined] Saved combined synthetic -> {combined_npz_path}")
 
-            # ---------------- Final test (UPDATED to use self.benchmarks_config) ----------------
+                # Use combined beta for final test
+                final_beta = combined_beta
+            else:
+                final_beta = self.beta_model
+
+            # ---------------- Final test ----------------
             b = self.benchmarks_config
 
             self.tracker.log_final_test(
@@ -832,7 +960,7 @@ class Training:
                 f1_thresh=0.5,
 
                 prefer_best_beta=True,
-                beta_model=self.beta_model,
+                beta_model=final_beta,
 
                 x_train=x_theta_train,
                 y_train=y_theta_train,
@@ -841,34 +969,34 @@ class Training:
                 jitter_n=None,
                 jitter_scale=0.20,
 
-                # alpha toggles/params 
+                # alpha toggles/params
                 run_alpha_raw_original=False,
                 run_alpha_plus_real=False,
                 alpha_plus_real_n=2000,
 
-                # CTGAN baseline toggles/params 
+                # CTGAN baseline toggles/params
                 run_alpha_plus_ctgan=bool(b.get("run_ctgan", False)),
                 alpha_plus_ctgan_n=int(b.get("alpha_plus_ctgan_n", self.traj_length)),
                 ctgan_epochs=int(b.get("ctgan_epochs", 300)),
                 cap_ctgan_train=b.get("cap_ctgan_train", None),
 
-                # CTABGAN baseline toggles/params 
+                # CTABGAN baseline toggles/params
                 run_ctabgan=bool(b.get("run_ctabgan", False)),
                 alpha_plus_ctabgan_n=int(b.get("alpha_plus_ctabgan_n", self.traj_length)),
 
-                # CTABGAN subprocess wiring 
+                # CTABGAN subprocess wiring
                 ctab_python=b.get("ctab_python", None),
                 ctab_repo=b.get("ctab_repo", None),
                 ctab_runner=str(self.project_root / "benchmarks" / "ctabgan" / "run_ctabgan.py"),
 
-                # Dataset rebuild params 
+                # Dataset rebuild params
                 data_path=None,
                 bias_pct=self.bias_pct,
                 val_frac=0.20,
                 test_frac=0.20,
                 train_size=self.real_data_size,
 
-                # additional params 
+                # additional params
                 batch_size=64,
                 pca_components=None,
                 seed=self.seed,
