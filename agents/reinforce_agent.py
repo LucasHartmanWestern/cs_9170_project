@@ -38,6 +38,8 @@ class ReinforceAgent():
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(self.seed)
         self.device = device
+        _dev = device if isinstance(device, torch.device) else torch.device(device if device else "cpu")
+        self._action_gen = torch.Generator(device=_dev).manual_seed(seed)
         self.policy_network = PolicyNetwork(state_size, action_size, hidden_sizes).to(self.device)
         self.policy_network = torch.compile(self.policy_network)
         
@@ -118,6 +120,7 @@ class ReinforceAgent():
         with torch.no_grad():
             mean, log_std = policy(state_t)                          # [1, action_size] each
             std = torch.exp(log_std)        # diagonal Gaussian
-            action = (mean + std * torch.randn_like(mean)).squeeze(0)                   # [action_size] (e.g., [2])
+            noise = torch.randn(mean.shape, generator=self._action_gen, device=mean.device, dtype=mean.dtype)
+            action = (mean + std * noise).squeeze(0)                   # [action_size] (e.g., [2])
 
         return action.detach()

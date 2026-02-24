@@ -2,8 +2,19 @@
 import os
 import json
 import hashlib
+import random
 from datetime import datetime
+import numpy as np
 import torch
+
+
+def _seed_everything(seed: int) -> None:
+    """Seed all global RNGs before any training objects are created."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 def _slug(s: str) -> str:
     import re
@@ -14,10 +25,7 @@ def _load_spec(path: str) -> dict:
         return json.load(f)
 
 def _spec_id(spec_path: str, spec: dict) -> str:
-    """
-    Identifier that includes the spec filename + a short hash of the spec content.
-    This helps prevent collisions while keeping the spec filename visible.
-    """
+
     base = os.path.basename(spec_path)
     base_noext = os.path.splitext(base)[0]
     payload = json.dumps(spec, sort_keys=True).encode("utf-8")
@@ -25,10 +33,7 @@ def _spec_id(spec_path: str, spec: dict) -> str:
     return f"{_slug(base_noext)}_{h}"
 
 def build_exp_group(spec_path: str, spec: dict) -> str:
-    """
-    Parent run folder name. MUST include spec filename (your requirement).
-    Generated once per spec invocation so all seeds share the same parent.
-    """
+
     ts = datetime.now().strftime("%Y%m%d%H%M")
     return f"SPEC_{_spec_id(spec_path, spec)}__G{ts}"
 
@@ -55,9 +60,10 @@ def run_spec_all_seeds(spec_path: str, device: str):
     for seed in seeds:
         seed = int(seed)
         print(f"[main] ---- running seed={seed} ----")
+        _seed_everything(seed)
 
         trainer = Training(
-            exp_group=exp_group,              # shared parent folder across seeds
+            exp_group=exp_group,              
             spec_name=spec_name,
             dataset_name=spec["dataset_name"],
             seed=seed,

@@ -86,10 +86,12 @@ class Training:
         self.seed = seed
         self.device = torch.device(device)
 
+        torch.manual_seed(self.seed)
         if self.device.type == "cuda":
             torch.cuda.manual_seed_all(self.seed)
-            torch.backends.cudnn.benchmark = True
-            torch.set_float32_matmul_precision("high")
+            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.deterministic = True
+            torch.set_float32_matmul_precision("highest")
 
         self.gen_both_classes = gen_both_classes
         self.bias_pct = bias_pct
