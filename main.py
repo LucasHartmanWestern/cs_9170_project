@@ -62,8 +62,9 @@ def run_spec_all_seeds(spec_path: str, device: str):
         print(f"[main] ---- running seed={seed} ----")
         _seed_everything(seed)
 
+        lw = spec.get("local_weights", {})
         trainer = Training(
-            exp_group=exp_group,              
+            exp_group=exp_group,
             spec_name=spec_name,
             dataset_name=spec["dataset_name"],
             seed=seed,
@@ -100,6 +101,13 @@ def run_spec_all_seeds(spec_path: str, device: str):
             benchmarks=spec.get("benchmarks"),
 
             gen_both_classes=spec.get("gen_both_classes", False),
+
+            w_anchor=float(lw.get("w_anchor",     0.60)),
+            w_hard=float(lw.get("w_hard",         0.30)),
+            w_div=float(lw.get("w_div",           0.05)),
+            sigma_anchor=float(lw.get("sigma_anchor", 0.85)),
+            rho_div=float(lw.get("rho_div",       0.60)),
+            hard_margin=float(lw.get("hard_margin", 0.65)),
         )
 
         trainer()

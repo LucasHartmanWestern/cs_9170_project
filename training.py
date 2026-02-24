@@ -77,6 +77,14 @@ class Training:
         #two-phase generation
         gen_both_classes=False,
 
+        #local reward weights
+        w_anchor: float = 0.60,
+        w_hard: float = 0.30,
+        w_div: float = 0.05,
+        sigma_anchor: float = 0.85,
+        rho_div: float = 0.60,
+        hard_margin: float = 0.65,
+
         #misc
         seed=42,
         device='cpu',
@@ -98,6 +106,12 @@ class Training:
         self.pca_components = pca_components
         self.reward_mode = reward_mode
         self.lambda_schedule = lambda_schedule
+        self.w_anchor = w_anchor
+        self.w_hard = w_hard
+        self.w_div = w_div
+        self.sigma_anchor = sigma_anchor
+        self.rho_div = rho_div
+        self.hard_margin = hard_margin
         self.curriculum_learning = curriculum_learning
         self.multiclass = multiclass
         self.dataset_name = dataset_name
@@ -409,11 +423,16 @@ class Training:
             # diversity penalty (scalar)
             div_pen = rh.diversity_penalty(x_phi, max_pts=128, rho=rho_div)  # scalar
 
-            score_local = (
-                w_anchor * anchor_reward +
-                w_hard   * hard_reward -
-                w_div    * div_pen
-            ).clamp(0.0, 1.0)
+            # diversity-only isolation: invert penalty to positive reward
+            if self.w_anchor == 0.0 and self.w_hard == 0.0 and self.w_div > 0.0:
+                val = float((1.0 - w_div * div_pen).clamp(0.0, 1.0))
+                score_local = torch.full_like(hard_reward, val)
+            else:
+                score_local = (
+                    w_anchor * anchor_reward +
+                    w_hard   * hard_reward -
+                    w_div    * div_pen
+                ).clamp(0.0, 1.0)
 
             # local diagnostics
             anchor_reward_mean = float(anchor_reward.mean().item())
@@ -602,6 +621,12 @@ class Training:
                 progress=progress,
                 f1_thresh=0.5,
                 class_mode=("multiclass" if self.multiclass else "binary"),
+                w_anchor=self.w_anchor,
+                w_hard=self.w_hard,
+                w_div=self.w_div,
+                sigma_anchor=self.sigma_anchor,
+                rho_div=self.rho_div,
+                hard_margin=self.hard_margin,
             )
 
             # Truncate episode tensors and learn
