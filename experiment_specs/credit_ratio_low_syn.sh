@@ -1,10 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=credit_2ph
+#SBATCH --job-name=credit_ratio_low_syn
 #SBATCH --account=def-mcapretz
-#SBATCH --time=25:00:00
+#SBATCH --time=18:00:00
 #SBATCH --mem=10G
 #SBATCH --cpus-per-task=3
 #SBATCH --gres=gpu:1
+#SBATCH --output=experiment_specs/logs/credit_ratio_low_syn.out
+#SBATCH --error=experiment_specs/logs/credit_ratio_low_syn.err
 
 set -euo pipefail
 
@@ -20,4 +22,6 @@ module purge
 module load python/3.12.4 cuda cudnn
 source ~/envs/rl/bin/activate
 
-python -u main.py --spec experiment_specs/credit_nopca_nobias_2phase.json --device cuda:0
+mkdir -p experiment_specs/logs
+
+python -u main.py --spec experiment_specs/credit_ratio_low_syn.json --device cuda:0

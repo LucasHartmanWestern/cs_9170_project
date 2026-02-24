@@ -1,10 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=pamap2_1ph
+#SBATCH --job-name=credit_ffnn_100epochs
 #SBATCH --account=def-mcapretz
-#SBATCH --time=13:00:00
+#SBATCH --time=84:00:00
 #SBATCH --mem=10G
 #SBATCH --cpus-per-task=3
 #SBATCH --gres=gpu:1
+#SBATCH --output=experiment_specs/logs/credit_ffnn_100epochs.out
+#SBATCH --error=experiment_specs/logs/credit_ffnn_100epochs.err
 
 set -euo pipefail
 
@@ -20,4 +22,6 @@ module purge
 module load python/3.12.4 cuda cudnn
 source ~/envs/rl/bin/activate
 
-python -u main.py --spec experiment_specs/pamap2_nopca_nobias_1phase.json --device cuda:0
+mkdir -p experiment_specs/logs
+
+python -u main.py --spec experiment_specs/credit_ffnn_100epochs.json --device cuda:0
