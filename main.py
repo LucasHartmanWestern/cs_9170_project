@@ -63,6 +63,7 @@ def run_spec_all_seeds(spec_path: str, device: str):
         _seed_everything(seed)
 
         lw = spec.get("local_weights", {})
+        rs = spec.get("reward_shaping", {})
         trainer = Training(
             exp_group=exp_group,
             spec_name=spec_name,
@@ -85,6 +86,12 @@ def run_spec_all_seeds(spec_path: str, device: str):
 
             reward_mode=spec["reward_mode"],
             lambda_schedule=tuple(spec["lambda_schedule"]),
+
+            global_reward_mode=str(rs.get("global_reward_mode", "delta")),
+            terminal_global=bool(rs.get("terminal_global", True)),
+            local_squash_k=float(rs.get("local_squash_k", 4.0)),
+            local_squash_center=float(rs.get("local_squash_center", 0.5)),
+            hard_from_beta=bool(rs.get("hard_from_beta", False)),
 
             use_delta_actions=spec.get("use_delta_actions", True),
             delta_scale=spec.get("delta_scale", 0.10),

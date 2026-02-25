@@ -55,7 +55,12 @@ class Training:
 
         #reward
         reward_mode="fairness",
-        lambda_schedule=(0.8, 0.8),
+        lambda_schedule=(0.2, 0.8),
+        global_reward_mode="delta",   # "exp_neg" | "neg" | "delta"
+        terminal_global=True,         # assign global only at terminal step
+        local_squash_k=4.0,          # sigmoid sharpness; 0 = clamp (old behavior)
+        local_squash_center=0.5,     # centering point for sigmoid squashing
+        hard_from_beta=False,         # use beta for hardness; False = alpha (stable)
 
         #ENV hyperparams
         use_delta_actions=True,
@@ -106,6 +111,11 @@ class Training:
         self.pca_components = pca_components
         self.reward_mode = reward_mode
         self.lambda_schedule = lambda_schedule
+        self.global_reward_mode = global_reward_mode
+        self.terminal_global = terminal_global
+        self.local_squash_k = local_squash_k
+        self.local_squash_center = local_squash_center
+        self.hard_from_beta = hard_from_beta
         self.w_anchor = w_anchor
         self.w_hard = w_hard
         self.w_div = w_div
@@ -291,6 +301,13 @@ class Training:
         sigma_anchor: float = 0.85,
         rho_div: float = 0.60,
         hard_margin: float = 0.65,
+
+        # --- reward shaping ---
+        global_reward_mode: str = "delta",
+        terminal_global: bool = True,
+        local_squash_k: float = 4.0,
+        local_squash_center: float = 0.5,
+        hard_from_beta: bool = False,
     ):
         """
         Reward combines:
@@ -374,9 +391,11 @@ class Training:
                     worst_loss_beta = float("nan")
 
         # ---------------- Local term on Φ ----------------
-        # NOTE: your code uses alpha for local hardness; leaving as-is.
         with torch.no_grad():
-            p = rh.p1_from_agent(alpha_model, x_phi)
+            if hard_from_beta:
+                p = rh.p1_from_agent(beta_model, x_phi)
+            else:
+                p = rh.p1_from_agent(alpha_model, x_phi)
 
         # defaults for diagnostics
         anchors_used = 0
@@ -387,7 +406,11 @@ class Training:
 
         if mode in ("local_gauss", "local_gauss_penalty"):
             m = torch.abs(p - 0.5)
-            score_local = torch.exp(-0.5 * (m / tau) ** 2).clamp(0.0, 1.0)
+            raw_local_gauss = torch.exp(-0.5 * (m / tau) ** 2)
+            if local_squash_k > 0:
+                score_local = torch.sigmoid(local_squash_k * (raw_local_gauss - local_squash_center))
+            else:
+                score_local = raw_local_gauss.clamp(0.0, 1.0)
 
             # judge/uncertainty (kept only if you still want them; not logged in lean set)
             # judge_conf_mean = float(score_local.mean().item())
@@ -425,14 +448,18 @@ class Training:
 
             # diversity-only isolation: invert penalty to positive reward
             if self.w_anchor == 0.0 and self.w_hard == 0.0 and self.w_div > 0.0:
-                val = float((1.0 - w_div * div_pen).clamp(0.0, 1.0))
-                score_local = torch.full_like(hard_reward, val)
+                raw_local = (1.0 - w_div * div_pen).expand_as(hard_reward)
             else:
-                score_local = (
+                raw_local = (
                     w_anchor * anchor_reward +
                     w_hard   * hard_reward -
                     w_div    * div_pen
-                ).clamp(0.0, 1.0)
+                )
+
+            if local_squash_k > 0:
+                score_local = torch.sigmoid(local_squash_k * (raw_local - local_squash_center))
+            else:
+                score_local = raw_local.clamp(0.0, 1.0)
 
             # local diagnostics
             anchor_reward_mean = float(anchor_reward.mean().item())
@@ -451,14 +478,24 @@ class Training:
 
         # ---------------- Combine global + local ----------------
         if mode == "fairness":
-            global_term = float(torch.exp(-torch.tensor(worst_loss_beta)).item())
+            if global_reward_mode == "exp_neg":
+                global_term = float(torch.exp(-torch.tensor(worst_loss_beta)).item())
+            elif global_reward_mode == "neg":
+                global_term = -worst_loss_beta
+            else:  # "delta" (default)
+                alpha_baseline = getattr(self, "disadv_worst_loss_alpha", float("nan"))
+                global_term = alpha_baseline - worst_loss_beta
         else:
             with torch.no_grad():
                 f1_minority_alpha = rh.f1_from_probs(y_val_bin, p1_alpha_val, f1_thresh)
             global_term = float(f1_minority_beta - f1_minority_alpha)
 
-        base_reward = lambda_t * float(global_term) + (1.0 - lambda_t) * score_local
-        reward = base_reward  # [T]
+        if terminal_global:
+            reward = (1.0 - lambda_t) * score_local
+            reward = reward.clone()
+            reward[-1] = reward[-1] + lambda_t * float(global_term)
+        else:
+            reward = lambda_t * float(global_term) + (1.0 - lambda_t) * score_local
 
         # ---------------- Extra diagnostics (lean set) ----------------
         diag_frac_mid_conf = float("nan")
@@ -483,8 +520,10 @@ class Training:
         # ---------------- Lean diagnostics dict ----------------
         diagnostics = {
             "global": {
-                "global_obj": float(global_term),          # global objective (F1 delta or -worst loss)
+                "global_obj": float(global_term),          # global objective (delta, -loss, or exp(-loss))
                 "local_reward": float(mean_local),         # mean local reward per step
+                "global_reward_mode": global_reward_mode,  # which formulation was used
+                "terminal_global": terminal_global,        # whether global was terminal-only
             },
             "utility": {
                 "f1_macro_beta": float(f1_macro_beta),         # macro F1 for beta model
@@ -500,6 +539,7 @@ class Training:
                 "n_g0": int(n_g0),                              # count of samples from group 0
                 "n_g1": int(n_g1),                              # count of samples from group 1
                 "dro_scale": float(dro_scale) if mode == "fairness" else None,   # DRO scaling factor
+                "worst_loss_alpha_baseline": float(getattr(self, "disadv_worst_loss_alpha", float("nan"))),
             },
             "local": {
                 "anchors_used": int(anchors_used),                  # number of anchor points used
@@ -627,6 +667,11 @@ class Training:
                 sigma_anchor=self.sigma_anchor,
                 rho_div=self.rho_div,
                 hard_margin=self.hard_margin,
+                global_reward_mode=self.global_reward_mode,
+                terminal_global=self.terminal_global,
+                local_squash_k=self.local_squash_k,
+                local_squash_center=self.local_squash_center,
+                hard_from_beta=self.hard_from_beta,
             )
 
             # Truncate episode tensors and learn
