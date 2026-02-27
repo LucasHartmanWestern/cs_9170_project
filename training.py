@@ -56,7 +56,7 @@ class Training:
         #reward
         reward_mode="fairness",
         lambda_schedule=(0.2, 0.8),
-        global_reward_mode="delta",   # "exp_neg" | "neg" | "delta"
+        global_reward_mode="neg",     # "exp_neg" | "neg" | "delta"
         terminal_global=True,         # assign global only at terminal step
         local_squash_k=4.0,          # sigmoid sharpness; 0 = clamp (old behavior)
         local_squash_center=0.5,     # centering point for sigmoid squashing
@@ -303,7 +303,7 @@ class Training:
         hard_margin: float = 0.65,
 
         # --- reward shaping ---
-        global_reward_mode: str = "delta",
+        global_reward_mode: str = "neg",
         terminal_global: bool = True,
         local_squash_k: float = 4.0,
         local_squash_center: float = 0.5,
