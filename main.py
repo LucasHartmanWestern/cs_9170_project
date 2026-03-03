@@ -87,7 +87,7 @@ def run_spec_all_seeds(spec_path: str, device: str):
             reward_mode=spec["reward_mode"],
             lambda_schedule=tuple(spec["lambda_schedule"]),
 
-            global_reward_mode=str(rs.get("global_reward_mode", "delta")),
+            global_reward_mode=str(rs.get("global_reward_mode", "neg")),
             terminal_global=bool(rs.get("terminal_global", True)),
             local_squash_k=float(rs.get("local_squash_k", 4.0)),
             local_squash_center=float(rs.get("local_squash_center", 0.5)),

@@ -713,7 +713,8 @@ class Training:
                 "local_contrib_est": (1.0 - float(lambda_t)) * float(g.get("local_reward", 0.0)),
             }
             avg_reward = float(torch.mean(rewards).item())
-            meta_metrics = {"avg_reward": avg_reward, "phase": phase_label}
+            episode_return = float(rewards.sum().item())
+            meta_metrics = {"avg_reward": avg_reward, "episode_return": episode_return, "phase": phase_label}
 
             self.tracker.log_episode(
                 episode + 1,
@@ -732,12 +733,12 @@ class Training:
             )
 
             # Track best in-memory for return
-            if avg_reward > best_phase_reward:
-                best_phase_reward = avg_reward
+            if episode_return > best_phase_reward:
+                best_phase_reward = episode_return
                 best_x_syn = x_phi_t.detach().clone()
                 best_y_syn = y_phi_t.detach().clone()
 
-        print(f"[Phase] Finished {phase_label} | best avg_reward={best_phase_reward:.4f}")
+        print(f"[Phase] Finished {phase_label} | best episode_return={best_phase_reward:.4f}")
         return (best_x_syn, best_y_syn)
 
     # ---------------- Training loop ----------------
@@ -784,7 +785,7 @@ class Training:
             run_stats,
             dataset=self.dataset,
             save_dir="training_runs",
-            compare_metric="average_reward",
+            compare_metric="meta.episode_return",
             beta_factory=beta_factory,
             seed=self.seed,
         ) as tracker:
