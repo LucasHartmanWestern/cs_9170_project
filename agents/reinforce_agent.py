@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -41,7 +42,10 @@ class ReinforceAgent():
         _dev = device if isinstance(device, torch.device) else torch.device(device if device else "cpu")
         self._action_gen = torch.Generator(device=_dev).manual_seed(seed)
         self.policy_network = PolicyNetwork(state_size, action_size, hidden_sizes).to(self.device)
-        self.policy_network = torch.compile(self.policy_network)
+        try:
+            self.policy_network = torch.compile(self.policy_network)
+        except Exception:
+            pass  # torch.compile requires PyTorch >= 2.0
         
         self.total_episodes = total_episodes
         self.gamma = gamma
@@ -58,12 +62,10 @@ class ReinforceAgent():
         if schedule == "linear":
             return start + (end - start) * t
         elif schedule == "cosine":  # smooth start/end
-            import math
             return end + (start - end) * 0.5 * (1 + math.cos(math.pi * t))
         elif schedule == "exp":
             # avoids zero; if end==0, set end to a tiny value like 1e-5
             e = end if end > 0 else 1e-5
-            import math
             return start * (e / start) ** t
         else:
             return start

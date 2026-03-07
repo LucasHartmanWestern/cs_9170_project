@@ -55,9 +55,7 @@ class Training:
 
         #reward
         reward_mode="fairness",
-        lambda_schedule=(0.2, 0.8),
-        global_reward_mode="neg",     # "exp_neg" | "neg" | "delta"
-        terminal_global=True,         # assign global only at terminal step
+        lambda_schedule=(0.5, 0.5),
         local_squash_k=4.0,          # sigmoid sharpness; 0 = clamp (old behavior)
         local_squash_center=0.5,     # centering point for sigmoid squashing
         hard_from_beta=False,         # use beta for hardness; False = alpha (stable)
@@ -111,8 +109,6 @@ class Training:
         self.pca_components = pca_components
         self.reward_mode = reward_mode
         self.lambda_schedule = lambda_schedule
-        self.global_reward_mode = global_reward_mode
-        self.terminal_global = terminal_global
         self.local_squash_k = local_squash_k
         self.local_squash_center = local_squash_center
         self.hard_from_beta = hard_from_beta
@@ -303,8 +299,6 @@ class Training:
         hard_margin: float = 0.65,
 
         # --- reward shaping ---
-        global_reward_mode: str = "neg",
-        terminal_global: bool = True,
         local_squash_k: float = 4.0,
         local_squash_center: float = 0.5,
         hard_from_beta: bool = False,
@@ -345,6 +339,8 @@ class Training:
             f1_minority_beta  = rh.f1_from_probs(y_val_bin, p1_beta_val,  f1_thresh)
             f1_majority_beta  = rh.f1_from_probs(1 - y_val_bin, 1 - p1_beta_val, 1 - f1_thresh)
             f1_macro_beta     = 0.5 * (f1_minority_beta + f1_majority_beta)
+            acc_beta          = rh.acc_from_probs(y_val_bin, p1_beta_val, f1_thresh)
+            auc_beta          = rh.roc_auc_from_probs(y_val_bin, p1_beta_val)
 
         # ---------------- Fairness (Group DRO) globals ----------------
         worst_loss_beta = float("nan")
@@ -355,6 +351,10 @@ class Training:
         bce_mean_beta = float("nan")
         n_g0 = 0
         n_g1 = 0
+        ep_dp_diff = float("nan")
+        ep_eo_tpr_diff = float("nan")
+        ep_eod_max_diff = float("nan")
+        ep_eod_avg_diff = float("nan")
 
         if mode == "fairness":
             a_theta_val = self.dataset.a_val
@@ -372,10 +372,13 @@ class Training:
                 # overall mean BCE
                 bce_mean_beta = float(loss_beta_vec.mean().item())
 
-                # group counts
-                a_t = torch.as_tensor(a_theta_val, device=loss_beta_vec.device).long()
-                n_g0 = int((a_t == 0).sum().item())
-                n_g1 = int((a_t == 1).sum().item())
+                # group counts (static — val split never changes; cache after first compute)
+                if not hasattr(self, "_cached_n_g0"):
+                    a_t = torch.as_tensor(a_theta_val, device=loss_beta_vec.device).long()
+                    self._cached_n_g0 = int((a_t == 0).sum().item())
+                    self._cached_n_g1 = int((a_t == 1).sum().item())
+                n_g0 = self._cached_n_g0
+                n_g1 = self._cached_n_g1
 
                 # worst-group + gap (only if both groups present)
                 if (group_loss_beta_g0 == group_loss_beta_g0) and (group_loss_beta_g1 == group_loss_beta_g1):
@@ -390,6 +393,15 @@ class Training:
                 else:
                     worst_loss_beta = float("nan")
 
+                # Classification-based fairness metrics on val
+                _fcls = rh.fairness_classification_metrics(
+                    a_theta_val, y_val_bin, p1_beta_val, threshold=f1_thresh
+                )
+                ep_dp_diff      = _fcls["dp_diff"]
+                ep_eo_tpr_diff  = _fcls["eo_tpr_diff"]
+                ep_eod_max_diff = _fcls["eod_max_diff"]
+                ep_eod_avg_diff = _fcls["eod_avg_diff"]
+
         # ---------------- Local term on Φ ----------------
         with torch.no_grad():
             if hard_from_beta:
@@ -398,7 +410,6 @@ class Training:
                 p = rh.p1_from_agent(alpha_model, x_phi)
 
         # defaults for diagnostics
-        anchors_used = 0
         anchor_reward_mean = float("nan")
         hard_reward_mean = float("nan")
         div_pen_mean = float("nan")
@@ -430,11 +441,9 @@ class Training:
 
             # anchor proximity
             if anchors is None or anchors.numel() == 0:
-                anchors_used = 0
                 min_d = torch.full((x_phi.shape[0],), float("nan"), device=x_phi.device, dtype=x_phi.dtype)
                 anchor_reward = torch.zeros((x_phi.shape[0],), device=x_phi.device, dtype=x_phi.dtype)
             else:
-                anchors_used = int(anchors.shape[0])
                 min_d = rh.nearest_anchor_dist(x_phi, anchors, chunk=512)  # [T]
                 sig = torch.tensor(float(sigma_anchor), device=min_d.device, dtype=min_d.dtype)
                 anchor_reward = torch.exp(-0.5 * (min_d / (sig + 1e-8)) ** 2)
@@ -477,57 +486,45 @@ class Training:
         local_clip_frac_1 = float((score_local >= 1.0 - 1e-12).float().mean().item())
 
         # ---------------- Combine global + local ----------------
+        # Global: sigmoid(10 * (alpha_loss - beta_loss)) ∈ (0, 1)
+        # 0.5 = no improvement over alpha, >0.5 = better, <0.5 = worse
         if mode == "fairness":
-            if global_reward_mode == "exp_neg":
-                global_term = float(torch.exp(-torch.tensor(worst_loss_beta)).item())
-            elif global_reward_mode == "neg":
-                global_term = -worst_loss_beta
-            else:  # "delta" (default)
-                alpha_baseline = getattr(self, "disadv_worst_loss_alpha", float("nan"))
-                global_term = alpha_baseline - worst_loss_beta
+            alpha_baseline = getattr(self, "disadv_worst_loss_alpha", float("nan"))
+            if alpha_baseline == alpha_baseline and worst_loss_beta == worst_loss_beta:
+                global_term = float(torch.sigmoid(torch.tensor(10.0 * (alpha_baseline - worst_loss_beta))).item())
+            else:
+                global_term = 0.5  # neutral fallback when losses unavailable
         else:
             with torch.no_grad():
                 f1_minority_alpha = rh.f1_from_probs(y_val_bin, p1_alpha_val, f1_thresh)
-            global_term = float(f1_minority_beta - f1_minority_alpha)
+            delta_f1 = float(f1_minority_beta - f1_minority_alpha)
+            global_term = float(torch.sigmoid(torch.tensor(10.0 * delta_f1)).item())
 
-        if terminal_global:
-            reward = (1.0 - lambda_t) * score_local
-            reward = reward.clone()
-            reward[-1] = reward[-1] + lambda_t * float(global_term)
-        else:
-            reward = lambda_t * float(global_term) + (1.0 - lambda_t) * score_local
+        # Spread both signals across all steps so cumulative sums stay comparable:
+        # G_0 ≈ (1 - λ) * mean(local) + λ * global
+        T_traj = float(score_local.shape[0])
+        reward = (1.0 - lambda_t) / T_traj * score_local + lambda_t / T_traj * float(global_term)
 
         # ---------------- Extra diagnostics (lean set) ----------------
-        diag_frac_mid_conf = float("nan")
-        diag_mean_abs_margin = float("nan")
-        diag_gen_radius_mean = float("nan")
-
+        # Reuse `p` (alpha/beta on x_phi) already computed for local reward — no extra forward pass needed.
         try:
-            x_phi_det = x_phi.detach().clone().requires_grad_(True)
-            with torch.enable_grad():
-                p_diag = rh.p1_from_agent(alpha_model, x_phi_det, no_grad=False)  # [T]
-
-                mid_band = ((p_diag >= 0.4) & (p_diag <= 0.6)).float()
-                diag_frac_mid_conf = float(mid_band.mean().item())
-
-                diag_mean_abs_margin = float(torch.abs(p_diag - 0.5).mean().item())
-
-                radius = torch.linalg.norm(x_phi_det, dim=1)
-                diag_gen_radius_mean = float(radius.mean().item())
+            diag_frac_mid_conf    = float(((p >= 0.4) & (p <= 0.6)).float().mean().item())
+            diag_mean_abs_margin  = float(torch.abs(p - 0.5).mean().item())
+            diag_gen_radius_mean  = float(torch.linalg.norm(x_phi, dim=1).mean().item())
         except Exception:
-            pass
+            diag_frac_mid_conf = diag_mean_abs_margin = diag_gen_radius_mean = float("nan")
 
         # ---------------- Lean diagnostics dict ----------------
         diagnostics = {
             "global": {
-                "global_obj": float(global_term),          # global objective (delta, -loss, or exp(-loss))
-                "local_reward": float(mean_local),         # mean local reward per step
-                "global_reward_mode": global_reward_mode,  # which formulation was used
-                "terminal_global": terminal_global,        # whether global was terminal-only
+                "global_obj": float(global_term),   # sigmoid(10*(alpha_loss - beta_loss)), ∈ (0,1)
+                "local_reward": float(mean_local),  # mean local reward per step
             },
             "utility": {
                 "f1_macro_beta": float(f1_macro_beta),         # macro F1 for beta model
                 "f1_minority_beta": float(f1_minority_beta),   # F1 score on minority class for beta model
+                "acc_beta": float(acc_beta),                   # accuracy for beta model
+                "auc_beta": float(auc_beta),                   # ROC-AUC for beta model
             },
             "fairness": {
                 "worst_loss_beta": float(worst_loss_beta),     # highest groupwise loss for beta model (DRO objective)
@@ -538,11 +535,14 @@ class Training:
                 "bce_mean_beta": float(bce_mean_beta),          # average binary cross-entropy loss beta
                 "n_g0": int(n_g0),                              # count of samples from group 0
                 "n_g1": int(n_g1),                              # count of samples from group 1
-                "dro_scale": float(dro_scale) if mode == "fairness" else None,   # DRO scaling factor
                 "worst_loss_alpha_baseline": float(getattr(self, "disadv_worst_loss_alpha", float("nan"))),
+                "dp_diff": float(ep_dp_diff),                   # |P(ŷ=1|a=0) - P(ŷ=1|a=1)|
+                "eo_tpr_diff": float(ep_eo_tpr_diff),           # |TPR(a=0) - TPR(a=1)|
+                "eod_max_diff": float(ep_eod_max_diff),         # max(|TPR diff|, |FPR diff|)
+                "eod_avg_diff": float(ep_eod_avg_diff),         # avg(|TPR diff|, |FPR diff|)
             },
             "local": {
-                "anchors_used": int(anchors_used),                  # number of anchor points used
+                "anchors_used": int(getattr(self, "_cached_anchors_used", 0)),  # number of anchor points (static after setup)
                 "anchor_reward_mean": float(anchor_reward_mean),     # mean anchor reward
                 "hard_reward_mean": float(hard_reward_mean),         # mean hard reward (challenging samples)
                 "div_pen_mean": float(div_pen_mean),                 # mean diversity penalty
@@ -632,7 +632,7 @@ class Training:
                 if done:
                     break
 
-            T = t + 1 if done else self.traj_length
+            T = self.traj_length
             x_phi_t = x_syn_tensor[:T]
             y_phi_t = y_syn_tensor[:T]
 
@@ -667,8 +667,6 @@ class Training:
                 sigma_anchor=self.sigma_anchor,
                 rho_div=self.rho_div,
                 hard_margin=self.hard_margin,
-                global_reward_mode=self.global_reward_mode,
-                terminal_global=self.terminal_global,
                 local_squash_k=self.local_squash_k,
                 local_squash_center=self.local_squash_center,
                 hard_from_beta=self.hard_from_beta,
@@ -705,12 +703,7 @@ class Training:
                 "delta_global": float(delta_val),
                 "corr_local_delta": float(corr_local_delta),
                 "curriculum_stage": int(env.current_stage),
-                "reward_mode": self.reward_mode,
                 "lambda_t": float(lambda_t),
-                "global_term_mag": abs(float(g.get("global_obj", 0.0))),
-                "local_term_mag": float(g.get("local_reward", 0.0)),
-                "global_contrib_est": float(lambda_t) * abs(float(g.get("global_obj", 0.0))),
-                "local_contrib_est": (1.0 - float(lambda_t)) * float(g.get("local_reward", 0.0)),
             }
             avg_reward = float(torch.mean(rewards).item())
             episode_return = float(rewards.sum().item())
@@ -871,6 +864,7 @@ class Training:
                 anchors = anchors[idx.to(anchors.device)]
 
             self.disadv_pos_anchors = anchors.detach()
+            self._cached_anchors_used = int(self.disadv_pos_anchors.shape[0])
 
             print(f"Anchors: {self.disadv_pos_anchors.shape[0]} (disadv={disadv})")
 
@@ -965,6 +959,7 @@ class Training:
                     idx = torch.randperm(anchors_0.shape[0], generator=g)[:MAX_ANCHORS]
                     anchors_0 = anchors_0[idx.to(anchors_0.device)]
                 self.disadv_pos_anchors = anchors_0.detach()
+                self._cached_anchors_used = int(self.disadv_pos_anchors.shape[0])
                 print(f"Phase 2 anchors: {self.disadv_pos_anchors.shape[0]} (y=0 & disadv={disadv})")
 
                 # Seed samples for env.reset() — majority class

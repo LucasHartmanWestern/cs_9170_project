@@ -248,7 +248,6 @@ class EpisodeTracker:
         self._header_written = True
 
         with open(self.seed_dir / "metrics_header.json", "w", encoding="utf-8") as f:
-            import json
             json.dump({"columns": self._csv_columns}, f, indent=2)
 
         print(f"[Tracker] CSV header written with {len(self._csv_columns)} columns.")
@@ -417,7 +416,6 @@ class EpisodeTracker:
 
         # Best-so-far
         if is_best:
-            import json, time, torch
 
             if phase_label is not None:
                 self._phase_best[phase_label] = metric_val

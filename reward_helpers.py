@@ -236,3 +236,69 @@ def diversity_penalty(x: torch.Tensor, *, max_pts: int = 128, rho: float = 0.5) 
     rho_t = torch.tensor(float(rho), device=D.device, dtype=D.dtype)
     sim = torch.exp(-0.5 * (D / (rho_t + 1e-8)) ** 2)
     return sim.mean()
+
+
+def acc_from_probs(y_true, p1: torch.Tensor, threshold: float = 0.5) -> float:
+    """Binary accuracy from probabilities."""
+    y_true = y_true.to(p1.device).long()
+    y_pred = (p1 >= threshold).long()
+    return float((y_pred == y_true).float().mean().item())
+
+
+def roc_auc_from_probs(y_true, p1: torch.Tensor) -> float:
+    """ROC-AUC from probabilities. Returns NaN if only one class present."""
+    try:
+        from sklearn.metrics import roc_auc_score
+        y_np = y_true.cpu().numpy().astype(int)
+        p_np = p1.detach().cpu().numpy()
+        if len(set(y_np)) < 2:
+            return float("nan")
+        return float(roc_auc_score(y_np, p_np))
+    except Exception:
+        return float("nan")
+
+
+def fairness_classification_metrics(
+    a, y_true, p1: torch.Tensor, *, threshold: float = 0.5
+) -> dict:
+    """
+    Computes DP diff, EO (TPR diff), EOd (max and avg of TPR/FPR diff).
+    Protected attribute `a` is coerced to {0,1}.
+    Returns NaN for any metric if a group is absent.
+    """
+    device = p1.device
+    y_true = y_true.to(device).long()
+    a = torch.as_tensor(a, device=device).long()
+    a01 = (a != 0).long()
+    y_hat = (p1 >= threshold).long()
+
+    def safe_rate(num, den):
+        d = float(den.item()) if torch.is_tensor(den) else float(den)
+        n = float(num.item()) if torch.is_tensor(num) else float(num)
+        return float("nan") if d <= 0 else n / d
+
+    dp, tpr, fpr = {}, {}, {}
+    for g in (0, 1):
+        m = (a01 == g)
+        pos = m & (y_true == 1)
+        neg = m & (y_true == 0)
+        dp[g]  = safe_rate(((y_hat == 1) & m).sum(),   m.sum())
+        tpr[g] = safe_rate(((y_hat == 1) & pos).sum(), pos.sum())
+        fpr[g] = safe_rate(((y_hat == 1) & neg).sum(), neg.sum())
+
+    def abs_diff(x, y):
+        return float("nan") if (x != x or y != y) else abs(x - y)
+
+    dp_diff   = abs_diff(dp[0],  dp[1])
+    tpr_diff  = abs_diff(tpr[0], tpr[1])
+    fpr_diff  = abs_diff(fpr[0], fpr[1])
+    both_ok   = (tpr_diff == tpr_diff) and (fpr_diff == fpr_diff)
+    eod_max   = max(tpr_diff, fpr_diff)   if both_ok else float("nan")
+    eod_avg   = 0.5 * (tpr_diff + fpr_diff) if both_ok else float("nan")
+
+    return {
+        "dp_diff":      dp_diff,
+        "eo_tpr_diff":  tpr_diff,
+        "eod_max_diff": eod_max,
+        "eod_avg_diff": eod_avg,
+    }

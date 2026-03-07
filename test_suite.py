@@ -191,6 +191,24 @@ class TestSuite:
         y_bin = self._to_binary_rope_vs_rest(y_true).to(p1.device).float()
         return float(((p1 - y_bin) ** 2).mean())
 
+    def _acc_from_probs(self, y_true, p1, threshold=0.5):
+        """Rope-vs-rest accuracy."""
+        y_bin = self._to_binary_rope_vs_rest(y_true).to(p1.device).long()
+        y_pred = (p1 >= threshold).long()
+        return float((y_pred == y_bin).float().mean().item())
+
+    def _roc_auc_from_probs(self, y_true, p1):
+        """Rope-vs-rest ROC-AUC. Returns NaN if only one class present."""
+        try:
+            from sklearn.metrics import roc_auc_score
+            y_bin = self._to_binary_rope_vs_rest(y_true).cpu().numpy().astype(int)
+            p_np = p1.detach().cpu().numpy()
+            if len(set(y_bin)) < 2:
+                return float("nan")
+            return float(roc_auc_score(y_bin, p_np))
+        except Exception:
+            return float("nan")
+
 
     def _sample_real_minority(self, x_pool, y_pool, add_n: int, seed: int | None):
         add_n = int(max(0, add_n))
@@ -982,13 +1000,18 @@ class TestSuite:
             p1_alpha = self._p1_from_agent(alpha_model, x_test)
             a_f1_min, a_f1_maj, a_f1_w, a_f1_macro = self._all_f1_from_probs(y_test, p1_alpha, f1_thresh)
             a_brier = self._brier_mean(y_test, p1_alpha)
+            a_acc   = self._acc_from_probs(y_test, p1_alpha, f1_thresh)
 
             if beta_for_eval is not None:
                 p1_beta = self._p1_from_agent(beta_for_eval, x_test)
                 b_f1_min, b_f1_maj, b_f1_w, b_f1_macro = self._all_f1_from_probs(y_test, p1_beta, f1_thresh)
                 b_brier = self._brier_mean(y_test, p1_beta)
+                b_acc   = self._acc_from_probs(y_test, p1_beta, f1_thresh)
             else:
-                b_f1_min = b_f1_maj = b_f1_w = b_f1_macro = b_brier = float('nan')
+                b_f1_min = b_f1_maj = b_f1_w = b_f1_macro = b_brier = b_acc = float('nan')
+
+        a_auc = self._roc_auc_from_probs(y_test, p1_alpha)
+        b_auc = self._roc_auc_from_probs(y_test, p1_beta) if beta_for_eval is not None else float('nan')
         # --- NEW: fairness metrics (DP / EO / EOd) for alpha and beta ---
         if a_test is None:
             print("[TestSuite] a_test (protected attribute) not provided; fairness metrics will be NaN in final_test_metrics.csv")
@@ -1106,12 +1129,16 @@ class TestSuite:
             "alpha_f1_weighted": a_f1_w,
             "alpha_f1_macro": a_f1_macro,
             "alpha_brier": a_brier,
+            "alpha_acc": a_acc,
+            "alpha_roc_auc": a_auc,
 
             "beta_f1_minority": b_f1_min,
             "beta_f1_majority": b_f1_maj,
             "beta_f1_weighted": b_f1_w,
             "beta_f1_macro": b_f1_macro,
             "beta_brier": b_brier,
+            "beta_acc": b_acc,
+            "beta_roc_auc": b_auc,
             # --- NEW fairness (alpha) ---
             "alpha_dp_diff": alpha_fair["dp_diff"],
             "alpha_eo_tpr_diff": alpha_fair["eo_tpr_diff"],

@@ -1,4 +1,5 @@
 import re
+from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -35,8 +36,6 @@ class Dataset:
         self.protected_attributes = self.DATASET_REGISTRY[self.dataset_name].get("protected_attributes", [])
         self.multiclass=multiclass
         self.use_pca = bool(use_pca)
-
-    from dataclasses import dataclass
 
     @dataclass
     class GanView:
@@ -83,30 +82,6 @@ class Dataset:
             svd_solver="full",          # deterministic basis for same data
             random_state=self.seed,     # deterministic for randomized solvers 
         )
-
-    def _fit_theta_transforms(
-        self,
-        X_train_biased_df: pd.DataFrame,
-        *,
-        cat_cols: list[str],
-        num_cols: list[str],
-        pca_components: int,
-    ):
-        try:
-            encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-        except TypeError:
-            encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
-
-        scaler = StandardScaler()
-
-        X_train_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_biased_df), 0))
-        X_train_num = scaler.fit_transform(X_train_biased_df[num_cols])  if len(num_cols) else np.empty((len(X_train_biased_df), 0))
-        X_train_all = np.hstack([X_train_num, X_train_cat])
-
-        pca = self._make_pca(pca_components)
-        pca.fit(X_train_all)
-
-        return encoder, scaler, pca
 
     def split_census_income(
             self,
@@ -725,10 +700,6 @@ class Dataset:
         A_df_raw = df[[dp_protected_col]].copy()
         X_df_raw = df.drop(columns=[label_col])
 
-        uniq = set(np.unique(y_raw).tolist())
-        if not uniq.issubset({0, 1}):
-            raise ValueError(f"Expected binary labels {{0,1}} but got {sorted(list(uniq))}.")
-
         # -----------------------------
         # 2) Optional: drop protected
         # -----------------------------
@@ -766,10 +737,18 @@ class Dataset:
         # -----------------------------
         # 4) Apply same bias in each split
         # -----------------------------
+        def _map_protected(a_raw):
+            """Map raw protected attribute values to 0/1."""
+            if dp_protected_col == "SEX":
+                return (a_raw.astype(int) == int(sex_positive_value)).astype(np.int64)
+            else:
+                # AGE or other continuous: binary by median split
+                med = np.median(a_raw.astype(float))
+                return (a_raw.astype(float) >= med).astype(np.int64)
+
         def apply_bias(df_split, y_split, a_split_df, target_minority_pct):
             dfb = df_split.copy()
             dfb["__y__"] = y_split
-
             dfb["__a__"] = a_split_df[dp_protected_col].to_numpy()
 
             maj = dfb[dfb["__y__"] == 0]
@@ -784,27 +763,9 @@ class Dataset:
                 out = pd.concat([maj, mino_b], axis=0).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
 
             y_out = out["__y__"].to_numpy(dtype=int)
-
-            a_out_raw = out["__a__"].to_numpy()
-
-            # Map protected attribute to 0/1 for DP
-            if dp_protected_col == "SEX":
-                a_out = (a_out_raw.astype(int) == int(sex_positive_value)).astype(np.int64)
-            else:
-                # If you later use AGE, you should bucketize first; for now treat as binary by median split
-                med = np.median(a_out_raw.astype(float))
-                a_out = (a_out_raw.astype(float) >= med).astype(np.int64)
-
+            a_out = _map_protected(out["__a__"].to_numpy())
             X_out = out.drop(columns=["__y__", "__a__"])
             return X_out, y_out, a_out
-
-        def _map_protected(a_raw):
-            """Map raw protected attribute values to 0/1."""
-            if dp_protected_col == "SEX":
-                return (a_raw.astype(int) == int(sex_positive_value)).astype(np.int64)
-            else:
-                med = np.median(a_raw.astype(float))
-                return (a_raw.astype(float) >= med).astype(np.int64)
 
         if bias_pct is not None:
             target_minority_pct = float(bias_pct)
@@ -1189,10 +1150,6 @@ class Dataset:
             # Fit scaler+PCA on TRAIN-biased; transform UNBIASED TRAIN pool
             feature_cols = [c for c in X_train_biased_df.columns if c != "subject_id"]
             scaler = StandardScaler()
-            Xtr_z  = scaler.fit_transform(X_train_biased_df[feature_cols].values)
-
-            # Fit scaler on TRAIN-biased
-            scaler = StandardScaler()
             Xtr_z = scaler.fit_transform(X_train_biased_df[feature_cols].values)
 
             # Transform pool
@@ -1464,8 +1421,8 @@ class Dataset:
             return {"supported": False}
         return gv
 
-    def ctgan_training_view(self, *, bias_pct, val_frac, test_frac, train_size, pca_components, device):
-        # apples-to-apples: reuse exactly what split_* used
+    def ctgan_training_view(self, **_):
+        # Returns the cached GAN view built during split_*; all args ignored.
         return self.get_gan_view()
 
 
