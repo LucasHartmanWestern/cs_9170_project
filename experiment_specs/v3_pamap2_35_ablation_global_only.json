@@ -1,16 +1,16 @@
 {
-  "dataset_name": "credit_card",
+  "dataset_name": "pamap2",
   "multiclass": false,
   "bias_pct": null,
 
   "reward_mode": "fairness",
-  "lambda_schedule": [0.5, 0.5],
-  "minority_id": 1,
-  "majority_id": 0,
+  "lambda_schedule": [1.0, 1.0],
+  "minority_id": 3,
+  "majority_id": 5,
   "third_id": null,
 
   "use_pca": false,
-  "pca_components": 10,
+  "pca_components": 6,
   "traj_length": 2000,
   "real_data_size": 3000,
   "total_episodes": 6000,
@@ -26,9 +26,9 @@
   "seeds": [42, 123, 999],
 
   "local_weights": {
-    "w_anchor": 0.0,
-    "w_hard": 0.0,
-    "w_div": 1.0
+    "w_anchor": 0.5,
+    "w_hard": 0.5,
+    "w_div": 0.0
   },
 
   "ffnn": {

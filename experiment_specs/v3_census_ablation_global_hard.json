@@ -1,5 +1,5 @@
 {
-  "dataset_name": "credit_card",
+  "dataset_name": "census_income",
   "multiclass": false,
   "bias_pct": null,
 
@@ -26,9 +26,9 @@
   "seeds": [42, 123, 999],
 
   "local_weights": {
-    "w_anchor": 0.45,
-    "w_hard": 0.45,
-    "w_div": 0.1
+    "w_anchor": 0.0,
+    "w_hard": 1.0,
+    "w_div": 0.0
   },
 
   "ffnn": {

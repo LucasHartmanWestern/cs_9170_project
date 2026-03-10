@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=ablation2_credit_global_anchors
+#SBATCH --job-name=v3_census_ablation_global_only
 #SBATCH --account=def-mcapretz
-#SBATCH --time=18:00:00
+#SBATCH --time=14:00:00
 #SBATCH --mem=3G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
-#SBATCH --output=experiment_specs/logs/ablation2_credit_global_anchors.out
-#SBATCH --error=experiment_specs/logs/ablation2_credit_global_anchors.err
+#SBATCH --output=experiment_specs/logs/v3_census_ablation_global_only.out
+#SBATCH --error=experiment_specs/logs/v3_census_ablation_global_only.err
 
 set -euo pipefail
 
@@ -24,4 +24,4 @@ source ~/envs/rl/bin/activate
 
 mkdir -p experiment_specs/logs
 
-python -u main.py --spec experiment_specs/ablation2_credit_global_anchors.json --device cuda:0
+python -u main.py --spec experiment_specs/v3_census_ablation_global_only.json --device cuda:0
