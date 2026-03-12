@@ -20,6 +20,6 @@
     "epochs": 200,
     "batch_size": 64,
     "eta": 0.01,
-    "n_groups": 2
+    "n_groups": 4
   }
 }

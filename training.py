@@ -363,7 +363,8 @@ class Training:
             with torch.no_grad():
                 loss_beta_vec = rh.bce_per_sample_from_probs(y_val_bin, p1_beta_val)
 
-                worst_b_t, per_b = rh.worst_group_loss(loss_beta_vec, a_theta_val, group_values=(0, 1))
+                g_ids_val = torch.as_tensor(a_theta_val, device=loss_beta_vec.device).long() * 2 + y_val_bin
+                worst_b_t, per_b = rh.worst_group_loss(loss_beta_vec, g_ids_val, group_values=(0, 1, 2, 3))
 
                 # per-group mean losses (floats/nan)
                 group_loss_beta_g0 = per_b.get(0, float("nan"))
@@ -435,7 +436,12 @@ class Training:
                 self.adv_group_value = adv
                 self.disadv_loss_alpha_g0 = per_g.get(0, float("nan"))
                 self.disadv_loss_alpha_g1 = per_g.get(1, float("nan"))
-                self.disadv_worst_loss_alpha = worst
+                # 4-group alpha baseline to match 4-group beta worst-loss
+                with torch.no_grad():
+                    _loss_a = rh.bce_per_sample_from_probs(y_val_bin, rh.p1_from_agent(alpha_model, x_theta_val))
+                    _g_ids_a = torch.as_tensor(self.dataset.a_val, device=_loss_a.device).long() * 2 + y_val_bin
+                    _worst_4g_a, _ = rh.worst_group_loss(_loss_a, _g_ids_a, group_values=(0, 1, 2, 3))
+                self.disadv_worst_loss_alpha = float(_worst_4g_a.item()) if _worst_4g_a == _worst_4g_a else float("nan")
 
             anchors = getattr(self, "disadv_pos_anchors", None)
 
@@ -843,9 +849,16 @@ class Training:
             self.adv_group_value = adv
             self.disadv_loss_alpha_g0 = per_g.get(0, float("nan"))
             self.disadv_loss_alpha_g1 = per_g.get(1, float("nan"))
-            self.disadv_worst_loss_alpha = worst
+            # 4-group alpha baseline to match 4-group beta worst-loss
+            with torch.no_grad():
+                _y_long = y_theta_val.long()
+                _p1_a = rh.p1_from_agent(self.alpha_model, x_theta_val)
+                _loss_a = rh.bce_per_sample_from_probs(_y_long, _p1_a)
+                _g_ids_a = torch.as_tensor(self.dataset.a_val, device=_loss_a.device).long() * 2 + _y_long
+                _worst_4g_a, _ = rh.worst_group_loss(_loss_a, _g_ids_a, group_values=(0, 1, 2, 3))
+            self.disadv_worst_loss_alpha = float(_worst_4g_a.item()) if _worst_4g_a == _worst_4g_a else float("nan")
 
-            print(f"[disadv] group={disadv} per_g={per_g} worst={worst:.4f}")
+            print(f"[disadv] group={disadv} per_g={per_g} worst_4g={self.disadv_worst_loss_alpha:.4f}")
 
 
             # Build anchor set: real TRAIN points that are (y=1) AND (a=disadvantaged group)

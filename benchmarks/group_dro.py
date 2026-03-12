@@ -84,7 +84,7 @@ class GroupDROTrainer:
             "epochs": 200,
             "batch_size": 64,
             "eta": 0.01,
-            "n_groups": 2,
+            "n_groups": 4,   # (a, y) subgroups: a∈{0,1} × y∈{0,1}
         }
         self.gdro_config = {**DEFAULT_GDRO, **(group_dro or {})}
 
@@ -292,6 +292,10 @@ class GroupDROTrainer:
                 y_b = y_b.to(self.device).long()
                 a_b = a_b.to(self.device).long()
 
+                # Composite group index: g = a*2 + y  →  0=(a=0,y=0), 1=(a=0,y=1),
+                #                                        2=(a=1,y=0), 3=(a=1,y=1)
+                g_ids_b = a_b * 2 + y_b
+
                 # Forward → P(y=1|x)
                 logits = model(x_b)
                 probs  = torch.softmax(logits, dim=-1)
@@ -300,18 +304,25 @@ class GroupDROTrainer:
                 # Per-sample BCE
                 losses = rh.bce_per_sample_from_probs(y_b, p1)
 
-                # Per-group mean losses (replace NaN / absent group with 0)
+                # Per-group mean losses; track which groups are present in this batch
                 group_losses = []
+                present      = []
                 for g in range(n_groups):
-                    lg = rh.group_mean_loss(losses, a_b, g)
+                    lg = rh.group_mean_loss(losses, g_ids_b, g)
                     if not torch.isfinite(lg):
-                        lg = torch.tensor(0.0, device=self.device, requires_grad=False)
-                    group_losses.append(lg)
+                        group_losses.append(torch.tensor(0.0, device=self.device))
+                        present.append(False)
+                    else:
+                        group_losses.append(lg)
+                        present.append(True)
                 group_losses_t = torch.stack(group_losses)   # [G]
 
-                # Update group weights (no grad)
+                # Update q only for groups present in this batch; skip absent ones
+                # so their weight is not silently treated as zero-loss.
                 with torch.no_grad():
-                    q.mul_(torch.exp(eta * group_losses_t.detach()))
+                    for g in range(n_groups):
+                        if present[g]:
+                            q[g] *= torch.exp(eta * group_losses_t[g].detach())
                     q.div_(q.sum())
 
                 # DRO loss
@@ -335,39 +346,40 @@ class GroupDROTrainer:
                 val_losses = rh.bce_per_sample_from_probs(
                     y_val.to(self.device).long(), val_p1
                 )
+                # Composite group index for validation set
+                g_ids_val = a_val.to(self.device) * 2 + y_val.to(self.device).long()
                 val_worst_t, val_per_g = rh.worst_group_loss(
                     val_losses,
-                    a_val.to(self.device),
+                    g_ids_val,
                     group_values=tuple(range(n_groups)),
                 )
 
             val_worst = float(val_worst_t.item()) if torch.isfinite(val_worst_t) else float("nan")
-            val_g0    = val_per_g.get(0, float("nan"))
-            val_g1    = val_per_g.get(1, float("nan"))
 
             # ---- checkpoint best by val worst-group loss ----
             if val_worst == val_worst and val_worst < best_val_worst:
                 best_val_worst = val_worst
                 best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
 
+            q_vals = {f"q{g}": float(q[g].item()) for g in range(n_groups)}
+            val_g_vals = {f"val_group{g}_loss": val_per_g.get(g, float("nan")) for g in range(n_groups)}
             row = {
                 "epoch":                  epoch,
                 "train_dro_loss":         epoch_dro_loss   / max(batch_count, 1),
                 "train_worst_group_loss": epoch_worst_loss / max(batch_count, 1),
-                "q0":                     float(q[0].item()),
-                "q1":                     float(q[1].item()),
+                **q_vals,
                 "val_worst_group_loss":   val_worst,
-                "val_group0_loss":        val_g0,
-                "val_group1_loss":        val_g1,
+                **val_g_vals,
             }
             rows.append(row)
 
             if epoch % 20 == 0 or epoch == 1:
+                q_str = ",".join(f"{q[g]:.3f}" for g in range(n_groups))
                 print(
                     f"[GroupDRO] epoch={epoch:4d} | "
                     f"dro={row['train_dro_loss']:.4f} | "
                     f"val_worst={val_worst:.4f} | "
-                    f"q=[{q[0]:.3f},{q[1]:.3f}]"
+                    f"q=[{q_str}]"
                 )
 
         print(f"[GroupDRO] Training done. Best val_worst={best_val_worst:.4f}")
