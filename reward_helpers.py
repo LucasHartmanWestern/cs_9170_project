@@ -188,6 +188,30 @@ def disadvantaged_group_from_alpha(
 
 
 
+def nearest_anchor_dist_and_idx(x: torch.Tensor, anchors: torch.Tensor, *, chunk: int = 512) -> tuple:
+    """
+    Returns (min_dist [T], nearest_idx [T]) for each x[i] to the closest anchor.
+    VRAM-safe via chunking.
+    """
+    device = x.device
+    anchors = anchors.to(device)
+    T = x.shape[0]
+    out_dist = torch.empty((T,), device=device, dtype=x.dtype)
+    out_idx  = torch.empty((T,), device=device, dtype=torch.long)
+    a2 = (anchors * anchors).sum(dim=1)  # [N]
+
+    for s in range(0, T, chunk):
+        xb = x[s:s + chunk]
+        x2 = (xb * xb).sum(dim=1, keepdim=True)
+        d2 = x2 + a2.unsqueeze(0) - 2.0 * (xb @ anchors.t())
+        d2 = torch.clamp(d2, min=0.0)
+        min_vals, min_idxs = d2.min(dim=1)
+        out_dist[s:s + chunk] = torch.sqrt(min_vals + 1e-12)
+        out_idx[s:s + chunk]  = min_idxs
+
+    return out_dist, out_idx
+
+
 def nearest_anchor_dist(x: torch.Tensor, anchors: torch.Tensor, *, chunk: int = 512) -> torch.Tensor:
     """
     Returns min Euclidean distance from each x[i] to any anchor.
@@ -256,6 +280,29 @@ def roc_auc_from_probs(y_true, p1: torch.Tensor) -> float:
         return float(roc_auc_score(y_np, p_np))
     except Exception:
         return float("nan")
+
+
+def soft_eo_gap(a, y_true, p1: torch.Tensor) -> torch.Tensor:
+    """
+    Soft (threshold-free) Equal Opportunity gap:
+    |E[p1 | y=1, a=0] - E[p1 | y=1, a=1]|
+    Uses raw probabilities instead of hard predictions — differentiable proxy for EO.
+    Returns NaN if a group has no positive samples.
+    """
+    device = p1.device
+    a = torch.as_tensor(a, device=device).long()
+    a01 = (a != 0).long()
+    y_true = y_true.to(device).long()
+    pos_mask = (y_true == 1)
+
+    means = {}
+    for g in (0, 1):
+        group_pos = (a01 == g) & pos_mask
+        if group_pos.sum().item() == 0:
+            return torch.tensor(float("nan"), device=device)
+        means[g] = p1[group_pos].mean()
+
+    return torch.abs(means[0] - means[1])
 
 
 def fairness_classification_metrics(

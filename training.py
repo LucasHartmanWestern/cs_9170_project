@@ -87,6 +87,7 @@ class Training:
         sigma_anchor: float = 0.85,
         rho_div: float = 0.60,
         hard_margin: float = 0.65,
+        use_uncertainty_anchors: bool = False,
 
         #misc
         seed=42,
@@ -117,6 +118,7 @@ class Training:
         self.w_div = w_div
         self.sigma_anchor = sigma_anchor
         self.rho_div = rho_div
+        self.use_uncertainty_anchors = use_uncertainty_anchors
         self.hard_margin = hard_margin
         self.curriculum_learning = curriculum_learning
         self.multiclass = multiclass
@@ -302,6 +304,7 @@ class Training:
         local_squash_k: float = 4.0,
         local_squash_center: float = 0.5,
         hard_from_beta: bool = False,
+        use_uncertainty_anchors: bool = False,
     ):
         """
         Reward combines:
@@ -355,6 +358,7 @@ class Training:
         ep_eo_tpr_diff = float("nan")
         ep_eod_max_diff = float("nan")
         ep_eod_avg_diff = float("nan")
+        ep_soft_eo_beta = float("nan")
 
         if mode == "fairness":
             a_theta_val = self.dataset.a_val
@@ -394,7 +398,7 @@ class Training:
                 else:
                     worst_loss_beta = float("nan")
 
-                # Classification-based fairness metrics on val
+                # Classification-based fairness metrics on val (hard threshold, for logging)
                 _fcls = rh.fairness_classification_metrics(
                     a_theta_val, y_val_bin, p1_beta_val, threshold=f1_thresh
                 )
@@ -402,6 +406,10 @@ class Training:
                 ep_eo_tpr_diff  = _fcls["eo_tpr_diff"]
                 ep_eod_max_diff = _fcls["eod_max_diff"]
                 ep_eod_avg_diff = _fcls["eod_avg_diff"]
+
+                # Soft EO for beta (threshold-free, used as reward signal)
+                _soft_eo_b = rh.soft_eo_gap(a_theta_val, y_val_bin, p1_beta_val)
+                ep_soft_eo_beta = float(_soft_eo_b.item()) if (_soft_eo_b == _soft_eo_b) else float("nan")
 
         # ---------------- Local term on Φ ----------------
         with torch.no_grad():
@@ -442,6 +450,13 @@ class Training:
                     _g_ids_a = torch.as_tensor(self.dataset.a_val, device=_loss_a.device).long() * 2 + y_val_bin
                     _worst_4g_a, _ = rh.worst_group_loss(_loss_a, _g_ids_a, group_values=(0, 1, 2, 3))
                 self.disadv_worst_loss_alpha = float(_worst_4g_a.item()) if _worst_4g_a == _worst_4g_a else float("nan")
+                # EO alpha baseline (computed once, used as reference for EO-direct global reward)
+                with torch.no_grad():
+                    _p1_a = rh.p1_from_agent(alpha_model, x_theta_val)
+                    _eo_fcls = rh.fairness_classification_metrics(
+                        self.dataset.a_val, y_val_bin, _p1_a, threshold=f1_thresh
+                    )
+                self.eo_alpha_baseline = float(_eo_fcls["eo_tpr_diff"])
 
             anchors = getattr(self, "disadv_pos_anchors", None)
 
@@ -449,6 +464,15 @@ class Training:
             if anchors is None or anchors.numel() == 0:
                 min_d = torch.full((x_phi.shape[0],), float("nan"), device=x_phi.device, dtype=x_phi.dtype)
                 anchor_reward = torch.zeros((x_phi.shape[0],), device=x_phi.device, dtype=x_phi.dtype)
+            elif use_uncertainty_anchors:
+                # Weight each anchor by beta's current uncertainty: 1 - p_beta(anchor).
+                # Generated samples near anchors where beta is wrong/uncertain get higher reward.
+                with torch.no_grad():
+                    p_beta_anchors = rh.p1_from_agent(beta_model, anchors)  # [N_anchors]
+                uncertainty_weights = (1.0 - p_beta_anchors).clamp(0.0, 1.0)
+                min_d, nearest_idx = rh.nearest_anchor_dist_and_idx(x_phi, anchors, chunk=512)
+                sig = torch.tensor(float(sigma_anchor), device=min_d.device, dtype=min_d.dtype)
+                anchor_reward = torch.exp(-0.5 * (min_d / (sig + 1e-8)) ** 2) * uncertainty_weights[nearest_idx]
             else:
                 min_d = rh.nearest_anchor_dist(x_phi, anchors, chunk=512)  # [T]
                 sig = torch.tensor(float(sigma_anchor), device=min_d.device, dtype=min_d.dtype)
@@ -492,14 +516,16 @@ class Training:
         local_clip_frac_1 = float((score_local >= 1.0 - 1e-12).float().mean().item())
 
         # ---------------- Combine global + local ----------------
-        # Global: sigmoid(10 * (alpha_loss - beta_loss)) ∈ (0, 1)
-        # 0.5 = no improvement over alpha, >0.5 = better, <0.5 = worse
+        # Global: sigmoid(10 * (soft_eo_alpha - soft_eo_beta)) ∈ (0, 1)
+        # Soft EO = |E[p1|y=1,a=0] - E[p1|y=1,a=1]|: threshold-free, less noisy than hard EO
+        # 0.5 = no change vs alpha, >0.5 = beta has smaller EO gap (better), <0.5 = worse
         if mode == "fairness":
-            alpha_baseline = getattr(self, "disadv_worst_loss_alpha", float("nan"))
-            if alpha_baseline == alpha_baseline and worst_loss_beta == worst_loss_beta:
-                global_term = float(torch.sigmoid(torch.tensor(10.0 * (alpha_baseline - worst_loss_beta))).item())
+            eo_alpha = getattr(self, "eo_alpha_baseline", float("nan"))
+            eo_beta  = ep_soft_eo_beta
+            if eo_alpha == eo_alpha and eo_beta == eo_beta:
+                global_term = float(torch.sigmoid(torch.tensor(10.0 * (eo_alpha - eo_beta))).item())
             else:
-                global_term = 0.5  # neutral fallback when losses unavailable
+                global_term = 0.5  # neutral fallback when soft EO unavailable
         else:
             with torch.no_grad():
                 f1_minority_alpha = rh.f1_from_probs(y_val_bin, p1_alpha_val, f1_thresh)
@@ -542,8 +568,10 @@ class Training:
                 "n_g0": int(n_g0),                              # count of samples from group 0
                 "n_g1": int(n_g1),                              # count of samples from group 1
                 "worst_loss_alpha_baseline": float(getattr(self, "disadv_worst_loss_alpha", float("nan"))),
+                "eo_alpha_baseline": float(getattr(self, "eo_alpha_baseline", float("nan"))),
                 "dp_diff": float(ep_dp_diff),                   # |P(ŷ=1|a=0) - P(ŷ=1|a=1)|
                 "eo_tpr_diff": float(ep_eo_tpr_diff),           # |TPR(a=0) - TPR(a=1)|
+                "soft_eo_beta": float(ep_soft_eo_beta),         # |E[p1|y=1,a=0] - E[p1|y=1,a=1]| (no threshold)
                 "eod_max_diff": float(ep_eod_max_diff),         # max(|TPR diff|, |FPR diff|)
                 "eod_avg_diff": float(ep_eod_avg_diff),         # avg(|TPR diff|, |FPR diff|)
             },
@@ -676,6 +704,7 @@ class Training:
                 local_squash_k=self.local_squash_k,
                 local_squash_center=self.local_squash_center,
                 hard_from_beta=self.hard_from_beta,
+                use_uncertainty_anchors=self.use_uncertainty_anchors,
             )
 
             # Truncate episode tensors and learn
@@ -784,7 +813,7 @@ class Training:
             run_stats,
             dataset=self.dataset,
             save_dir="training_runs",
-            compare_metric="meta.episode_return",
+            compare_metric="global.global_obj",
             beta_factory=beta_factory,
             seed=self.seed,
         ) as tracker:
@@ -858,7 +887,13 @@ class Training:
                 _worst_4g_a, _ = rh.worst_group_loss(_loss_a, _g_ids_a, group_values=(0, 1, 2, 3))
             self.disadv_worst_loss_alpha = float(_worst_4g_a.item()) if _worst_4g_a == _worst_4g_a else float("nan")
 
-            print(f"[disadv] group={disadv} per_g={per_g} worst_4g={self.disadv_worst_loss_alpha:.4f}")
+            # Soft EO alpha baseline (threshold-free, differentiable proxy for EO gap)
+            with torch.no_grad():
+                _p1_a_eo = rh.p1_from_agent(self.alpha_model, x_theta_val)
+                _soft_eo_a = rh.soft_eo_gap(self.dataset.a_val, y_theta_val, _p1_a_eo)
+            self.eo_alpha_baseline = float(_soft_eo_a.item()) if (_soft_eo_a == _soft_eo_a) else float("nan")
+
+            print(f"[disadv] group={disadv} per_g={per_g} worst_4g={self.disadv_worst_loss_alpha:.4f} soft_eo_alpha={self.eo_alpha_baseline:.4f}")
 
 
             # Build anchor set: real TRAIN points that are (y=1) AND (a=disadvantaged group)

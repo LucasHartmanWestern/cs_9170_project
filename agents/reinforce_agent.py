@@ -52,6 +52,11 @@ class ReinforceAgent():
         self.entropy_start = entropy_start
         self.entropy_end = entropy_end
         self.optimizer = torch.optim.Adam(self.policy_network.parameters(), lr=lr)
+
+        # Cross-episode running baseline (EMA of mean per-step reward)
+        self._baseline_ema = 0.0
+        self._baseline_var_ema = 1e-4  # EMA of squared deviation, for std estimate
+        self._baseline_decay = 0.95
         
         
 
@@ -75,14 +80,16 @@ class ReinforceAgent():
         states, actions, rewards, _, dones = experiences  # rewards,dones: [T]
         dones = dones.to(dtype=rewards.dtype)
 
-        # 1) Discounted returns 
+        # 1) Discounted returns
         T = rewards.shape[0]
         returns = torch.empty_like(rewards)              # [T]
         G = torch.zeros((), device=rewards.device)       # scalar on correct device
         for t in range(T - 1, -1, -1):                   # backward through time
             G = rewards[t] + self.gamma * G * (1.0 - dones[t])
             returns[t] = G
-        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+        # Scale only by within-episode std (do NOT center — baseline subtraction
+        # in learn_trajectory already handles cross-episode centering)
+        returns = returns / (returns.std() + 1e-8)
 
         # 3) Policy + log-probs
         mean, log_std = self.policy_network(states)          # [T, A], [T, A]
@@ -99,6 +106,19 @@ class ReinforceAgent():
         return loss
 
     def learn_trajectory(self, states, actions, rewards, next_states, dones, episode_idx):
+        # Update cross-episode running baseline (EMA of mean per-step reward)
+        ep_mean = rewards.mean().item()
+        d = self._baseline_decay
+        self._baseline_ema = d * self._baseline_ema + (1.0 - d) * ep_mean
+        self._baseline_var_ema = d * self._baseline_var_ema + (1.0 - d) * (ep_mean - self._baseline_ema) ** 2
+
+        # Subtract baseline to center rewards cross-episode:
+        # good episodes (ep_mean > baseline) get positive rewards → all actions reinforced
+        # bad episodes get negative rewards → all actions inhibited
+        # Warm up for 10 episodes before applying (EMA needs time to stabilize)
+        if episode_idx >= 10:
+            rewards = rewards - self._baseline_ema
+
         experiences_torch = (states, actions, rewards, next_states, dones)
         entropy_coef = self.entropy_annealing(episode_idx, self.total_episodes, start=self.entropy_start, end=self.entropy_end)
         loss = self.compute_loss(experiences_torch, entropy_coef=entropy_coef)

@@ -26,9 +26,11 @@
   "seeds": [42, 123, 999],
 
   "local_weights": {
-    "w_anchor": 1.0,
-    "w_hard": 0.0,
-    "w_div": 0.0
+    "w_anchor": 0.80,
+    "w_hard": 0.15,
+    "w_div": 0.05,
+    "sigma_anchor": 3.0,
+    "use_uncertainty_anchors": false
   },
 
   "ffnn": {

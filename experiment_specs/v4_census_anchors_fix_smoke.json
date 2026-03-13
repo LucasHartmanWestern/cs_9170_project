@@ -1,5 +1,5 @@
 {
-  "dataset_name": "credit_card",
+  "dataset_name": "census_income",
   "multiclass": false,
   "bias_pct": null,
 
@@ -13,7 +13,7 @@
   "pca_components": 10,
   "traj_length": 2000,
   "real_data_size": 3000,
-  "total_episodes": 6000,
+  "total_episodes": 200,
 
   "curriculum_learning": true,
   "use_delta_actions": true,
@@ -23,7 +23,7 @@
   "radius_clip": 3.0,
 
   "gen_both_classes": false,
-  "seeds": [42, 123, 999],
+  "seeds": [42],
 
   "local_weights": {
     "w_anchor": 0.80,

@@ -113,6 +113,7 @@ def run_spec_all_seeds(spec_path: str, device: str):
             sigma_anchor=float(lw.get("sigma_anchor", 0.85)),
             rho_div=float(lw.get("rho_div",       0.60)),
             hard_margin=float(lw.get("hard_margin", 0.65)),
+            use_uncertainty_anchors=bool(lw.get("use_uncertainty_anchors", False)),
         )
 
         trainer()
