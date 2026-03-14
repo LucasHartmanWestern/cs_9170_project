@@ -75,6 +75,7 @@ class Training:
 
         #feature space
         use_pca=True,
+        whiten_pca=False,
         bias_val=True,
 
         #two-phase generation
@@ -141,6 +142,7 @@ class Training:
         self.dataset_name = dataset_name
 
         self.use_pca = use_pca
+        self.whiten_pca = whiten_pca
         self.bias_val = bias_val
 
         self.minority_id = minority_id
@@ -184,6 +186,7 @@ class Training:
             seed=self.seed,
             device=self.device,
             use_pca=self.use_pca,
+            whiten_pca=self.whiten_pca,
         )
 
         # Curriculum schedule config

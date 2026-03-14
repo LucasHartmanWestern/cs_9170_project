@@ -98,6 +98,7 @@ def run_spec_all_seeds(spec_path: str, device: str):
             radius_clip=spec.get("radius_clip", None),
 
             use_pca=spec.get("use_pca", True),
+            whiten_pca=spec.get("whiten_pca", False),
             bias_val=spec.get("bias_val", True),
 
             ffnn=spec.get("ffnn"),

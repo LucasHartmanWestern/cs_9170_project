@@ -24,7 +24,7 @@ class Dataset:
             "protected_attributes": ["SEX", "AGE"]
         }
     }
-    def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False):
+    def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
         self.dataset_name = dataset_name
         self.MINORITY_ID = minority_id
         self.MAJORITY_ID = majority_id
@@ -36,6 +36,7 @@ class Dataset:
         self.protected_attributes = self.DATASET_REGISTRY[self.dataset_name].get("protected_attributes", [])
         self.multiclass=multiclass
         self.use_pca = bool(use_pca)
+        self.whiten_pca = bool(whiten_pca)
 
     @dataclass
     class GanView:
@@ -80,7 +81,8 @@ class Dataset:
         return PCA(
             n_components=n_components,
             svd_solver="full",          # deterministic basis for same data
-            random_state=self.seed,     # deterministic for randomized solvers 
+            random_state=self.seed,     # deterministic for randomized solvers
+            whiten=getattr(self, "whiten_pca", False),
         )
 
     def split_census_income(
