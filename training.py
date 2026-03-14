@@ -88,6 +88,15 @@ class Training:
         rho_div: float = 0.60,
         hard_margin: float = 0.65,
         use_uncertainty_anchors: bool = False,
+        uncertainty_warmup_episodes: int = 0,
+        sigma_calibration_factor: float | None = None,
+        anchor_refresh_interval: int = 0,
+        anchor_refresh_top_k: int = 500,
+        anchor_selection_mode: str = "all",  # "all" | "hard_positive" (lowest p_alpha)
+        anchor_selection_top_k: int = 200,   # max anchors to keep in hard_positive mode
+
+        #reward shaping
+        global_sigmoid_k: float = 10.0,
 
         #misc
         seed=42,
@@ -119,6 +128,13 @@ class Training:
         self.sigma_anchor = sigma_anchor
         self.rho_div = rho_div
         self.use_uncertainty_anchors = use_uncertainty_anchors
+        self.uncertainty_warmup_episodes = int(uncertainty_warmup_episodes)
+        self.sigma_calibration_factor = sigma_calibration_factor
+        self.anchor_refresh_interval = int(anchor_refresh_interval)
+        self.anchor_refresh_top_k = int(anchor_refresh_top_k)
+        self.anchor_selection_mode = anchor_selection_mode
+        self.anchor_selection_top_k = int(anchor_selection_top_k)
+        self.global_sigmoid_k = float(global_sigmoid_k)
         self.hard_margin = hard_margin
         self.curriculum_learning = curriculum_learning
         self.multiclass = multiclass
@@ -305,6 +321,7 @@ class Training:
         local_squash_center: float = 0.5,
         hard_from_beta: bool = False,
         use_uncertainty_anchors: bool = False,
+        global_sigmoid_k: float = 10.0,
     ):
         """
         Reward combines:
@@ -523,7 +540,7 @@ class Training:
             eo_alpha = getattr(self, "eo_alpha_baseline", float("nan"))
             eo_beta  = ep_soft_eo_beta
             if eo_alpha == eo_alpha and eo_beta == eo_beta:
-                global_term = float(torch.sigmoid(torch.tensor(10.0 * (eo_alpha - eo_beta))).item())
+                global_term = float(torch.sigmoid(torch.tensor(global_sigmoid_k * (eo_alpha - eo_beta))).item())
             else:
                 global_term = 0.5  # neutral fallback when soft EO unavailable
         else:
@@ -583,6 +600,7 @@ class Training:
                 "min_anchor_dist_mean": float(min_anchor_dist_mean), # mean min distance to an anchor
                 "local_clip_frac_0": float(local_clip_frac_0),       # fraction of local rewards clipped at zero
                 "local_clip_frac_1": float(local_clip_frac_1),       # fraction of local rewards clipped at one
+                "sigma_anchor_used": float(sigma_anchor),            # effective sigma this episode
             },
             "extra": {
                 "diag_frac_mid_conf": float(diag_frac_mid_conf),         # fraction of samples with confidence in mid (0.4, 0.6)
@@ -684,6 +702,37 @@ class Training:
 
             progress = (episode + 1) / self.episodes
 
+            # Dynamic anchor refresh: re-select most uncertain anchors from candidate pool
+            if (self.anchor_refresh_interval > 0
+                    and episode > 0
+                    and episode % self.anchor_refresh_interval == 0
+                    and getattr(self, "_anchor_candidate_pool", None) is not None
+                    and self._anchor_candidate_pool.shape[0] > 0):
+                with torch.no_grad():
+                    p_pool = rh.p1_from_agent(self.beta_model, self._anchor_candidate_pool)
+                uncertainty = torch.abs(p_pool - 0.5)  # low = uncertain (near decision boundary)
+                top_k = min(self.anchor_refresh_top_k, self._anchor_candidate_pool.shape[0])
+                _, uncertain_idx = uncertainty.topk(top_k, largest=False)
+                self.disadv_pos_anchors = self._anchor_candidate_pool[uncertain_idx].detach()
+                self._anchor_refresh_count = getattr(self, "_anchor_refresh_count", 0) + 1
+                # Recalibrate sigma for the new anchor set if auto-calibration is enabled
+                if self.sigma_calibration_factor is not None and self.disadv_pos_anchors.shape[0] >= 2:
+                    n_s = min(300, self.disadv_pos_anchors.shape[0])
+                    sub = self.disadv_pos_anchors[:n_s].to(self.device)
+                    D_r = torch.cdist(sub, sub)
+                    D_r.fill_diagonal_(float("inf"))
+                    median_d_r = float(D_r.min(dim=1).values.median().item())
+                    self.sigma_anchor = median_d_r * self.sigma_calibration_factor
+                print(f"[anchor_refresh] ep={episode} refresh #{self._anchor_refresh_count}: "
+                      f"{self.disadv_pos_anchors.shape[0]} most-uncertain anchors "
+                      f"sigma_anchor={self.sigma_anchor:.4f}")
+
+            # UA warm-up: disable uncertainty weighting for first N episodes
+            use_ua_this_episode = (
+                self.use_uncertainty_anchors
+                and (episode >= self.uncertainty_warmup_episodes)
+            )
+
             # Rewards
             rewards, diagnostics = self.compute_reward(
                 self.alpha_model,
@@ -704,7 +753,8 @@ class Training:
                 local_squash_k=self.local_squash_k,
                 local_squash_center=self.local_squash_center,
                 hard_from_beta=self.hard_from_beta,
-                use_uncertainty_anchors=self.use_uncertainty_anchors,
+                use_uncertainty_anchors=use_ua_this_episode,
+                global_sigmoid_k=self.global_sigmoid_k,
             )
 
             # Truncate episode tensors and learn
@@ -739,6 +789,8 @@ class Training:
                 "corr_local_delta": float(corr_local_delta),
                 "curriculum_stage": int(env.current_stage),
                 "lambda_t": float(lambda_t),
+                "anchor_refresh_count": int(getattr(self, "_anchor_refresh_count", 0)),
+                "ua_warmup_active": int(self.use_uncertainty_anchors and episode < self.uncertainty_warmup_episodes),
             }
             avg_reward = float(torch.mean(rewards).item())
             episode_return = float(rewards.sum().item())
@@ -897,24 +949,55 @@ class Training:
 
 
             # Build anchor set: real TRAIN points that are (y=1) AND (a=disadvantaged group)
-            a_train = self.dataset.a_train  
+            a_train = self.dataset.a_train
             disadv = int(self.disadv_group_value)
 
             anchor_mask = (y_theta_train == 1) & (a_train == disadv)
+            anchor_pool = x_theta_train[anchor_mask]
 
-            anchors = x_theta_train[anchor_mask]
+            # Store full candidate pool (pre-cap) for dynamic anchor refresh
+            self._anchor_candidate_pool = anchor_pool.detach()
+            self._anchor_refresh_count = 0
 
-            #cap anchors to keep distance calcs fast
             MAX_ANCHORS = 2000
-            if anchors.shape[0] > MAX_ANCHORS:
-                g = torch.Generator(device="cpu").manual_seed(self.seed)
-                idx = torch.randperm(anchors.shape[0], generator=g)[:MAX_ANCHORS]
-                anchors = anchors[idx.to(anchors.device)]
+            if self.anchor_selection_mode == "hard_positive":
+                # Select anchors where alpha is most uncertain/wrong:
+                # sort by p_alpha ascending (lowest = alpha gets it most wrong),
+                # so anchor proximity and hard_reward align toward the decision boundary.
+                with torch.no_grad():
+                    p_alpha_pool = rh.p1_from_agent(self.alpha_model, anchor_pool)
+                n_sel = min(self.anchor_selection_top_k, anchor_pool.shape[0])
+                _, hard_idx = p_alpha_pool.topk(n_sel, largest=False)
+                anchors = anchor_pool[hard_idx]
+                print(f"[anchor_selection] hard_positive: {n_sel}/{anchor_pool.shape[0]} anchors selected "
+                      f"(p_alpha range [{float(p_alpha_pool[hard_idx].min()):.3f}, "
+                      f"{float(p_alpha_pool[hard_idx].max()):.3f}])")
+            else:
+                # "all": random cap (original behaviour)
+                anchors = anchor_pool
+                if anchors.shape[0] > MAX_ANCHORS:
+                    g = torch.Generator(device="cpu").manual_seed(self.seed)
+                    idx = torch.randperm(anchors.shape[0], generator=g)[:MAX_ANCHORS]
+                    anchors = anchors[idx.to(anchors.device)]
 
             self.disadv_pos_anchors = anchors.detach()
             self._cached_anchors_used = int(self.disadv_pos_anchors.shape[0])
 
-            print(f"Anchors: {self.disadv_pos_anchors.shape[0]} (disadv={disadv})")
+            # Sigma auto-calibration: set sigma to median nearest-neighbour distance * factor
+            if self.sigma_calibration_factor is not None and anchors.shape[0] >= 2:
+                n_sample = min(300, anchors.shape[0])
+                g_cal = torch.Generator(device="cpu").manual_seed(self.seed)
+                cal_idx = torch.randperm(anchors.shape[0], generator=g_cal)[:n_sample]
+                sub = anchors[cal_idx].to(self.device)
+                D_cal = torch.cdist(sub, sub)
+                D_cal.fill_diagonal_(float("inf"))
+                nn_dists = D_cal.min(dim=1).values
+                median_d = float(nn_dists.median().item())
+                self.sigma_anchor = median_d * self.sigma_calibration_factor
+                print(f"[sigma_calib] n_anchors={anchors.shape[0]} median_nn_dist={median_d:.4f} "
+                      f"sigma_anchor={self.sigma_anchor:.4f} (factor={self.sigma_calibration_factor})")
+
+            print(f"Anchors: {self.disadv_pos_anchors.shape[0]} (disadv={disadv}) sigma_anchor={self.sigma_anchor:.4f}")
 
             self.tracker.save_alpha_state_dict(
                 self.alpha_model, self.ffnn_config, self.pca_components

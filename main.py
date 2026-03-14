@@ -114,6 +114,14 @@ def run_spec_all_seeds(spec_path: str, device: str):
             rho_div=float(lw.get("rho_div",       0.60)),
             hard_margin=float(lw.get("hard_margin", 0.65)),
             use_uncertainty_anchors=bool(lw.get("use_uncertainty_anchors", False)),
+            uncertainty_warmup_episodes=int(lw.get("uncertainty_warmup_episodes", 0)),
+            sigma_calibration_factor=lw.get("sigma_calibration_factor", None),
+            anchor_refresh_interval=int(lw.get("anchor_refresh_interval", 0)),
+            anchor_refresh_top_k=int(lw.get("anchor_refresh_top_k", 500)),
+            anchor_selection_mode=str(lw.get("anchor_selection_mode", "all")),
+            anchor_selection_top_k=int(lw.get("anchor_selection_top_k", 200)),
+
+            global_sigmoid_k=float(rs.get("global_sigmoid_k", 10.0)),
         )
 
         trainer()

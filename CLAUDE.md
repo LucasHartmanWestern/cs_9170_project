@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Experiment Findings
+
+See **`EXPERIMENTS.md`** for the full record of what has worked, what has not, baseline
+comparisons, and planned next experiments. Update it after each significant result.
+
 ## Project Overview
 
 Fairness-aware synthetic data generation using reinforcement learning. An RL agent (REINFORCE/PPO) learns to generate synthetic training samples that improve classifier fairness (e.g., Equal Opportunity, Equalized Odds) while maintaining utility (accuracy/F1). Uses curriculum learning to progressively increase PCA dimensionality during training.
