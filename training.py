@@ -99,6 +99,9 @@ class Training:
         #reward shaping
         global_sigmoid_k: float = 10.0,
 
+        #beta warm-start
+        beta_reset_interval: int = 1,  # 1 = reset every episode (default); N>1 = warm-start
+
         #misc
         seed=42,
         device='cpu',
@@ -137,6 +140,7 @@ class Training:
         self.anchor_selection_top_k = int(anchor_selection_top_k)
         self.global_sigmoid_k = float(global_sigmoid_k)
         self.hard_margin = hard_margin
+        self.beta_reset_interval = max(1, int(beta_reset_interval))
         self.curriculum_learning = curriculum_learning
         self.multiclass = multiclass
         self.dataset_name = dataset_name
@@ -664,7 +668,8 @@ class Training:
             else:
                 state = env.reset()
 
-            self.beta_model.reset()
+            if episode % self.beta_reset_interval == 0:
+                self.beta_model.reset()
 
             for t in range(self.traj_length):
                 action = agent.predict(state)

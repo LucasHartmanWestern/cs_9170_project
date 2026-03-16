@@ -123,6 +123,7 @@ def run_spec_all_seeds(spec_path: str, device: str):
             anchor_selection_top_k=int(lw.get("anchor_selection_top_k", 200)),
 
             global_sigmoid_k=float(rs.get("global_sigmoid_k", 10.0)),
+            beta_reset_interval=int(spec.get("beta_reset_interval", 1)),
         )
 
         trainer()
