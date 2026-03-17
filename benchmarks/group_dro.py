@@ -58,6 +58,8 @@ class GroupDROTrainer:
         group_dro: dict = None,
         # misc
         multiclass: bool = False,
+        use_pca: bool = False,
+        pca_components: int = 10,
     ):
         self.exp_group = exp_group
         self.spec_name = spec_name
@@ -91,6 +93,9 @@ class GroupDROTrainer:
         # FFNN architecture overrides (applied later once feature_dim is known)
         self.ffnn_overrides = ffnn or {}
 
+        self.use_pca = use_pca
+        self.pca_components = pca_components
+
         # Dataset (feature_dim resolved after get_data_splits)
         self.dataset = Dataset(
             dataset_name,
@@ -98,10 +103,10 @@ class GroupDROTrainer:
             minority_id=minority_id,
             majority_id=majority_id,
             third_id=third_id,
-            pca_components=10,       # placeholder; identity when use_pca=False
+            pca_components=pca_components,
             seed=seed,
             device=self.device,
-            use_pca=False,
+            use_pca=use_pca,
         )
 
     # ------------------------------------------------------------------ #
@@ -115,7 +120,7 @@ class GroupDROTrainer:
         x_train, x_val, x_test, y_train, y_val, y_test = self.dataset.get_data_splits(
             train_size=self.real_data_size,
             bias_pct=self.bias_pct,
-            pca_components=10,          # ignored when use_pca=False
+            pca_components=self.pca_components,
             drop_protected=False,
             protected_cols=self.dataset.protected_attributes,
             bias_val=True,
@@ -196,7 +201,12 @@ class GroupDROTrainer:
             print(f"[GroupDRO] Best model saved -> {best_model_path}")
 
             # ---- alpha (ERM) for comparison in TestSuite ----
-            alpha_agent = self._train_erm(ffnn_config, x_train, y_train)
+            # Use ffnn_overrides for epochs/lr so alpha matches training.py's ERM config,
+            # not the DRO training config (which uses 200 epochs by default).
+            erm_config = dict(ffnn_config)
+            erm_config["epochs"] = int(self.ffnn_overrides.get("epochs", 10))
+            erm_config["learning_rate"] = float(self.ffnn_overrides.get("learning_rate", 1e-3))
+            alpha_agent = self._train_erm(erm_config, x_train, y_train)
 
             # ---- wrap trained model as FFNNAgent for TestSuite ----
             beta_agent = FFNNAgent(**ffnn_config)

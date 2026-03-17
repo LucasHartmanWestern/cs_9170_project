@@ -262,6 +262,33 @@ def diversity_penalty(x: torch.Tensor, *, max_pts: int = 128, rho: float = 0.5) 
     return sim.mean()
 
 
+def group_conditional_beta_loss(
+    x: torch.Tensor,
+    y: torch.Tensor,
+    beta_model,
+    max_bce: float = 0.693,
+) -> torch.Tensor:
+    """
+    DVRL-inspired local reward: beta's BCE loss on each generated sample,
+    normalized to [0, 1] by max_bce (default ln(2) ≈ 0.693, loss at random chance).
+
+    High reward = beta currently fails here = high value for retraining.
+    Intended for minority-class trajectories where all y==1 and seed points
+    are filtered to the disadvantaged group before episode start (Option B).
+
+    Args:
+        x:         [T, D] generated samples in PCA space
+        y:         [T] labels (all 1s for minority phase)
+        beta_model: current beta FFNNAgent
+        max_bce:   normalization ceiling (default ln2 = random-chance loss)
+    Returns:
+        [T] per-sample rewards in [0, 1]
+    """
+    p1 = p1_from_agent(beta_model, x)
+    losses = bce_per_sample_from_probs(y.float(), p1)
+    return torch.clamp(losses / max_bce, 0.0, 1.0)
+
+
 def acc_from_probs(y_true, p1: torch.Tensor, threshold: float = 0.5) -> float:
     """Binary accuracy from probabilities."""
     y_true = y_true.to(p1.device).long()

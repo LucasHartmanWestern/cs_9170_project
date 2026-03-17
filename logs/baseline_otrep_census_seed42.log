@@ -1,0 +1,33 @@
+[run_baseline] baseline=gaussian_ot_repair
+[run_baseline] spec=experiment_specs/baseline_otrep_census_seed42.json
+[run_baseline] device=cuda:1
+[run_baseline] exp_group=BASELINE_gaussian_ot_repair_baseline_otrep_census_seed42_aff2237e__G202603161746
+[run_baseline] seeds=[42]
+
+[run_baseline] ---- seed=42 ----
+[TRAIN] size=3000, minority=722 (24.07%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+[OTRepair] exp_group=BASELINE_gaussian_ot_repair_baseline_otrep_census_seed42_aff2237e__G202603161746  seed=42
+[OTRepair] dataset=census_income  feature_dim=103
+[OTRepair] ot_config={'lam': 1.0, 'n_groups': 2, 'cov_reg': 1e-05, 'barycenter_iters': 100, 'repair_test': True}
+[OTRepair] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_baseline_otrep_census_seed42_aff2237e__G202603161746/seed_42
+[OTRepair] Group 0: n=1010, ||μ||=2.0001, cov_diag=[0.0000, 1.0084]
+[OTRepair] Group 1: n=1990, ||μ||=2.0729, cov_diag=[0.0000, 1.3477]
+[OTRepair] Barycenter computed. μ* norm=1.8318
+[OTRepair] Group 0: A_g computed, ||A_g - I||=772.4831
+[OTRepair] Group 1: A_g computed, ||A_g - I||=610.9527
+[OTRepair] Test features repaired.
+FFNN Using device: cuda:1
+[OTRepair] ERM trained on repaired features.
+FFNN Using device: cuda:1
+[OTRepair] Alpha (ERM on original features) trained.
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_baseline_otrep_census_seed42_aff2237e__G202603161746/seed_42/otrep_model.pt
+
+[TEST] Alpha -> F1(min)=0.5392 | F1(maj)=0.8676 | F1(weighted)=0.7885 | F1(macro)=0.7034 | Brier=0.1710
+[TEST] Beta  -> F1(min)=0.5989 | F1(maj)=0.8689 | F1(weighted)=0.8039 | F1(macro)=0.7339 | Brier=0.1552
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_baseline_otrep_census_seed42_aff2237e__G202603161746/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_baseline_otrep_census_seed42_aff2237e__G202603161746/final_test_metrics.csv
+[OTRepair] Done. seed=42 | time=26.6s
+[OTRepair] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_baseline_otrep_census_seed42_aff2237e__G202603161746/seed_42

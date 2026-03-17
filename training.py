@@ -96,8 +96,16 @@ class Training:
         anchor_selection_mode: str = "all",  # "all" | "hard_positive" (lowest p_alpha)
         anchor_selection_top_k: int = 200,   # max anchors to keep in hard_positive mode
 
+        #DVRL-inspired local reward (v10)
+        use_dvrl_local: bool = False,        # replace anchor/hard/div with beta-loss local reward
+        dvrl_max_bce: float = 0.693,         # normalization ceiling: ln(2) = random-chance BCE
+
+        #asymmetric phase episodes (gen_both_classes only)
+        phase2_episodes: int | None = None,  # None = use total_episodes for both phases
+
         #reward shaping
         global_sigmoid_k: float = 10.0,
+        utility_guard_min_factor: float = 1.0,  # 1.0 = disabled; <1.0 enables multiplicative utility guard
 
         #beta warm-start
         beta_reset_interval: int = 1,  # 1 = reset every episode (default); N>1 = warm-start
@@ -138,7 +146,11 @@ class Training:
         self.anchor_refresh_top_k = int(anchor_refresh_top_k)
         self.anchor_selection_mode = anchor_selection_mode
         self.anchor_selection_top_k = int(anchor_selection_top_k)
+        self.use_dvrl_local = bool(use_dvrl_local)
+        self.dvrl_max_bce = float(dvrl_max_bce)
+        self.phase2_episodes = int(phase2_episodes) if phase2_episodes is not None else None
         self.global_sigmoid_k = float(global_sigmoid_k)
+        self.utility_guard_min_factor = float(utility_guard_min_factor)
         self.hard_margin = hard_margin
         self.beta_reset_interval = max(1, int(beta_reset_interval))
         self.curriculum_learning = curriculum_learning
@@ -329,6 +341,9 @@ class Training:
         hard_from_beta: bool = False,
         use_uncertainty_anchors: bool = False,
         global_sigmoid_k: float = 10.0,
+        use_dvrl_local: bool = False,
+        dvrl_max_bce: float = 0.693,
+        utility_guard_min_factor: float = 1.0,
     ):
         """
         Reward combines:
@@ -474,6 +489,8 @@ class Training:
                     _g_ids_a = torch.as_tensor(self.dataset.a_val, device=_loss_a.device).long() * 2 + y_val_bin
                     _worst_4g_a, _ = rh.worst_group_loss(_loss_a, _g_ids_a, group_values=(0, 1, 2, 3))
                 self.disadv_worst_loss_alpha = float(_worst_4g_a.item()) if _worst_4g_a == _worst_4g_a else float("nan")
+                self.bce_mean_alpha_overall = float(_loss_a.mean().item())
+                self.auc_alpha_overall = rh.roc_auc_from_probs(y_val_bin, p1_alpha_val)
                 # EO alpha baseline (computed once, used as reference for EO-direct global reward)
                 with torch.no_grad():
                     _p1_a = rh.p1_from_agent(alpha_model, x_theta_val)
@@ -482,56 +499,68 @@ class Training:
                     )
                 self.eo_alpha_baseline = float(_eo_fcls["eo_tpr_diff"])
 
-            anchors = getattr(self, "disadv_pos_anchors", None)
-
-            # anchor proximity
-            if anchors is None or anchors.numel() == 0:
-                min_d = torch.full((x_phi.shape[0],), float("nan"), device=x_phi.device, dtype=x_phi.dtype)
-                anchor_reward = torch.zeros((x_phi.shape[0],), device=x_phi.device, dtype=x_phi.dtype)
-            elif use_uncertainty_anchors:
-                # Weight each anchor by beta's current uncertainty: 1 - p_beta(anchor).
-                # Generated samples near anchors where beta is wrong/uncertain get higher reward.
-                with torch.no_grad():
-                    p_beta_anchors = rh.p1_from_agent(beta_model, anchors)  # [N_anchors]
-                uncertainty_weights = (1.0 - p_beta_anchors).clamp(0.0, 1.0)
-                min_d, nearest_idx = rh.nearest_anchor_dist_and_idx(x_phi, anchors, chunk=512)
-                sig = torch.tensor(float(sigma_anchor), device=min_d.device, dtype=min_d.dtype)
-                anchor_reward = torch.exp(-0.5 * (min_d / (sig + 1e-8)) ** 2) * uncertainty_weights[nearest_idx]
-            else:
-                min_d = rh.nearest_anchor_dist(x_phi, anchors, chunk=512)  # [T]
-                sig = torch.tensor(float(sigma_anchor), device=min_d.device, dtype=min_d.dtype)
-                anchor_reward = torch.exp(-0.5 * (min_d / (sig + 1e-8)) ** 2)
-
-            # hard-positive reward
-            hm = float(hard_margin)
-            hard_reward = ((hm - p) / max(hm, 1e-8)).clamp(0.0, 1.0)  # [T]
-
-            # diversity penalty (scalar)
-            div_pen = rh.diversity_penalty(x_phi, max_pts=128, rho=rho_div)  # scalar
-
-            # diversity-only isolation: invert penalty to positive reward
-            if self.w_anchor == 0.0 and self.w_hard == 0.0 and self.w_div > 0.0:
-                raw_local = (1.0 - w_div * div_pen).expand_as(hard_reward)
-            else:
-                raw_local = (
-                    w_anchor * anchor_reward +
-                    w_hard   * hard_reward -
-                    w_div    * div_pen
+            if use_dvrl_local:
+                # DVRL-inspired local reward: beta's BCE loss on each generated sample.
+                # High loss = beta currently fails here = high retraining value.
+                # Seeds are pre-filtered to disadvantaged minority (Option B in training
+                # setup), so all generated samples are implicitly group-targeted.
+                score_local = rh.group_conditional_beta_loss(
+                    x_phi, y_phi, beta_model, max_bce=dvrl_max_bce
                 )
-
-            if local_squash_k > 0:
-                score_local = torch.sigmoid(local_squash_k * (raw_local - local_squash_center))
+                anchor_reward_mean = float("nan")
+                hard_reward_mean = float("nan")
+                div_pen_mean = float("nan")
+                min_anchor_dist_mean = float("nan")
             else:
-                score_local = raw_local.clamp(0.0, 1.0)
+                # anchor/hard/diversity local reward (legacy)
+                anchors = getattr(self, "disadv_pos_anchors", None)
 
-            # local diagnostics
-            anchor_reward_mean = float(anchor_reward.mean().item())
-            hard_reward_mean = float(hard_reward.mean().item())
-            div_pen_mean = float(div_pen.item()) if torch.is_tensor(div_pen) else float(div_pen)
+                # anchor proximity
+                if anchors is None or anchors.numel() == 0:
+                    min_d = torch.full((x_phi.shape[0],), float("nan"), device=x_phi.device, dtype=x_phi.dtype)
+                    anchor_reward = torch.zeros((x_phi.shape[0],), device=x_phi.device, dtype=x_phi.dtype)
+                elif use_uncertainty_anchors:
+                    with torch.no_grad():
+                        p_beta_anchors = rh.p1_from_agent(beta_model, anchors)  # [N_anchors]
+                    uncertainty_weights = (1.0 - p_beta_anchors).clamp(0.0, 1.0)
+                    min_d, nearest_idx = rh.nearest_anchor_dist_and_idx(x_phi, anchors, chunk=512)
+                    sig = torch.tensor(float(sigma_anchor), device=min_d.device, dtype=min_d.dtype)
+                    anchor_reward = torch.exp(-0.5 * (min_d / (sig + 1e-8)) ** 2) * uncertainty_weights[nearest_idx]
+                else:
+                    min_d = rh.nearest_anchor_dist(x_phi, anchors, chunk=512)  # [T]
+                    sig = torch.tensor(float(sigma_anchor), device=min_d.device, dtype=min_d.dtype)
+                    anchor_reward = torch.exp(-0.5 * (min_d / (sig + 1e-8)) ** 2)
 
-            if torch.isfinite(min_d).any():
-                md = min_d[torch.isfinite(min_d)]
-                min_anchor_dist_mean = float(md.mean().item())
+                # hard-positive reward
+                hm = float(hard_margin)
+                hard_reward = ((hm - p) / max(hm, 1e-8)).clamp(0.0, 1.0)  # [T]
+
+                # diversity penalty (scalar)
+                div_pen = rh.diversity_penalty(x_phi, max_pts=128, rho=rho_div)  # scalar
+
+                # diversity-only isolation: invert penalty to positive reward
+                if self.w_anchor == 0.0 and self.w_hard == 0.0 and self.w_div > 0.0:
+                    raw_local = (1.0 - w_div * div_pen).expand_as(hard_reward)
+                else:
+                    raw_local = (
+                        w_anchor * anchor_reward +
+                        w_hard   * hard_reward -
+                        w_div    * div_pen
+                    )
+
+                if local_squash_k > 0:
+                    score_local = torch.sigmoid(local_squash_k * (raw_local - local_squash_center))
+                else:
+                    score_local = raw_local.clamp(0.0, 1.0)
+
+                # local diagnostics
+                anchor_reward_mean = float(anchor_reward.mean().item())
+                hard_reward_mean = float(hard_reward.mean().item())
+                div_pen_mean = float(div_pen.item()) if torch.is_tensor(div_pen) else float(div_pen)
+
+                if torch.isfinite(min_d).any():
+                    md = min_d[torch.isfinite(min_d)]
+                    min_anchor_dist_mean = float(md.mean().item())
 
         mean_local = float(score_local.mean().item())
 
@@ -540,21 +569,35 @@ class Training:
         local_clip_frac_1 = float((score_local >= 1.0 - 1e-12).float().mean().item())
 
         # ---------------- Combine global + local ----------------
-        # Global: sigmoid(10 * (soft_eo_alpha - soft_eo_beta)) ∈ (0, 1)
-        # Soft EO = |E[p1|y=1,a=0] - E[p1|y=1,a=1]|: threshold-free, less noisy than hard EO
-        # 0.5 = no change vs alpha, >0.5 = beta has smaller EO gap (better), <0.5 = worse
+        # Global: sigmoid(k * (worst_loss_alpha - worst_loss_beta)) ∈ (0, 1)
+        # 0.5 = no change vs alpha, >0.5 = beta has lower worst-group loss (better), <0.5 = worse
+        # Uses 4-group (group × class) worst-case loss: directly aligned with DRO objective.
         if mode == "fairness":
-            eo_alpha = getattr(self, "eo_alpha_baseline", float("nan"))
-            eo_beta  = ep_soft_eo_beta
-            if eo_alpha == eo_alpha and eo_beta == eo_beta:
-                global_term = float(torch.sigmoid(torch.tensor(global_sigmoid_k * (eo_alpha - eo_beta))).item())
+            wgl_alpha = getattr(self, "disadv_worst_loss_alpha", float("nan"))
+            wgl_beta  = worst_loss_beta
+            if wgl_alpha == wgl_alpha and wgl_beta == wgl_beta:
+                global_term = float(torch.sigmoid(torch.tensor(global_sigmoid_k * (wgl_alpha - wgl_beta))).item())
             else:
-                global_term = 0.5  # neutral fallback when soft EO unavailable
+                global_term = 0.5  # neutral fallback when worst-group loss unavailable
         else:
             with torch.no_grad():
                 f1_minority_alpha = rh.f1_from_probs(y_val_bin, p1_alpha_val, f1_thresh)
             delta_f1 = float(f1_minority_beta - f1_minority_alpha)
             global_term = float(torch.sigmoid(torch.tensor(10.0 * delta_f1)).item())
+
+        # Utility guard: scale global_term down when beta's AUC regresses vs alpha.
+        # utility_factor = clamp(auc_beta / auc_alpha, min_factor, 1.0)
+        # = 1.0 when beta ≥ alpha AUC (no penalty); <1.0 when beta is worse.
+        # min_factor prevents reward from collapsing to zero (keeps gradient signal).
+        # Disabled when utility_guard_min_factor == 1.0 (default).
+        auc_alpha_ref = getattr(self, "auc_alpha_overall", float("nan"))
+        utility_factor = 1.0
+        if (utility_guard_min_factor < 1.0
+                and auc_alpha_ref == auc_alpha_ref and auc_alpha_ref > 0
+                and auc_beta == auc_beta):
+            raw_factor = auc_beta / auc_alpha_ref
+            utility_factor = float(max(utility_guard_min_factor, min(1.0, raw_factor)))
+        global_term = global_term * utility_factor
 
         # Spread both signals across all steps so cumulative sums stay comparable:
         # G_0 ≈ (1 - λ) * mean(local) + λ * global
@@ -573,8 +616,9 @@ class Training:
         # ---------------- Lean diagnostics dict ----------------
         diagnostics = {
             "global": {
-                "global_obj": float(global_term),   # sigmoid(10*(alpha_loss - beta_loss)), ∈ (0,1)
-                "local_reward": float(mean_local),  # mean local reward per step
+                "global_obj": float(global_term),        # fairness signal × utility_factor
+                "local_reward": float(mean_local),       # mean local reward per step
+                "utility_factor": float(utility_factor), # multiplicative utility guard (1.0 = no penalty)
             },
             "utility": {
                 "f1_macro_beta": float(f1_macro_beta),         # macro F1 for beta model
@@ -632,8 +676,11 @@ class Training:
         y_theta_val,
         prior_synthetic: tuple | None,   # (x_syn, y_syn) from earlier phase
         phase_label: str,                 # "phase1_class1" or "phase2_class0"
+        episodes: int | None = None,      # override self.episodes for this phase
     ) -> tuple:
         """Run a full episode loop for one phase. Returns (best_x_syn, best_y_syn) tensors."""
+        n_episodes = episodes if episodes is not None else self.episodes
+
         # Clear correlation buffers at start of each phase
         self._local_buf.clear()
         self._delta_buf.clear()
@@ -643,10 +690,10 @@ class Training:
         best_y_syn = None
 
         print(f"\n{'='*60}")
-        print(f"[Phase] Starting {phase_label} | target_class={target_class} | episodes={self.episodes}")
+        print(f"[Phase] Starting {phase_label} | target_class={target_class} | episodes={n_episodes}")
         print(f"{'='*60}")
 
-        for episode in range(self.episodes):
+        for episode in range(n_episodes):
             A = self.pca_components
             if self.curriculum_learning:
                 D = 1 + A + A
@@ -708,7 +755,7 @@ class Training:
             y_hybrid = torch.cat(parts_y)
             self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
 
-            progress = (episode + 1) / self.episodes
+            progress = (episode + 1) / n_episodes
 
             # Dynamic anchor refresh: re-select most uncertain anchors from candidate pool
             if (self.anchor_refresh_interval > 0
@@ -763,6 +810,9 @@ class Training:
                 hard_from_beta=self.hard_from_beta,
                 use_uncertainty_anchors=use_ua_this_episode,
                 global_sigmoid_k=self.global_sigmoid_k,
+                use_dvrl_local=self.use_dvrl_local,
+                dvrl_max_bce=self.dvrl_max_bce,
+                utility_guard_min_factor=self.utility_guard_min_factor,
             )
 
             # Truncate episode tensors and learn
@@ -820,13 +870,15 @@ class Training:
                 phase_label=phase_label,
             )
 
-            # Track best in-memory for return
-            if episode_return > best_phase_reward:
-                best_phase_reward = episode_return
+            # Track best in-memory for return — use global_obj (fairness metric) not episode_return,
+            # so the synthetic data returned to the final combined test is from the best fairness episode.
+            best_select_val = diagnostics.get("global", {}).get("global_obj", episode_return)
+            if best_select_val > best_phase_reward:
+                best_phase_reward = best_select_val
                 best_x_syn = x_phi_t.detach().clone()
                 best_y_syn = y_phi_t.detach().clone()
 
-        print(f"[Phase] Finished {phase_label} | best episode_return={best_phase_reward:.4f}")
+        print(f"[Phase] Finished {phase_label} | best global_obj={best_phase_reward:.4f}")
         return (best_x_syn, best_y_syn)
 
     # ---------------- Training loop ----------------
@@ -909,8 +961,8 @@ class Training:
             self.alpha_model = FFNNAgent(**self.ffnn_config)
             self.beta_model = FFNNAgent(**self.ffnn_config)
 
-            minority_mask = (y_theta_train == 1)
-            real_minority_samples = x_theta_train[minority_mask]
+            # real_minority_samples is populated after disadv_group_value is known (see below)
+            real_minority_samples = None  # placeholder; set after alpha/disadv setup
 
             total_data = len(x_theta_train) + self.traj_length
             real_percentage = (len(x_theta_train) / total_data) * 100
@@ -946,6 +998,7 @@ class Training:
                 _g_ids_a = torch.as_tensor(self.dataset.a_val, device=_loss_a.device).long() * 2 + _y_long
                 _worst_4g_a, _ = rh.worst_group_loss(_loss_a, _g_ids_a, group_values=(0, 1, 2, 3))
             self.disadv_worst_loss_alpha = float(_worst_4g_a.item()) if _worst_4g_a == _worst_4g_a else float("nan")
+            self.auc_alpha_overall = rh.roc_auc_from_probs(_y_long, _p1_a)
 
             # Soft EO alpha baseline (threshold-free, differentiable proxy for EO gap)
             with torch.no_grad():
@@ -959,6 +1012,12 @@ class Training:
             # Build anchor set: real TRAIN points that are (y=1) AND (a=disadvantaged group)
             a_train = self.dataset.a_train
             disadv = int(self.disadv_group_value)
+
+            # Option B: seed env trajectories only from disadvantaged minority samples so
+            # all generated samples are implicitly targeted at the right group (no group
+            # labels needed at step time for DVRL local reward).
+            disadv_minority_mask = (y_theta_train == 1) & (a_train == disadv)
+            real_minority_samples = x_theta_train[disadv_minority_mask]
 
             anchor_mask = (y_theta_train == 1) & (a_train == disadv)
             anchor_pool = x_theta_train[anchor_mask]
@@ -1101,8 +1160,10 @@ class Training:
                 self._cached_anchors_used = int(self.disadv_pos_anchors.shape[0])
                 print(f"Phase 2 anchors: {self.disadv_pos_anchors.shape[0]} (y=0 & disadv={disadv})")
 
-                # Seed samples for env.reset() — majority class
-                real_majority_samples = x_theta_train[y_theta_train == 0]
+                # Seed samples for env.reset() — disadvantaged group y=0 only (mirrors Option B)
+                real_majority_samples = x_theta_train[(y_theta_train == 0) & (a_train == disadv)]
+                if real_majority_samples.shape[0] == 0:
+                    real_majority_samples = x_theta_train[y_theta_train == 0]
 
                 # Fresh RL agent for phase 2
                 phase2_agent = ReinforceAgent(**self.reinforce_config)
@@ -1122,6 +1183,7 @@ class Training:
                     y_theta_val=y_theta_val,
                     prior_synthetic=best_syn_1,
                     phase_label="phase2_class0",
+                    episodes=self.phase2_episodes,
                 )
 
             # === Final test ===

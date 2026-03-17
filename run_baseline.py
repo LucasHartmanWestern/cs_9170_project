@@ -75,6 +75,8 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 ffnn=spec.get("ffnn"),
                 group_dro=spec.get("group_dro"),
                 multiclass=spec.get("multiclass", False),
+                use_pca=spec.get("use_pca", False),
+                pca_components=spec.get("pca_components", 10),
             )
         elif baseline == "gaussian_ot_repair":
             from benchmarks.gaussian_ot_repair import GaussianOTRepairTrainer
@@ -92,6 +94,8 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 ffnn=spec.get("ffnn"),
                 ot_repair=spec.get("ot_repair"),
                 multiclass=spec.get("multiclass", False),
+                use_pca=spec.get("use_pca", False),
+                pca_components=spec.get("pca_components", 10),
             )
         else:
             raise ValueError(

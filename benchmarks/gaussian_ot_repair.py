@@ -154,6 +154,8 @@ class GaussianOTRepairTrainer:
         ot_repair:    dict = None,
         # misc
         multiclass:   bool = False,
+        use_pca:      bool = False,
+        pca_components: int = 10,
     ):
         self.exp_group     = exp_group
         self.spec_name     = spec_name
@@ -183,6 +185,8 @@ class GaussianOTRepairTrainer:
         }
         self.ot_config  = {**DEFAULT_OT, **(ot_repair or {})}
         self.ffnn_overrides = ffnn or {}
+        self.use_pca = use_pca
+        self.pca_components = pca_components
 
         self.dataset = Dataset(
             dataset_name,
@@ -190,10 +194,10 @@ class GaussianOTRepairTrainer:
             minority_id  = minority_id,
             majority_id  = majority_id,
             third_id     = third_id,
-            pca_components = 10,   # placeholder; identity when use_pca=False
+            pca_components = pca_components,
             seed         = seed,
             device       = self.device,
-            use_pca      = False,
+            use_pca      = use_pca,
         )
 
     # ---------------------------------------------------------------- #
@@ -205,7 +209,7 @@ class GaussianOTRepairTrainer:
         x_train, x_val, x_test, y_train, y_val, y_test = self.dataset.get_data_splits(
             train_size     = self.real_data_size,
             bias_pct       = self.bias_pct,
-            pca_components = 10,
+            pca_components = self.pca_components,
             drop_protected = False,
             protected_cols = self.dataset.protected_attributes,
             bias_val       = True,

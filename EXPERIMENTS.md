@@ -102,38 +102,88 @@ v6 specs are still valid but lower priority.
 
 ---
 
-### v7 — Hard-Positive Anchors ⬜ Next to run
+### v7 — Hard-Positive Anchors ❌ Inconclusive
 
-**Goal:** Fix the root cause of local/global reward misalignment identified in Training
-Dynamics Analysis Finding 4. Make anchor proximity and hard_reward point at the same region.
+**Goal:** Fix the root cause of local/global reward misalignment (Finding 4). Select anchors
+from the N most misclassified minority-positive points (lowest p_alpha), aligning anchor
+proximity reward and hard_reward toward the same decision boundary region.
 
-**Key insight:** Current "all" anchor selection includes easy minority-positive training
-points where alpha is already confident (p_alpha ≈ 1). `anchor_reward` then pulls generation
-toward these easy regions. But `hard_reward` rewards generating where alpha is uncertain
-(p < 0.65). These two terms pull in opposite directions; since `w_anchor=0.80` dominates,
-the agent ends up near easy anchors where hard_reward ≈ 0. This structural tension is why
-`corr(anchor_reward, EO) = +0.36` in credit run 3 — the anchor reward is tracking the
-wrong thing.
+**Config:** `anchor_selection_mode: "hard_positive"`, `sigma_calibration_factor: 1.0`,
+`anchor_refresh_interval: 300`, `lambda=[0.5,0.5]`, `use_pca=true`.
 
-**Fix:** `anchor_selection_mode: "hard_positive"` selects the N most misclassified
-minority-positive training points (lowest p_alpha). Now anchor proximity and hard_reward
-both target the decision boundary region → local reward coherently aligned with EO.
-Combined with `sigma_calibration_factor: 1.0` to prevent anchor death.
+**Results (3 seeds each):**
 
-**Specs created:**
+| Dataset | Alpha EO | Beta EO | Δ EO | Alpha F1-w | Beta F1-w | Δ F1-w | Alpha Brier | Beta Brier |
+|---|---|---|---|---|---|---|---|---|
+| Census | 0.2551 | 0.2466 | **-3.3%** | 0.8353 | 0.8263 | -0.52pp | 0.1108 | 0.1163 |
+| Credit | 0.0319 | 0.0310 | **-2.8%** | 0.7651 | 0.7524 | -1.27pp | 0.1486 | 0.1667 |
 
-| Spec | Runs | Purpose |
-|---|---|---|
-| `v7_census_hard_anchors_smoke` | 1 seed, 200 eps | Verify anchor_reward stays healthy and correlates with EO |
-| `v7_credit_hard_anchors_smoke` | 1 seed, 200 eps | Same for credit |
-| `v7_census_hard_anchors` | 3 seeds, 6000 eps | Full run for census |
-| `v7_credit_hard_anchors` | 3 seeds, 6000 eps | Full run for credit |
+**Key finding:** Very high seed variance. Census seed 42 shows -25.9% EO improvement,
+but seeds 123 and 999 degrade (+9.1%, +24.6%). Mean improvement is noise-level. Consistent
+utility degradation on both datasets. The hard-positive anchor selection does not reliably
+solve the misalignment problem — possibly the dynamic anchor refresh (interval=300) is
+introducing instability.
 
-All use: `use_pca=true`, `lambda=[0.5,0.5]`, `sigma_calibration_factor=1.0`,
-`use_uncertainty_anchors=false` — isolates the anchor selection change cleanly.
+---
 
-**Run order:** both smoke tests first (fast, ~10 min each), then check
-`corr(anchor_reward, EO)` in metrics.csv. If negative (aligned), launch full runs.
+### v8 — PCA Whitening ❌ Backfires
+
+**Goal:** Decorrelate and normalize PCA components to improve exploration and fairness.
+
+**Config:** Same as v7 + `whiten_pca: true`, `radius_clip: 5.0`. Credit only.
+
+**Results (3 seeds):**
+
+| Dataset | Alpha EO | Beta EO | Δ EO | Alpha F1-w | Beta F1-w | Δ F1-w | Alpha Brier | Beta Brier |
+|---|---|---|---|---|---|---|---|---|
+| Credit | 0.0423 | 0.0649 | **+53.4% (WORSE)** | 0.7668 | 0.7164 | -5.04pp | 0.1479 | 0.1936 |
+
+**Key finding:** Whitening is actively harmful. EO gap increases 53% on average; seed 42
+alone loses 10pp F1-w. Whitening likely disrupts the learned data manifold geometry that
+the RL agent relies on to generate useful samples. **Abandon this direction.**
+
+---
+
+### v9 — Sigma Calibration & Training Dynamics ⚠️ Mixed
+
+**Goal:** Test whether tighter sigma (factor=1.0 vs 3.5), disabling beta resets
+(`beta_reset_interval=9999`), and higher RL LR (0.001 vs 0.0003) improve convergence.
+
+**Variants run:**
+
+| Spec | Dataset | sigma_factor | reset_interval | RL LR |
+|---|---|---|---|---|
+| `v9_census_sigma1` | Census | 1.0 | 300 (default) | 0.0003 |
+| `v9_census_sigma1_highlr_neverreset` | Census | 1.0 | 9999 (never) | 0.001 |
+| `v9_credit_sigma2` | Credit | 2.0 | 300 (default) | 0.0003 |
+| `v9_credit_sigma2_neverreset` | Credit | 2.0 | 9999 (never) | 0.001 |
+
+**Results (3 seeds each):**
+
+| Variant | Alpha EO | Beta EO | Δ EO | Alpha F1-w | Beta F1-w | Δ F1-w | Alpha Brier | Beta Brier |
+|---|---|---|---|---|---|---|---|---|
+| Census sigma1 | 0.2551 | 0.2488 | -2.5% | 0.8353 | 0.8148 | -2.05pp | 0.1108 | 0.1256 |
+| Census sigma1+HiLR+NoReset | 0.2683 | 0.2081 | **-22.4%** | 0.8336 | 0.7809 | **-5.27pp** | 0.1110 | 0.2154 |
+| Credit sigma2 | 0.0319 | 0.0433 | +35.7% | 0.7651 | 0.7586 | -0.65pp | 0.1486 | 0.1772 |
+| Credit sigma2+NoReset | 0.0342 | 0.0297 | -13.1% | 0.7714 | 0.7034 | **-6.79pp** | 0.1481 | 0.2867 |
+
+**Key findings:**
+1. **Never-reset (`beta_reset_interval=9999`) is catastrophically harmful.** On both datasets,
+   Brier nearly doubles and utility collapses. Beta resets are essential for stability.
+2. **High LR + never-reset on census** worsens EO despite apparent EO gain: F1-w drops 5.27pp,
+   Brier doubles from 0.111 to 0.215. The EO improvement comes at an unacceptable cost.
+3. **Credit sigma2 (standard)** is the best result across v7-v9: modest EO regression but
+   minimal utility loss (-0.65pp F1-w). Still worse than v3 credit in absolute terms.
+4. **Tighter sigma (1.0 vs 3.5)** shows no benefit on census — same instability as v7.
+5. **Census continues to resist improvement** under all variants. No v7-v9 run achieves
+   robust EO improvement with preserved utility on census.
+
+**Overall v7-v9 ranking** (best to worst fairness-utility tradeoff):
+1. v9 credit_sigma2: -0.65pp F1-w, EO roughly flat
+2. v7 credit_hard_anchors: -1.27pp F1-w, EO roughly flat
+3. v7/v9 census variants: noise-level EO changes, 0.5-2pp utility loss
+4. v8 credit_whiten: +53% EO degradation, -5pp F1-w
+5. v9 never-reset variants: utility collapse on both datasets
 
 ---
 

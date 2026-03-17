@@ -57,6 +57,12 @@ Each episode: generate synthetic trajectory → train beta on real+synthetic →
 - **`test_suite.py`**: `TestSuite` class for post-training evaluation (DP, EO, EOd, F1, Brier)
 - **`agents/`**: `FFNNAgent` (classifier), `ReinforceAgent` (policy gradient), `PPOAgent` (actor-critic)
 
+### Notebooks
+- **`plot_results.ipynb`**: Main results comparison notebook. Loads `final_test_metrics.csv` from selected `training_runs/` directories, produces fairness (EO/DP/EOd) and utility (F1/AUC) bar charts per dataset, and a full tradeoff table with UAFI scores. Edit the `DATASETS` dict in cell 6 to add new runs.
+- **`dataset_visualizations.ipynb`**: PCA projections and class/group distribution plots for raw datasets.
+- **`diagnose_training.ipynb`**: Per-episode `metrics.csv` analysis — reward curves, anchor health, local/global correlation. Use this to check if a new run is learning before waiting for full results.
+- **`analyze_datasets.ipynb`**: Dataset statistics, bias injection effects, group imbalance summaries.
+
 ### Experiment Configuration
 JSON specs in `experiment_specs/` define all hyperparameters: dataset, reward mode, lambda schedule, PCA components, trajectory length, curriculum settings, network architectures, seeds. Multi-seed runs execute sequentially from a single spec.
 

@@ -121,8 +121,12 @@ def run_spec_all_seeds(spec_path: str, device: str):
             anchor_refresh_top_k=int(lw.get("anchor_refresh_top_k", 500)),
             anchor_selection_mode=str(lw.get("anchor_selection_mode", "all")),
             anchor_selection_top_k=int(lw.get("anchor_selection_top_k", 200)),
+            use_dvrl_local=bool(lw.get("use_dvrl_local", False)),
+            dvrl_max_bce=float(lw.get("dvrl_max_bce", 0.693)),
 
             global_sigmoid_k=float(rs.get("global_sigmoid_k", 10.0)),
+            utility_guard_min_factor=float(rs.get("utility_guard_min_factor", 1.0)),
+            phase2_episodes=spec.get("phase2_episodes", None),
             beta_reset_interval=int(spec.get("beta_reset_interval", 1)),
         )
 
