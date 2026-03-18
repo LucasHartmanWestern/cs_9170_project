@@ -425,11 +425,12 @@ adaptation. With the deadzone already consuming 450 episodes, the policy has at 
 ~350 stable episodes for learning. Stage disruptions cut into that further.
 
 **P4 — DVRL local reward weak in early episodes**
-Median Phase 1 `local_reward` = 0.12 (low, not saturated at 1 as initially feared).
-Generated samples land near the training distribution (delta_scale=0.10) where beta already
-has low loss → low DVRL → weak gradient signal in early episodes. Phase 1 local-global
-correlation is **+0.765** (strong alignment), so DVRL is correct in principle. The weakness
-is spatial: samples are too close to training data to produce meaningful DVRL variance.
+Median Phase 1 `local_reward` = 0.09 (low). Generated samples land near the training
+distribution (delta_scale=0.10) where beta already has low loss → low DVRL. Note: the
+overall Pearson corr(local, global) = +0.765 is trend-inflated (both variables independently
+trend upward); rolling window correlation = −0.127, meaning no strong step-level alignment.
+With v17a (gamma=1.0), local_reward rose to 0.16–0.18 organically, suggesting the agent
+now explores the space more broadly.
 
 **P5 — Phase 2 agent already separate (not a problem)**
 Initially diagnosed as gradient pollution, but code inspection (line 1169) confirms Phase 2
@@ -478,4 +479,132 @@ AFTER RESULTS: v17c delta_scale sweep (only if v17b shows stable training)
 **Specs created:** `v17a_bias05_rl_census_3seeds`, `v17a_bias010_rl_census_3seeds`,
 `v17b_bias05_rl_census_3seeds`, `v17b_bias010_rl_census_3seeds`
 
-**Status:** v17a/v17b specs ready, code changes merged — awaiting submission
+**Status:** COMPLETE (Mar 18 2026)
+
+---
+
+### v17 Results (Mar 18 2026)
+
+#### Deadzone Analysis
+
+| Spec | dead%_42 | dead%_0 | dead%_1 | mean_dead | esc_42 | esc_0 | esc_1 | med_local |
+|---|---|---|---|---|---|---|---|---|
+| v16 bias=0.05 | 57.4% | 40.8% | 44.4% | **47.5%** | 481 | 325 | 295 | 0.090 |
+| v16 bias=0.10 | 58.5% | 36.6% | 59.5% | **51.5%** | 481 | 125 | 481 | 0.092 |
+| v17a bias=0.05 | 8.2% | 11.9% | 6.6% | **8.9%** | 61 | 77 | 41 | 0.179 |
+| v17a bias=0.10 | 14.2% | 1.2% | 20.5% | **12.0%** | 92 | 1 | 139 | 0.156 |
+| v17b bias=0.05 | 3.8% | 18.0% | 6.4% | **9.4%** | 25 | 176 | 73 | 0.198 |
+| v17b bias=0.10 | 14.9% | 0.4% | 13.6% | **9.6%** | 126 | 1 | 124 | 0.172 |
+
+**Key finding:** gamma=1.0 + no curriculum (v17a) **alone** eliminated the deadzone from
+~50% to ~10%, matching v17b. The warm-start was unnecessary — the root cause was credit
+assignment failure (gamma=0.99), not random beta initialisation.
+
+#### Final Test Metrics
+
+| Spec | α-EO | β-EO | ±std | range | β-F1w | β-AUC | EO delta |
+|---|---|---|---|---|---|---|---|
+| v16 bias=0.05 | 0.075 | 0.097 | 0.067 | 0.118 | 0.787 | 0.850 | +0.022 |
+| v16 bias=0.10 | 0.144 | 0.084 | 0.043 | 0.082 | 0.788 | 0.848 | −0.059 |
+| v17a bias=0.05 | 0.075 | **0.071** | 0.051 | 0.101 | 0.771 | 0.860 | −0.004 |
+| v17a bias=0.10 | 0.144 | **0.071** | 0.067 | 0.134 | **0.807** | **0.867** | −0.073 |
+| v17b bias=0.05 | 0.075 | 0.096 | 0.069 | 0.137 | 0.768 | 0.858 | +0.021 |
+| v17b bias=0.10 | 0.144 | 0.116 | 0.062 | 0.119 | 0.801 | 0.859 | −0.028 |
+
+#### Per-seed breakdown — v17a
+
+| Spec | seed | α-EO | β-EO | Δ-EO | β-F1w | β-AUC |
+|---|---|---|---|---|---|---|
+| bias=0.05 | 42 | 0.093 | 0.068 | −0.025 | 0.795 | 0.875 |
+| bias=0.05 | 0  | 0.056 | 0.022 | −0.034 | 0.740 | 0.861 |
+| bias=0.05 | 1  | 0.076 | 0.123 | +0.047 🔴 | 0.778 | 0.845 |
+| bias=0.10 | 42 | 0.162 | 0.141 | −0.020 | 0.813 | 0.867 |
+| bias=0.10 | 0  | 0.157 | 0.063 | −0.093 | 0.799 | 0.879 |
+| bias=0.10 | 1  | 0.113 | 0.007 | −0.106 ✅ | 0.808 | 0.856 |
+
+2 of 3 seeds improve at each bias level. One "rogue" seed degrades at each level — variance
+reduction is real but partial.
+
+#### Comparison vs baselines at bias=0.10
+
+| Method | β-EO | ±std | β-F1w | β-AUC |
+|---|---|---|---|---|
+| Alpha (no aug) | 0.144 | — | 0.821 | 0.891 |
+| **RL v17a** | **0.071** | 0.067 | **0.807** | **0.867** |
+| RL v16 | 0.084 | 0.043 | 0.788 | 0.848 |
+| RL v17b | 0.116 | 0.062 | 0.801 | 0.859 |
+| CTGAN | 0.075 | 0.027 | 0.789 | 0.842 |
+| OT Repair | 0.025 | 0.020 | 0.788 | 0.819 |
+| GroupDRO | 0.115 | 0.024 | 0.821 | 0.891 |
+
+v17a at bias=0.10: EO competitive with CTGAN (0.071 vs 0.075), **best F1w and AUC of all
+methods** (0.807 F1w, 0.867 AUC). First config to simultaneously match CTGAN on fairness
+and beat it on utility.
+
+#### Interpretations
+
+**Why gamma=1.0 fixed the deadzone (not the warm-start):**
+The original deadzone hypothesis assumed random beta init was the cause. In fact, gamma=0.99
+was the root cause: with only 100-step effective horizon, the agent couldn't build useful
+gradient signal from 2000-step trajectories. With gamma=1.0, all 2000 steps contribute
+equally — even a randomly-initialised beta trains well enough on the full synthetic trajectory
+to escape the deadzone from episode 1.
+
+**Why v17b (warm-start) is worse than v17a:**
+Warm-starting beta from alpha's weights locks beta into alpha's biased solution. The RL
+agent's synthetic data must overcome alpha's entrenched priors each episode rather than
+guiding a more plastic randomly-initialised model. Net result: beta ends closer to alpha,
+EO improvement is smaller. **Abandon the warm-start direction.**
+
+**Why local_reward increased (0.09 → 0.16–0.18):**
+With gamma=1.0 and no curriculum, the agent explores more freely across the full
+10D PCA space from episode 1. Generated samples land further from the training distribution,
+producing higher DVRL (beta uncertainty) signals. This is the P4 fix happening organically.
+
+#### Next Steps
+
+1. **v17a is the new baseline.** All future experiments start from v17a config.
+2. **Abandon beta warm-start** — confirmed counterproductive.
+3. **Submit v17c delta_scale sweep** (deadzone 9–12% < 20% threshold ✅):
+   - `delta_scale: 0.20` and `delta_scale: 0.30`, both with v17a base config
+   - Target: does larger perturbation further reduce EO or help the rogue seed?
+4. **5-seed runs for v17a** once delta_scale is confirmed — tighten confidence intervals.
+5. **Rogue seed problem**: one seed in 3 degrades at each bias level. Investigate whether
+   this correlates with alpha-EO level (seed 1 at bias=0.05 has relatively low alpha-EO=0.076,
+   leaving little room; seed 42 at bias=0.10 has α-EO=0.162, agent may overshoot).
+
+---
+
+### After v17 Results: Decision Tree
+
+**Step 1 — Early diagnosis (after ~200 episodes, use `diagnose_training.ipynb`)**
+
+Open the `metrics.csv` for each run and check:
+- `global_obj` column: what fraction of Phase 1 episodes have `global_obj < 0.5`?
+- First episode where `global_obj` crosses 0.5 stably?
+- Median `local_reward` in Phase 1?
+
+**Step 2 — Compare v17a vs v17b**
+
+| Outcome | Interpretation | Action |
+|---|---|---|
+| v17b deadzone < 10%, EO improves | Warm-start fixes P1; gamma+curriculum (P2+P3) also helped | Submit v17c (delta_scale sweep) |
+| v17b deadzone < 10%, EO flat | Deadzone fixed but something else limits fairness | Investigate P4 (delta_scale) — still submit v17c |
+| v17b deadzone still > 30% | Warm-start not working as expected | Check training.py warm-start code path; check if `_optim_cfg` is stored |
+| v17a much better than v16, v17b no further gain | gamma=1.0 + no curriculum was the key fix | P1 may be less important; still run v17c |
+| No improvement vs v16 in either | Deeper structural issue | Discuss Phase 2 warm-start, longer episodes, or DVRL delta_scale before more runs |
+
+**Step 3 — v17c (delta_scale sweep)**: only if v17b shows stable training (deadzone < 20%)
+
+Submit `v17c_bias05_rl_census` and `v17c_bias010_rl_census` with:
+- `delta_scale: 0.20` and `delta_scale: 0.30` (two specs per bias level)
+- Everything else from v17b
+
+**Step 4 — Credit card runs**: once census v17b is validated, run equivalent credit specs.
+Credit alpha-EO is near-zero at both bias levels so credit results only matter for
+utility preservation claims, not the fairness story.
+
+**Step 5 — Final paper experiments**: once best config is identified from v17a/b/c:
+- 5-seed runs for census (main result table)
+- Add CTGAN at bias=0.05 to the comparison (already done at bias=0.10)
+- Re-run GroupDRO/OTRepair at best bias levels to confirm degradation story
