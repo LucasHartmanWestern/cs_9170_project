@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=v17c_b010_ds030
 #SBATCH --account=def-mcapretz
-#SBATCH --time=09:00:00
+#SBATCH --time=04:00:00
 #SBATCH --mem=3G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
