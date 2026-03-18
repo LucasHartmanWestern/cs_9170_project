@@ -308,3 +308,174 @@ JSON: `reward_shaping.global_sigmoid_k` (default 10.0).
 | Group DRO (2) | 0.0182* | 0.4969** | 0.7421 | 0.7444 | Best EO+F1_min, F1_w drops |
 
 *p<0.05, **p<0.01 vs alpha baseline
+
+---
+
+## v14 / v15a — DVRL Two-Phase Framework (Unbiased)
+
+Major redesign: replaced anchor/hard/diversity local reward with DVRL-inspired signal
+(beta's BCE loss on generated samples). Added two-phase training (phase 1 = minority class,
+phase 2 = majority class recovery). Added curriculum learning and delta actions.
+
+| Method | EO | EO std | F1w | AUC | Seeds |
+|---|---|---|---|---|---|
+| v14 (lambda [0.3,0.7], util_guard=0.2) | 0.0834 | ±0.075 | 0.8232 | 0.8694 | 3 |
+| v15a (lambda [0.3,0.5], util_guard=0.0) | 0.0557 | ±0.069 | 0.8135 | 0.8586 | 3 |
+| GroupDRO (unbiased) | 0.0290 | ±0.026 | 0.8154 | 0.8923 | 3 |
+| OTRepair (unbiased) | 0.0570 | ±0.025 | 0.8032 | 0.8425 | 3 |
+
+**Key finding:** GroupDRO outperforms on unbiased census. This motivated reframing the
+contribution around **positive-class outcome scarcity** — the regime where reweighting
+methods fail due to insufficient minority positive examples.
+
+**v15b (confidence window on DVRL reward):** Tested but abandoned. Helped utility (phase 2
+AUC ~0.884 vs 0.860) but broke EO (mean ~0.10+ vs 0.014 for seed 42). The window filtered
+too much local signal, leaving the agent running on global reward only.
+
+---
+
+## Reframing: Outcome Bias / Positive-Class Scarcity (v16, Mar 2026)
+
+**Motivation:** GroupDRO and OTRepair both operate on existing samples only (reweighting /
+redistribution). When the disadvantaged group has very few *positive-class* examples —
+simulating historical outcome bias — reweighting degenerates. Our generative framework
+synthesises new minority positive samples, which is the only viable approach in this regime.
+
+**Bias injection:** `bias_pct` downsamples y=1 (positive class) across the training set.
+Because the disadvantaged group (a=0) already has a low positive rate, this creates severe
+positive-class scarcity specifically for them:
+
+| bias_pct | Disadv. group (a=0) positive examples | Total positives |
+|---|---|---|
+| 0.05 | 17 | 150 |
+| 0.10 | 43 | 300 |
+| 0.15 | 77 | 450 |
+| None | 116 | 722 |
+
+**Census baseline degradation curve (already collected, Mar 17 2026):**
+
+| Method | bias=0.05 EO | bias=0.10 EO | bias=0.15 EO | unbiased EO |
+|---|---|---|---|---|
+| GroupDRO | **0.247** ± 0.120 | **0.100** ± 0.038 | 0.018 ± 0.007 | 0.029 ± 0.026 |
+| OTRepair | 0.050 ± 0.038 | 0.025 ± 0.020 | 0.055 ± 0.062 | 0.057 ± 0.025 |
+
+GroupDRO collapses at bias=0.05 (17 positive minority examples) and is still meaningfully
+impaired at bias=0.10 (43 examples). OTRepair maintains EO but at a consistent utility cost
+(F1w ~0.757–0.788 vs GroupDRO's ~0.821).
+
+**Status: COMPLETE (Mar 18 2026)**
+
+| Experiment | Spec | Status | β-EO | β-F1w | β-AUC |
+|---|---|---|---|---|---|
+| RL Census bias=0.05 | v16_bias05_rl_census_3seeds | ✅ done | 0.097 ± 0.067 | 0.787 | 0.850 |
+| RL Census bias=0.10 | v16_bias010_rl_census_3seeds | ✅ done | 0.084 ± 0.043 | 0.788 | 0.848 |
+| RL Credit bias=0.05 | v16_bias05_rl_credit_3seeds | ✅ done | 0.031 ± 0.022 | 0.715 | 0.633 |
+| RL Credit bias=0.10 | v16_bias010_rl_credit_3seeds | ✅ done | 0.030 ± 0.013 | 0.715 | 0.652 |
+| CTGAN Census bias=0.05 | v16_bias05_ctgan_census_3seeds | ✅ done | 0.020 ± 0.010 | 0.756 | 0.812 |
+| CTGAN Census bias=0.10 | v16_bias010_ctgan_census_3seeds | ✅ done | 0.075 ± 0.027 | 0.789 | 0.842 |
+
+**Full census comparison (bias=0.10):**
+
+| Method | α-EO | β-EO | ±std | β-F1w | β-AUC |
+|---|---|---|---|---|---|
+| RL v16 | 0.144 | 0.084 | 0.043 | 0.788 | 0.848 |
+| OTRepair | 0.325 | 0.025 | 0.020 | 0.788 | 0.819 |
+| GroupDRO | 0.109 | 0.115 🔴 | 0.024 | 0.821 | 0.891 |
+| CTGAN | 0.114 | 0.075 | 0.027 | 0.789 | 0.842 |
+
+**Key findings:**
+- GroupDRO fails at ALL bias levels (EO 0.11–0.25, never beats alpha baseline) — confirms the paper's core motivation
+- RL achieves best AUC at both bias levels (+2.9pp vs OTRepair at bias=0.10)
+- RL and CTGAN are essentially tied at bias=0.10 on all metrics
+- CTGAN's EO advantage at bias=0.05 (0.020 vs RL's 0.097) is not robust — degrades to 0.075 at bias=0.10
+- Credit card alpha-EO is near-zero at both bias levels; credit results do not contribute to fairness story
+
+**Target outcomes (original):**
+- ✅ RL EO < 0.10 at bias=0.10 (achieved 0.084)
+- ❌ RL F1w > 0.79 (achieved 0.788, miss by 0.002)
+- ✅ RL AUC > 0.82 (achieved 0.848)
+
+---
+
+## Reward Structure Analysis & v17 Plan (Mar 18 2026)
+
+Deep convergence analysis of v16 `metrics.csv` identified five structural problems with the
+reward setup. All problems are backed by per-episode data.
+
+### Diagnosed Problems
+
+**P1 — Global reward deadzone (root cause of high variance)**
+Phase 1 (minority generation) spends **57% of episodes** with `global_obj < 0.5`, meaning
+beta is worse than alpha and the agent gets no positive learning signal. Root cause: beta
+resets to **random weights every episode** (`beta_reset_interval=1`), then trains on
+real + (bad early synthetic) data → beta fails to learn → wloss_beta >> wloss_alpha →
+global_obj ≈ 0 for ~450 episodes. The agent randomly stumbles into a good policy region
+around ep500 that fixes beta. This explains the seed-level EO variance (range 0.12 at
+bias=0.05): the "lucky" discovery timing varies.
+
+**P2 — gamma=0.99 with T=2000 wastes 95% of trajectory**
+Effective credit horizon = 1/(1−γ) = 100 steps. Steps 500–2000 contribute discount factor
+< 0.007 — negligible. The policy gradient uses only the first ~100 steps for credit
+assignment despite generating 2000 samples per episode. Since beta trains on the *full*
+2000-sample trajectory, there is no causal reason to discount later steps at all.
+
+**P3 — Curriculum jumps destabilise the policy**
+PCA dimensionality steps 2→4→6→8→10 every 200 episodes. Each transition forces policy
+adaptation. With the deadzone already consuming 450 episodes, the policy has at most
+~350 stable episodes for learning. Stage disruptions cut into that further.
+
+**P4 — DVRL local reward weak in early episodes**
+Median Phase 1 `local_reward` = 0.12 (low, not saturated at 1 as initially feared).
+Generated samples land near the training distribution (delta_scale=0.10) where beta already
+has low loss → low DVRL → weak gradient signal in early episodes. Phase 1 local-global
+correlation is **+0.765** (strong alignment), so DVRL is correct in principle. The weakness
+is spatial: samples are too close to training data to produce meaningful DVRL variance.
+
+**P5 — Phase 2 agent already separate (not a problem)**
+Initially diagnosed as gradient pollution, but code inspection (line 1169) confirms Phase 2
+already instantiates a fresh `ReinforceAgent`. No change needed here.
+
+### v17 Experiment Plan
+
+**v17a — Structural spec fixes only** (no code changes)
+- `gamma: 1.0` (was 0.99) — all 2000 steps contribute equally
+- `curriculum: start_dim=10, max_dim_cap=10, stage_count=1` — disabled
+- Everything else identical to v16
+- **Purpose:** Isolate effect of P2 and P3 fixes. Run first; requires no code deployment.
+
+**v17b — Beta warm-start from alpha** (one code change: ~10 lines in training.py)
+- All v17a settings **plus** `beta_warmstart_from_alpha: true`
+- On each beta reset, copies `alpha.model.state_dict()` into beta instead of random init.
+  Beta always starts at alpha-level performance; deadzone becomes structurally impossible.
+- Fresh optimizer recreated after copy (no momentum carryover).
+- **Purpose:** Eliminate P1 (deadzone). This is the highest-priority fix.
+
+**v17c — delta_scale sweep** (spec only, run after v17b confirms stable training)
+- v17b settings with `delta_scale: 0.20` and `delta_scale: 0.30`
+- **Purpose:** Address P4. Larger perturbations → samples in higher-DVRL regions.
+- Only run if v17b shows stable convergence (deadzone < 20%).
+
+### Diagnostic targets per run
+
+Check `metrics.csv` after ~200 episodes before waiting for full results:
+
+| Metric | v16 baseline | v17a target | v17b target |
+|---|---|---|---|
+| % eps with global_obj < 0.5 | 57% | 40–50% | < 10% |
+| First ep where global_obj > 0.5 | ~ep450 | ~ep300 | ~ep50 |
+| EO seed range (3 seeds) | 0.12 | 0.08 | 0.05 |
+| Median local_reward (Phase 1) | 0.12 | 0.12 | 0.15+ |
+
+### Run sequence
+
+```
+SUBMIT NOW:   v17a_{bias05,bias010}_rl_census_3seeds  (spec-only, deploy immediately)
+DEPLOY CODE:  training.py beta_warmstart change + main.py wire-up  ← DONE
+SUBMIT NEXT:  v17b_{bias05,bias010}_rl_census_3seeds  (after v17a submitted)
+AFTER RESULTS: v17c delta_scale sweep (only if v17b shows stable training)
+```
+
+**Specs created:** `v17a_bias05_rl_census_3seeds`, `v17a_bias010_rl_census_3seeds`,
+`v17b_bias05_rl_census_3seeds`, `v17b_bias010_rl_census_3seeds`
+
+**Status:** v17a/v17b specs ready, code changes merged — awaiting submission

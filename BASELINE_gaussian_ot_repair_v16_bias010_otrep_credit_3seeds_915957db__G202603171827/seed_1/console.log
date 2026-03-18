@@ -1,0 +1,23 @@
+[OTRepair] exp_group=BASELINE_gaussian_ot_repair_v16_bias010_otrep_credit_3seeds_915957db__G202603171827  seed=1
+[OTRepair] dataset=credit_card  feature_dim=32
+[OTRepair] ot_config={'lam': 1.0, 'n_groups': 2, 'cov_reg': 1e-05, 'barycenter_iters': 100, 'repair_test': True}
+[OTRepair] seed_dir=/lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_v16_bias010_otrep_credit_3seeds_915957db__G202603171827/seed_1
+[OTRepair] Group 0: n=1128, ||μ||=1.3899, cov_diag=[0.0000, 1.1825]
+[OTRepair] Group 1: n=1872, ||μ||=1.3730, cov_diag=[0.0000, 1.4483]
+[OTRepair] Barycenter computed. μ* norm=1.1693
+[OTRepair] Group 0: A_g computed, ||A_g - I||=315.2335
+[OTRepair] Group 1: A_g computed, ||A_g - I||=315.2332
+[OTRepair] Test features repaired.
+FFNN Using device: cpu
+[OTRepair] ERM trained on repaired features.
+FFNN Using device: cpu
+[OTRepair] Alpha (ERM on original features) trained.
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_v16_bias010_otrep_credit_3seeds_915957db__G202603171827/seed_1/otrep_model.pt
+
+[TEST] Alpha -> F1(min)=0.3634 | F1(maj)=0.8800 | F1(weighted)=0.7657 | F1(macro)=0.6217 | Brier=0.1599
+[TEST] Beta  -> F1(min)=0.2792 | F1(maj)=0.8765 | F1(weighted)=0.7444 | F1(macro)=0.5779 | Brier=0.1643
+[TestSuite] Final test metrics appended to (seed): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_v16_bias010_otrep_credit_3seeds_915957db__G202603171827/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_v16_bias010_otrep_credit_3seeds_915957db__G202603171827/final_test_metrics.csv
+[OTRepair] Done. seed=1 | time=10.5s
+[OTRepair] Results in /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_v16_bias010_otrep_credit_3seeds_915957db__G202603171827/seed_1

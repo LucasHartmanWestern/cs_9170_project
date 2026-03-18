@@ -1,0 +1,29 @@
+[GroupDRO] exp_group=BASELINE_group_dro_v16_bias05_gdro_credit_3seeds_c161369f__G202603171827  seed=0
+[GroupDRO] dataset=credit_card  feature_dim=33
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_v16_bias05_gdro_credit_3seeds_c161369f__G202603171827/seed_0
+[GroupDRO] epoch=   1 | dro=0.5772 | val_worst=0.7950 | q=[0.241,0.255,0.242,0.262]
+[GroupDRO] epoch=  20 | dro=0.3890 | val_worst=1.4006 | q=[0.185,0.193,0.312,0.309]
+[GroupDRO] epoch=  40 | dro=0.2956 | val_worst=1.7947 | q=[0.172,0.179,0.328,0.321]
+[GroupDRO] epoch=  60 | dro=0.2487 | val_worst=2.0982 | q=[0.190,0.203,0.317,0.290]
+[GroupDRO] epoch=  80 | dro=0.1867 | val_worst=2.7909 | q=[0.213,0.210,0.303,0.273]
+[GroupDRO] epoch= 100 | dro=0.1618 | val_worst=3.2880 | q=[0.226,0.211,0.304,0.259]
+[GroupDRO] epoch= 120 | dro=0.1312 | val_worst=3.8944 | q=[0.223,0.204,0.316,0.257]
+[GroupDRO] epoch= 140 | dro=0.1073 | val_worst=4.1867 | q=[0.218,0.184,0.337,0.262]
+[GroupDRO] epoch= 160 | dro=0.0825 | val_worst=4.7021 | q=[0.201,0.172,0.354,0.273]
+[GroupDRO] epoch= 180 | dro=0.0793 | val_worst=4.9451 | q=[0.188,0.157,0.374,0.280]
+[GroupDRO] epoch= 200 | dro=0.0615 | val_worst=5.5280 | q=[0.174,0.147,0.391,0.288]
+[GroupDRO] Training done. Best val_worst=0.7484
+[GroupDRO] Training metrics -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_v16_bias05_gdro_credit_3seeds_c161369f__G202603171827/seed_0/metrics.csv
+[GroupDRO] Best model saved -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_v16_bias05_gdro_credit_3seeds_c161369f__G202603171827/seed_0/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_v16_bias05_gdro_credit_3seeds_c161369f__G202603171827/seed_0/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.0496 | F1(maj)=0.8773 | F1(weighted)=0.6942 | F1(macro)=0.4634 | Brier=0.1809
+[TEST] Beta  -> F1(min)=0.4341 | F1(maj)=0.7699 | F1(weighted)=0.6956 | F1(macro)=0.6020 | Brier=0.2168
+[TestSuite] Final test metrics appended to (seed): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_v16_bias05_gdro_credit_3seeds_c161369f__G202603171827/seed_0/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_v16_bias05_gdro_credit_3seeds_c161369f__G202603171827/final_test_metrics.csv
+[GroupDRO] Done. seed=0 | time=15.1s
+[GroupDRO] Results in /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_v16_bias05_gdro_credit_3seeds_c161369f__G202603171827/seed_0

@@ -108,7 +108,8 @@ class Training:
         utility_guard_min_factor: float = 1.0,  # 1.0 = disabled; <1.0 enables multiplicative utility guard
 
         #beta warm-start
-        beta_reset_interval: int = 1,  # 1 = reset every episode (default); N>1 = warm-start
+        beta_reset_interval: int = 1,       # 1 = reset every episode (default); N>1 = warm-start
+        beta_warmstart_from_alpha: bool = False,  # if True, reset beta to alpha weights instead of random init
 
         #misc
         seed=42,
@@ -153,6 +154,7 @@ class Training:
         self.utility_guard_min_factor = float(utility_guard_min_factor)
         self.hard_margin = hard_margin
         self.beta_reset_interval = max(1, int(beta_reset_interval))
+        self.beta_warmstart_from_alpha = bool(beta_warmstart_from_alpha)
         self.curriculum_learning = curriculum_learning
         self.multiclass = multiclass
         self.dataset_name = dataset_name
@@ -716,7 +718,18 @@ class Training:
                 state = env.reset()
 
             if episode % self.beta_reset_interval == 0:
-                self.beta_model.reset()
+                if self.beta_warmstart_from_alpha and hasattr(self, "alpha_model"):
+                    # Warm-start beta from alpha weights — prevents the random-init deadzone
+                    # where beta is worse than alpha for hundreds of episodes.
+                    self.beta_model.model.load_state_dict(
+                        self.alpha_model.model.state_dict()
+                    )
+                    self.beta_model.optimizer = type(self.beta_model.optimizer)(
+                        self.beta_model.model.parameters(),
+                        **self.beta_model._optim_cfg,
+                    )
+                else:
+                    self.beta_model.reset()
 
             for t in range(self.traj_length):
                 action = agent.predict(state)
