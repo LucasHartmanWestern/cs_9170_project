@@ -717,3 +717,115 @@ Do not pursue further delta_scale variants. The next experiments are:
 3. **Credit card v17a runs** — for utility preservation story. Use same config, both bias levels.
 4. **PAMAP2** — after census and credit are finalised.
 
+---
+
+## v19 — 5-seed results + global-only ablation (2026-03-19)
+
+### Runs
+
+| Spec | Dataset | Bias | Config | Seeds | Dir |
+|------|---------|------|--------|-------|-----|
+| v17a_bias010_5seeds | census | 0.10 | DVRL (v17a) | 42,0,1,2,3 | SPECv17a_bias010_rl_census_5seeds_...e7a6f2fe |
+| v17a_bias05_5seeds | census | 0.05 | DVRL (v17a) | 42,0,1,2,3 | SPECv17a_bias05_rl_census_5seeds_...253d5a53 |
+| v18_ablation_global_only | census | 0.10 | global-only | 42,0,1,2,3 | SPECv18_ablation_global_only_bias010_...4676389e |
+
+### Results
+
+**v17a 5-seed census bias=0.10** (seeds 42,0,1,2,3):
+
+| Seed | α-EO | β-EO | F1w | AUC |
+|------|------|------|-----|-----|
+| 42 | 0.162 | 0.141 | 0.813 | 0.867 |
+| 0  | 0.157 | 0.063 | 0.799 | 0.879 |
+| 1  | 0.113 | 0.008 | 0.808 | 0.856 |
+| 2  | 0.263 | 0.234 | 0.814 | 0.886 |
+| 3  | 0.227 | 0.169 | 0.800 | 0.862 |
+| **Mean** | 0.184 | **0.123 ± 0.089** | **0.807 ± 0.007** | **0.870 ± 0.012** |
+
+The 3-seed mean was 0.071; seeds 2 and 3 (α-EO 0.263, 0.227) are "hard" seeds that inflate
+the 5-seed mean significantly. High variance is a problem for the main results table.
+
+**v17a 5-seed census bias=0.05** (seeds 42,0,1,2,3):
+
+| Seed | α-EO | β-EO | F1w | AUC |
+|------|------|------|-----|-----|
+| 42 | 0.093 | 0.068 | 0.795 | 0.875 |
+| 0  | 0.056 | 0.022 | 0.740 | 0.861 |
+| 1  | 0.076 | 0.123 | 0.778 | 0.845 |
+| 2  | 0.065 | 0.045 | 0.727 | 0.846 |
+| 3  | 0.077 | 0.124 | 0.762 | 0.812 |
+| **Mean** | 0.073 | **0.076 ± 0.046** | **0.760 ± 0.027** | **0.848 ± 0.023** |
+
+**v18 global-only ablation census bias=0.10** (seeds 42,0,1,2,3, note: "3seeds" in dir name
+but 5 seeds ran):
+
+| Seed | α-EO | β-EO | F1w | AUC |
+|------|------|------|-----|-----|
+| 42 | 0.162 | 0.026 | 0.826 | 0.884 |
+| 0  | 0.157 | 0.082 | 0.805 | 0.875 |
+| 1  | 0.113 | 0.002 | 0.808 | 0.871 |
+| 2  | 0.263 | 0.153 | 0.797 | 0.876 |
+| 3  | 0.227 | 0.055 | 0.821 | 0.882 |
+| **Mean** | 0.184 | **0.063 ± 0.059** | **0.811 ± 0.012** | **0.877 ± 0.005** |
+
+### Key Findings
+
+1. **Global-only (v18) outperforms DVRL (v17a) on EO in 4/5 seeds.** Mean EO 0.063 vs 0.123.
+   The DVRL local reward does not help fairness at bias=0.10 — it hurts. The ablation claim
+   originally intended to validate DVRL is now inverted: the ablation shows global-only is better.
+
+2. **v18 shows clearer learning curves.** Episode return rises monotonically to ~0.99 in 4/5
+   seeds. Best checkpoints found at ep 31–796 (spread across training). v17a by contrast shows
+   severe late-training regression in worst_loss_beta (up to +1.10 delta) and seed_3's best
+   checkpoint was found at episode 6/800 — essentially no learning.
+
+3. **v17a DVRL causes policy instability in late training.** The local reward (DVRL) drives the
+   agent toward beta's decision boundary, but this produces increasingly out-of-distribution
+   samples that destabilize beta training in Q3/Q4. This explains both the worse EO and the
+   best-checkpoint regression pattern.
+
+4. **Seed 2 is a structural outlier** (α-EO=0.263) for both methods. The underlying data split
+   has severe imbalance; neither method closes the gap well. Seed 2 should be noted in the paper
+   as a high-difficulty case.
+
+5. **On overlap seeds {42,0,1}, v18 vs baselines:**
+
+| Method | EO | F1w | AUC |
+|--------|----|-----|-----|
+| GroupDRO | 0.100 ± 0.038 | 0.821 | 0.891 |
+| OT Repair | 0.025 ± 0.020 | 0.788 | 0.819 |
+| CTGAN | 0.073 ± 0.031 | 0.789 | 0.842 |
+| v17a (DVRL) | 0.071 ± 0.067 | 0.807 | 0.867 |
+| **v18 (global-only)** | **0.036 ± 0.041** | **0.813** | **0.877** |
+
+v18 achieves near-OT-Repair EO (0.036 vs 0.025) while dominating OT Repair on utility
+(F1w +0.025, AUC +0.058). Beats GroupDRO and CTGAN on both axes.
+
+### Decision: v18 (global-only) is the new primary method
+
+**The primary method for the paper is now v18 (global-only reward, gamma=1.0, no curriculum,
+delta_scale=0.10).** v17a (DVRL) becomes the ablation variant that shows local reward shaping
+does not improve over global-only.
+
+Paper narrative revision:
+- Claim 2 (competitive performance): strongly supported by v18 results
+- Claim 3 (ablation): reframed — global-only is the proposed design; DVRL local reward is
+  tested and shown not to improve, giving a clean negative ablation result
+
+### Remaining experiments for paper
+
+**Main results (must run):**
+1. v18 census bias=0.05 — 5 seeds (42,0,1,2,3)
+2. v18 credit bias=0.10 — 5 seeds (42,0,1,2,3)
+3. v18 credit bias=0.05 — 5 seeds (42,0,1,2,3)
+4. CTGAN credit bias=0.10 — 3 seeds (42,0,1)
+5. CTGAN credit bias=0.05 — 3 seeds (42,0,1)
+
+**Hyperparameter sweeps** (census bias=0.10, v18 config, 3 seeds 42/0/1):
+- Synthetic data budget: T ∈ {500, 1000, **2000**, 4000}
+- FFNN epochs per episode: {5, **10**, 20, 50}
+- Delta scale: {0.05, **0.10**, 0.20} (bold = current default)
+
+**Ablation (complete):**
+- v17a (DVRL) vs v18 (global-only) — 5 seeds, bias=0.10 — done
+
