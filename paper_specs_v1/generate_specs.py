@@ -4,11 +4,23 @@ Generates all paper_specs_v1 JSON + SLURM batch files.
 
 Run from the project root: python paper_specs_v1/generate_specs.py
 
-53 specs total:
+61 specs total:
   Group 1 — Main results          ( 3 specs, census + credit)
   Group 2 — Budget sweep          (36 specs, both datasets × 5 conditions × 2 bias × 2 modes)
   Group 3 — Delta scale sweep     ( 8 specs, both datasets × 2 values × 2 modes)
   Group 4 — FFNN epochs sweep     ( 6 specs, both datasets × 3 values, global-only only)
+  Group 5 — No-PCA main results   ( 8 specs, both datasets × 2 bias levels × 2 modes)
+
+Group 5 notes:
+  - use_pca=False means identity mapping; pca_components is overridden at runtime to the
+    actual engineered feature count (~29 for credit_card, ~100 for census_income).
+  - The RL agent action size auto-resizes to match. For census (~100D), the default
+    reinforce hidden_sizes=[64,64] is narrow relative to the output dimension — learning
+    may be slower or noisier than the 10D PCA case. Results will show whether PCA is a
+    necessary component of the framework.
+  - pca_components is set to 1 as a placeholder (overridden at runtime; value irrelevant).
+  - Both v18 (global-only) and v17a (DVRL) included to keep the local-reward ablation
+    consistent across PCA and no-PCA conditions.
 
 NOTE: v17a (DVRL) is NOT included in the FFNN epochs sweep by design.
 The FFNN epoch count for v17a is fixed at 10 (the default). This choice was
@@ -131,27 +143,30 @@ def _apply(spec: dict, overrides: dict) -> None:
 
 
 # ── SLURM time estimation ────────────────────────────────────────────────────
-# Baseline observed: 5 seeds × 800 eps × T=2000 ≈ 5h actual.
-# We use 8h as a safe default, scaling up for larger budget/epoch runs.
+# Baseline observed: 5 seeds × 800 eps × T=2000 ≈ 3h actual.
+#
+# Cost model: trajectory generation dominates (~70% of runtime, scales linearly
+# with T). FFNN training is ~30% of runtime; real_data_size has negligible impact
+# at these scales on GPU (3k–9k samples), so is ignored. Epoch count scales the
+# FFNN portion only.
+#   composite_scale = 0.7 * (T/2000) + 0.3 * (epochs/10)
+# 30% safety buffer applied on top.
 
 def slurm_time(spec: dict) -> str:
     T      = spec.get("traj_length", 2000)
-    real   = spec.get("real_data_size", 3000)
     epochs = spec.get("ffnn", {}).get("epochs", 10)
     seeds  = len(spec.get("seeds", [1]))
 
-    # Approximate relative cost vs baseline (T=2000, real=3000, epochs=10, 5 seeds)
-    t_scale     = T / 2000
-    real_scale  = (real / 3000) ** 0.5   # real data adds sqrt cost to FFNN training
+    traj_scale  = T / 2000
     epoch_scale = epochs / 10
     seed_scale  = seeds / 5
 
-    cost = t_scale * real_scale * epoch_scale * seed_scale
+    composite = (0.7 * traj_scale + 0.3 * epoch_scale) * seed_scale
 
-    base_hours = 5.0   # observed actual for baseline config
-    est = base_hours * cost * 1.6   # 60% safety buffer
+    base_hours = 3.0   # observed actual for baseline config
+    est = base_hours * composite * 1.3   # 30% safety buffer
 
-    if   est <= 5:   return "8:00:00"
+    if   est <= 5:   return "6:00:00"
     elif est <= 9:   return "12:00:00"
     elif est <= 14:  return "16:00:00"
     else:            return "20:00:00"
@@ -292,6 +307,31 @@ def main():
                 make_v18({"dataset_name": ds_name,
                           "ffnn": {"hidden_sizes": [32, 16], "learning_rate": 0.001,
                                    "batch_size": 64, "epochs": ep}})
+            )
+
+    # ── Group 5: No-PCA main fairness results ────────────────────────────────
+    # use_pca=False uses raw engineered features (identity mapping).
+    # Feature dim is determined at runtime: ~29 for credit_card, ~100 for census_income.
+    # pca_components=1 is a placeholder — overridden to actual feature count at runtime.
+    # Both v18 and v17a included to preserve the local-reward ablation across conditions.
+
+    print("\n=== Group 5: No-PCA main results (8 specs, both datasets) ===")
+
+    for ds_tag, ds_name in DATASETS.items():
+        for bias, bias_tag in [(0.10, "bias010"), (0.05, "bias05")]:
+            nopca_overrides = {
+                "dataset_name": ds_name,
+                "use_pca": False,
+                "pca_components": 1,   # placeholder; overridden at runtime
+                "bias_pct": bias,
+            }
+            emit(
+                f"p1_nopca_{ds_tag}_{bias_tag}_global_5s",
+                make_v18(nopca_overrides)
+            )
+            emit(
+                f"p1_nopca_{ds_tag}_{bias_tag}_dvrl_5s",
+                make_v17a(nopca_overrides)
             )
 
     # ── Summary ──────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=p1_budget_credit_hireal_
 #SBATCH --account=def-mcapretz
-#SBATCH --time=16:00:00
+#SBATCH --time=6:00:00
 #SBATCH --mem=3G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1

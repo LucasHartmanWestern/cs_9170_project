@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=p1_ffnn_census_ep20_bias
 #SBATCH --account=def-mcapretz
-#SBATCH --time=20:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mem=3G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1

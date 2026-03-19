@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=p1_budget_credit_hisynth
+#SBATCH --job-name=p1_nopca_census_bias010_
 #SBATCH --account=def-mcapretz
-#SBATCH --time=16:00:00
+#SBATCH --time=6:00:00
 #SBATCH --mem=3G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
-#SBATCH --output=paper_specs_v1/logs/p1_budget_credit_hisynth_bias010_dvrl_5s.out
-#SBATCH --error=paper_specs_v1/logs/p1_budget_credit_hisynth_bias010_dvrl_5s.err
+#SBATCH --output=paper_specs_v1/logs/p1_nopca_census_bias010_global_5s.out
+#SBATCH --error=paper_specs_v1/logs/p1_nopca_census_bias010_global_5s.err
 
 set -euo pipefail
 
@@ -22,4 +22,4 @@ module load python/3.12.4 cuda cudnn
 source ~/envs/rl/bin/activate
 mkdir -p paper_specs_v1/logs
 
-python -u main.py --spec paper_specs_v1/p1_budget_credit_hisynth_bias010_dvrl_5s.json --device cuda:0
+python -u main.py --spec paper_specs_v1/p1_nopca_census_bias010_global_5s.json --device cuda:0
