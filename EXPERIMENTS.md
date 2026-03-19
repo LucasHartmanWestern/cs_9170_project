@@ -608,3 +608,112 @@ utility preservation claims, not the fairness story.
 - 5-seed runs for census (main result table)
 - Add CTGAN at bias=0.05 to the comparison (already done at bias=0.10)
 - Re-run GroupDRO/OTRepair at best bias levels to confirm degradation story
+
+---
+
+## v17c — Delta Scale Sweep Results (Mar 18 2026)
+
+**Goal:** Test whether larger perturbation magnitude (delta_scale=0.20, 0.30 vs v17a's 0.10)
+reduces EO gap further, addressing P4 (DVRL local reward too weak in early training).
+
+**Base config:** v17a (gamma=1.0, curriculum disabled, no warm-start). Only delta_scale varies.
+
+### Per-seed results
+
+#### bias=0.10
+
+| Spec | seed | α-EO | β-EO | Δ-EO | β-F1w | β-AUC | dead% |
+|---|---|---|---|---|---|---|---|
+| ds=0.20 | 0  | 0.157 | 0.049 | −0.107 ✅ | 0.808 | 0.877 | 0.2% |
+| ds=0.20 | 1  | 0.113 | 0.068 | −0.046 ✅ | 0.800 | 0.851 | 6.0% |
+| ds=0.20 | 42 | 0.162 | **0.314** | +0.153 🔴 | 0.817 | 0.868 | 3.4% |
+| **ds=0.20 mean** | — | 0.144 | **0.144** | ±0.121 | **0.808** | **0.865** | **3.2%** |
+| ds=0.30 | 0  | 0.157 | 0.235 | +0.079 🔴 | 0.804 | 0.873 | 0.0% |
+| ds=0.30 | 1  | 0.113 | 0.015 | −0.099 ✅ | 0.767 | 0.846 | 0.9% |
+| ds=0.30 | 42 | 0.162 | 0.258 | +0.096 🔴 | 0.806 | 0.855 | 0.0% |
+| **ds=0.30 mean** | — | 0.144 | **0.169** | ±0.110 | **0.793** | **0.858** | **0.3%** |
+
+#### bias=0.05
+
+| Spec | seed | α-EO | β-EO | Δ-EO | β-F1w | β-AUC | dead% |
+|---|---|---|---|---|---|---|---|
+| ds=0.20 | 0  | 0.056 | 0.125 | +0.069 🔴 | 0.780 | 0.850 | 2.7% |
+| ds=0.20 | 1  | 0.076 | 0.047 | −0.028 ✅ | 0.765 | 0.842 | 10.7% |
+| ds=0.20 | 42 | 0.093 | 0.052 | −0.042 ✅ | 0.774 | 0.847 | 0.5% |
+| **ds=0.20 mean** | — | 0.075 | **0.075** | ±0.036 | **0.773** | **0.846** | **4.6%** |
+| ds=0.30 | 0  | 0.056 | 0.152 | +0.096 🔴 | 0.789 | 0.839 | 0.3% |
+| ds=0.30 | 1  | 0.076 | 0.063 | −0.012 ✅ | 0.749 | 0.804 | 0.4% |
+| ds=0.30 | 42 | 0.093 | 0.084 | −0.009 ~ | 0.786 | 0.843 | 0.0% |
+| **ds=0.30 mean** | — | 0.075 | **0.100** | ±0.038 | **0.775** | **0.828** | **0.2%** |
+
+### Comparison vs v17a
+
+| Method | bias | β-EO | ±std | β-F1w | β-AUC | dead% | seeds improve |
+|---|---|---|---|---|---|---|---|
+| **v17a (ds=0.10)** | 0.10 | **0.071** | 0.067 | **0.807** | **0.867** | 12.0% | 2/3 |
+| v17c ds=0.20 | 0.10 | 0.144 | 0.121 | 0.808 | 0.865 | 3.2% | 2/3 |
+| v17c ds=0.30 | 0.10 | 0.169 | 0.110 | 0.793 | 0.858 | 0.3% | 1/3 |
+| **v17a (ds=0.10)** | 0.05 | **0.071** | 0.051 | 0.771 | **0.860** | 8.9% | 2/3 |
+| v17c ds=0.20 | 0.05 | 0.075 | 0.036 | **0.773** | 0.846 | 4.6% | 2/3 |
+| v17c ds=0.30 | 0.05 | 0.100 | 0.038 | 0.775 | 0.828 | 0.2% | 2/3 |
+
+### Key Findings
+
+1. **Larger delta_scale makes results worse, not better.** Mean EO degrades monotonically
+   with delta_scale at both bias levels. v17a (ds=0.10) remains the best config by a clear margin.
+
+2. **Deadzone nearly eliminated but this does not help fairness.** ds=0.30 hits near-zero
+   deadzone (0.2–0.3%) yet achieves the worst EO outcomes. The deadzone fix from gamma=1.0
+   (v17a, ~10–12%) was sufficient; eliminating it further by increasing perturbation does
+   not buy additional fairness improvement.
+
+3. **Catastrophic rogue seed at ds=0.20, bias=0.10 (seed 42: EO=0.314).** This is far
+   worse than v17a's worst case (seed 42: EO=0.141). Seed 42 at bias=0.10 has a high
+   α-EO=0.162 — the agent likely overshoots the decision boundary with larger perturbations,
+   generating samples that confuse beta rather than guiding it. The problem is structural:
+   larger delta_scale amplifies both the signal and the risk of overshoot.
+
+4. **ds=0.30 at bias=0.05 shows AUC regression** (0.828 vs v17a's 0.860 — a 3.2pp drop).
+   The larger perturbations are placing synthetic samples in regions that hurt beta's
+   overall discrimination ability while failing to close the EO gap.
+
+5. **Rogue seed at bias=0.05 (seed 0, α-EO=0.056)** is partly explained by near-floor
+   alpha performance: with only 0.056 EO gap, there is almost no room to improve, and
+   any noise in synthetic sample placement degrades to the rogue outcome.
+
+### Interpretations (Claude)
+
+The delta_scale sweep conclusively answers the P4 hypothesis: larger perturbations do not
+fix the problem of "DVRL local reward too weak in early training." What actually happened
+with v17a (ds=0.10, gamma=1.0) was that the agent explored more freely across the full 10D
+PCA space than v16 (which had curriculum limiting early dims), producing higher DVRL signals
+organically. This was already sufficient — and increasing delta_scale beyond 0.10 sends
+the agent into regions where beta's training becomes noisy and unstable.
+
+The pattern is revealing: ds=0.30 has near-zero deadzone (the beta *looks* healthy by that
+metric) but EO is worst. This means the deadzone metric alone is insufficient — a large
+perturbation can "rescue" beta from the deadzone by generating lots of uncertain samples,
+but those samples may be too far out of distribution to actually guide beta toward fairness.
+The right balance is enough perturbation to keep DVRL informative (ds=0.10 achieves 0.16–0.18
+median local reward) but not so much that the synthetic samples become pure noise.
+
+The rogue seed at ds=0.20 is a warning sign: increasing delta_scale raises the ceiling
+(the two good seeds are better than v17a: 0.049, 0.068 vs 0.141, 0.063) but also raises
+the floor dramatically (0.314 vs 0.141). For a paper result, high variance is worse than
+a slightly higher mean — reviewers will focus on the rogue seed. v17a's controlled variance
+is more publishable.
+
+### Decision: v17a is the final best config
+
+**v17a config (gamma=1.0, no curriculum, delta_scale=0.10) is the winner.**
+
+Do not pursue further delta_scale variants. The next experiments are:
+
+1. **5-seed runs of v17a** at both bias levels (census) — required for final paper table.
+   Use seeds: 42, 0, 1, 2, 3 (or any 5 fixed seeds).
+2. **Global-only ablation** (no local reward, global reward only) at bias=0.10 — needed
+   to prove DVRL contribution. Without this, reviewers will ask "does the local reward
+   actually help?" This is the highest-priority experiment after confirming the 5-seed plan.
+3. **Credit card v17a runs** — for utility preservation story. Use same config, both bias levels.
+4. **PAMAP2** — after census and credit are finalised.
+
