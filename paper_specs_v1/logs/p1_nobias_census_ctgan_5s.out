@@ -1,0 +1,206 @@
+[run_baseline] baseline=ctgan
+[run_baseline] spec=paper_specs_v1/p1_nobias_census_ctgan_5s.json
+[run_baseline] device=cpu
+[run_baseline] exp_group=BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756
+[run_baseline] seeds=[42, 0, 1, 2, 3]
+
+[run_baseline] ---- seed=42 ----
+[TRAIN] size=3000, minority=722 (24.07%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+[CTGAN] exp_group=BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756  seed=42
+[CTGAN] dataset=census_income  feature_dim=103
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_42
+[CTGAN] Training set: n_pos=722, n_neg=2278, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 296.8s
+[CTGAN] Sampling 2000 synthetic minority samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:  16%|#6        | 327/2000 [00:01<00:08, 186.58it/s]Sampling conditions: 100%|##########| 2000/2000 [00:07<00:00, 266.50it/s]/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:1102: PerformanceWarning:
+
+DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+
+Sampling conditions: 100%|##########| 2000/2000 [00:07<00:00, 260.87it/s]
+[CTGAN] Got 2000 synthetic minority samples.
+[CTGAN] Augmented set: n_pos=2722, total=5000
+FFNN Using device: cpu
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cpu
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_42/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6507 | F1(maj)=0.9029 | F1(weighted)=0.8421 | F1(macro)=0.7768 | Brier=0.1064
+[TEST] Beta  -> F1(min)=0.5986 | F1(maj)=0.8866 | F1(weighted)=0.8172 | F1(macro)=0.7426 | Brier=0.1233
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/final_test_metrics.csv
+[CTGAN] Done. seed=42 | time=1798.0s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_42
+
+[run_baseline] ---- seed=0 ----
+[TRAIN] size=3000, minority=722 (24.07%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+[CTGAN] exp_group=BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756  seed=0
+[CTGAN] dataset=census_income  feature_dim=107
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_0
+[CTGAN] Training set: n_pos=722, n_neg=2278, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 303.2s
+[CTGAN] Sampling 2000 synthetic minority samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:  17%|#6        | 336/2000 [00:02<00:09, 166.44it/s]Sampling conditions: 100%|##########| 2000/2000 [00:07<00:00, 273.42it/s]/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:1102: PerformanceWarning:
+
+DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+
+Sampling conditions: 100%|##########| 2000/2000 [00:07<00:00, 264.68it/s]
+[CTGAN] Got 2000 synthetic minority samples.
+[CTGAN] Augmented set: n_pos=2722, total=5000
+FFNN Using device: cpu
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cpu
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_0/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6675 | F1(maj)=0.8995 | F1(weighted)=0.8436 | F1(macro)=0.7835 | Brier=0.1087
+[TEST] Beta  -> F1(min)=0.6232 | F1(maj)=0.8846 | F1(weighted)=0.8216 | F1(macro)=0.7539 | Brier=0.1213
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_0/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/final_test_metrics.csv
+[CTGAN] Done. seed=0 | time=1801.2s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_0
+
+[run_baseline] ---- seed=1 ----
+[TRAIN] size=3000, minority=722 (24.07%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+[CTGAN] exp_group=BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756  seed=1
+[CTGAN] dataset=census_income  feature_dim=97
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_1
+[CTGAN] Training set: n_pos=722, n_neg=2278, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 269.8s
+[CTGAN] Sampling 2000 synthetic minority samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:  11%|#         | 214/2000 [00:01<00:13, 131.09it/s]Sampling conditions: 100%|##########| 2000/2000 [00:10<00:00, 198.23it/s]Sampling conditions: 100%|##########| 2000/2000 [00:10<00:00, 194.86it/s]
+[CTGAN] Got 2000 synthetic minority samples.
+[CTGAN] Augmented set: n_pos=2722, total=5000
+FFNN Using device: cpu
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cpu
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_1/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6756 | F1(maj)=0.8972 | F1(weighted)=0.8438 | F1(macro)=0.7864 | Brier=0.1066
+[TEST] Beta  -> F1(min)=0.6376 | F1(maj)=0.8860 | F1(weighted)=0.8261 | F1(macro)=0.7618 | Brier=0.1230
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/final_test_metrics.csv
+[CTGAN] Done. seed=1 | time=1763.4s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_1
+
+[run_baseline] ---- seed=2 ----
+[TRAIN] size=3000, minority=722 (24.07%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+[CTGAN] exp_group=BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756  seed=2
+[CTGAN] dataset=census_income  feature_dim=105
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_2
+[CTGAN] Training set: n_pos=722, n_neg=2278, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 268.8s
+[CTGAN] Sampling 2000 synthetic minority samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:  14%|#3        | 270/2000 [00:01<00:07, 218.02it/s]Sampling conditions: 100%|##########| 2000/2000 [00:06<00:00, 334.16it/s]/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:1102: PerformanceWarning:
+
+DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+
+Sampling conditions: 100%|##########| 2000/2000 [00:06<00:00, 326.86it/s]
+[CTGAN] Got 2000 synthetic minority samples.
+[CTGAN] Augmented set: n_pos=2722, total=5000
+FFNN Using device: cpu
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cpu
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_2/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6549 | F1(maj)=0.9039 | F1(weighted)=0.8439 | F1(macro)=0.7794 | Brier=0.1055
+[TEST] Beta  -> F1(min)=0.6167 | F1(maj)=0.8912 | F1(weighted)=0.8251 | F1(macro)=0.7539 | Brier=0.1193
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_2/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/final_test_metrics.csv
+[CTGAN] Done. seed=2 | time=1385.8s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_2
+
+[run_baseline] ---- seed=3 ----
+[TRAIN] size=3000, minority=722 (24.07%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+[CTGAN] exp_group=BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756  seed=3
+[CTGAN] dataset=census_income  feature_dim=100
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_3
+[CTGAN] Training set: n_pos=722, n_neg=2278, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 244.8s
+[CTGAN] Sampling 2000 synthetic minority samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   8%|7         | 151/2000 [00:01<00:14, 123.85it/s]Sampling conditions:  86%|########5 | 1715/2000 [00:08<00:01, 200.91it/s]Sampling conditions: 100%|#########9| 1997/2000 [00:10<00:00, 190.77it/s]/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:1102: PerformanceWarning:
+
+DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+
+Sampling conditions: 100%|##########| 2000/2000 [00:10<00:00, 182.35it/s]
+[CTGAN] Got 2000 synthetic minority samples.
+[CTGAN] Augmented set: n_pos=2722, total=5000
+FFNN Using device: cpu
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cpu
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_3/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6623 | F1(maj)=0.9029 | F1(weighted)=0.8450 | F1(macro)=0.7826 | Brier=0.1061
+[TEST] Beta  -> F1(min)=0.6367 | F1(maj)=0.8859 | F1(weighted)=0.8259 | F1(macro)=0.7613 | Brier=0.1225
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/final_test_metrics.csv
+[CTGAN] Done. seed=3 | time=1094.1s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/seed_3
