@@ -1,0 +1,20 @@
+{
+  "baseline": "ctgan",
+  "dataset_name": "credit_card",
+  "multiclass": false,
+  "bias_pct": null,
+  "minority_id": 1,
+  "majority_id": 0,
+  "third_id": null,
+  "real_data_size": 3000,
+  "seeds": [42, 0, 1, 2, 3],
+  "ffnn": {
+    "hidden_sizes": [32, 16],
+    "epochs": 20
+  },
+  "ctgan": {
+    "epochs": 300,
+    "batch_size": 500,
+    "n_synthetic": 2000
+  }
+}
