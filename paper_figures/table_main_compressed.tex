@@ -1,57 +1,59 @@
 \begin{table}[t]
 \centering
 \setlength{\tabcolsep}{5pt}
-\caption{Results under No Bias. EO and DP ($\downarrow$) are fairness metrics; AUC and Acc ($\uparrow$) are utility metrics. FUS $= (1-\text{EO})\times\text{AUC}$.}
+\caption{Results under No Bias.}
 \label{tab:nobias_compressed}
 \begin{tabular}{llccccc}
 \toprule
 Dataset & Method & EO $\downarrow$ & DP $\downarrow$ & AUC $\uparrow$ & Acc $\uparrow$ & FUS $\uparrow$ \\
 \midrule
-\multirow{4}{*}{Census} & Group DRO & \textbf{0.031$_{\pm 0.026}$} & 0.198$_{\pm 0.019}$ & \textbf{0.893$_{\pm 0.004}$} & 0.807$_{\pm 0.004}$ & \textbf{0.865$_{\pm 0.021}$} \\
+\multirow{5}{*}{Census} & \textit{No Intervention} & 0.217$_{\pm 0.021}$ & 0.205$_{\pm 0.015}$ & 0.896$_{\pm 0.002}$ & 0.843$_{\pm 0.002}$ & 0.701$_{\pm 0.020}$ \\
+ & Group DRO & \textbf{0.031$_{\pm 0.026}$} & 0.198$_{\pm 0.019}$ & \textbf{0.893$_{\pm 0.004}$} & 0.807$_{\pm 0.004}$ & \textbf{0.865$_{\pm 0.021}$} \\
  & OT Repair & 0.151$_{\pm 0.036}$ & \textbf{0.076$_{\pm 0.029}$} & 0.873$_{\pm 0.004}$ & \textbf{0.832$_{\pm 0.005}$} & 0.741$_{\pm 0.034}$ \\
  & CT-GAN & 0.077$_{\pm 0.058}$ & 0.166$_{\pm 0.030}$ & 0.874$_{\pm 0.003}$ & 0.826$_{\pm 0.003}$ & 0.807$_{\pm 0.050}$ \\
  & RL Framework & 0.042$_{\pm 0.031}$ & 0.158$_{\pm 0.012}$ & 0.880$_{\pm 0.007}$ & 0.826$_{\pm 0.010}$ & 0.843$_{\pm 0.026}$ \\
 \midrule
-\multirow{4}{*}{Credit} & Group DRO & \textbf{0.037$_{\pm 0.016}$} & 0.029$_{\pm 0.019}$ & 0.736$_{\pm 0.029}$ & 0.719$_{\pm 0.029}$ & 0.709$_{\pm 0.038}$ \\
+\multirow{5}{*}{Credit} & \textit{No Intervention} & 0.036$_{\pm 0.012}$ & 0.030$_{\pm 0.009}$ & 0.731$_{\pm 0.008}$ & 0.804$_{\pm 0.002}$ & 0.704$_{\pm 0.016}$ \\
+ & Group DRO & \textbf{0.037$_{\pm 0.016}$} & 0.029$_{\pm 0.019}$ & 0.736$_{\pm 0.029}$ & 0.719$_{\pm 0.029}$ & 0.709$_{\pm 0.038}$ \\
  & OT Repair & 0.043$_{\pm 0.039}$ & \textbf{0.012$_{\pm 0.010}$} & \textbf{0.741$_{\pm 0.010}$} & \textbf{0.811$_{\pm 0.002}$} & \textbf{0.710$_{\pm 0.024}$} \\
  & CT-GAN & 0.064$_{\pm 0.027}$ & 0.050$_{\pm 0.037}$ & 0.717$_{\pm 0.012}$ & 0.765$_{\pm 0.011}$ & 0.671$_{\pm 0.026}$ \\
  & RL Framework & 0.041$_{\pm 0.016}$ & 0.030$_{\pm 0.009}$ & 0.708$_{\pm 0.011}$ & 0.785$_{\pm 0.006}$ & 0.679$_{\pm 0.017}$ \\
 \midrule
-\multirow{4}{*}{HAR} & Group DRO & -- & -- & -- & -- & -- \\
+\multirow{5}{*}{HAR} & \textit{No Intervention} & -- & -- & -- & -- & -- \\
+ & Group DRO & -- & -- & -- & -- & -- \\
  & OT Repair & -- & -- & -- & -- & -- \\
  & CT-GAN & -- & -- & -- & -- & -- \\
  & RL Framework & -- & -- & -- & -- & -- \\
 \bottomrule
 \end{tabular}
-\smallskip
-\par\raggedright\small $\dagger$ provisional ($<$5 seeds). Best per column is \textbf{bolded}. FUS $= (1-\text{EO})\times\text{AUC}$.
 \end{table}
 
 \begin{table}[t]
 \centering
 \setlength{\tabcolsep}{5pt}
-\caption{Results under High Bias (10\%). EO and DP ($\downarrow$) are fairness metrics; AUC and Acc ($\uparrow$) are utility metrics. FUS $= (1-\text{EO})\times\text{AUC}$.}
+\caption{Fairness and Utility Performance under High Bias (10\%).}
 \label{tab:010_compressed}
 \begin{tabular}{llccccc}
 \toprule
 Dataset & Method & EO $\downarrow$ & DP $\downarrow$ & AUC $\uparrow$ & Acc $\uparrow$ & FUS $\uparrow$ \\
 \midrule
-\multirow{4}{*}{Census} & Group DRO & 0.103$_{\pm 0.027}$ & 0.259$_{\pm 0.023}$ & \textbf{0.894$_{\pm 0.004}$} & 0.817$_{\pm 0.014}$ & 0.802$_{\pm 0.025}$ \\
+\multirow{5}{*}{Census} & \textit{No Intervention} & 0.183$_{\pm 0.079}$ & 0.112$_{\pm 0.023}$ & 0.889$_{\pm 0.004}$ & 0.825$_{\pm 0.006}$ & 0.726$_{\pm 0.070}$ \\
+ & Group DRO & 0.103$_{\pm 0.027}$ & 0.259$_{\pm 0.023}$ & \textbf{0.894$_{\pm 0.004}$} & 0.817$_{\pm 0.014}$ & 0.802$_{\pm 0.025}$ \\
  & OT Repair & 0.105$_{\pm 0.062}$ & \textbf{0.036$_{\pm 0.016}$} & 0.867$_{\pm 0.008}$ & 0.817$_{\pm 0.006}$ & 0.777$_{\pm 0.060}$ \\
  & CT-GAN & 0.070$_{\pm 0.082}$ & 0.088$_{\pm 0.026}$ & 0.850$_{\pm 0.008}$ & 0.809$_{\pm 0.009}$ & 0.790$_{\pm 0.071}$ \\
  & RL Framework & \textbf{0.021$_{\pm 0.015}$} & 0.094$_{\pm 0.017}$ & 0.878$_{\pm 0.005}$ & \textbf{0.831$_{\pm 0.005}$} & \textbf{0.860$_{\pm 0.016}$} \\
 \midrule
-\multirow{4}{*}{Credit} & Group DRO & 0.055$_{\pm 0.019}$ & 0.052$_{\pm 0.028}$ & 0.708$_{\pm 0.030}$ & 0.704$_{\pm 0.060}$ & 0.668$_{\pm 0.031}$ \\
+\multirow{5}{*}{Credit} & \textit{No Intervention} & 0.024$_{\pm 0.022}$ & 0.011$_{\pm 0.007}$ & 0.688$_{\pm 0.013}$ & 0.787$_{\pm 0.006}$ & 0.672$_{\pm 0.025}$ \\
+ & Group DRO & 0.055$_{\pm 0.019}$ & 0.052$_{\pm 0.028}$ & 0.708$_{\pm 0.030}$ & 0.704$_{\pm 0.060}$ & 0.668$_{\pm 0.031}$ \\
  & OT Repair & \textbf{0.022$_{\pm 0.014}$} & \textbf{0.005$_{\pm 0.004}$} & \textbf{0.724$_{\pm 0.011}$} & \textbf{0.795$_{\pm 0.004}$} & \textbf{0.708$_{\pm 0.010}$} \\
  & CT-GAN & 0.048$_{\pm 0.029}$ & 0.033$_{\pm 0.020}$ & 0.690$_{\pm 0.015}$ & 0.771$_{\pm 0.007}$ & 0.657$_{\pm 0.016}$ \\
  & RL Framework & 0.041$_{\pm 0.047}$ & 0.023$_{\pm 0.023}$ & 0.672$_{\pm 0.022}$ & 0.776$_{\pm 0.015}$ & 0.644$_{\pm 0.030}$ \\
 \midrule
-\multirow{4}{*}{HAR} & Group DRO & -- & -- & -- & -- & -- \\
+\multirow{5}{*}{HAR} & \textit{No Intervention} & -- & -- & -- & -- & -- \\
+ & Group DRO & -- & -- & -- & -- & -- \\
  & OT Repair & -- & -- & -- & -- & -- \\
  & CT-GAN & -- & -- & -- & -- & -- \\
  & RL Framework & -- & -- & -- & -- & -- \\
 \bottomrule
 \end{tabular}
-\smallskip
-\par\raggedright\small $\dagger$ provisional ($<$5 seeds). Best per column is \textbf{bolded}. FUS $= (1-\text{EO})\times\text{AUC}$.
 \end{table}

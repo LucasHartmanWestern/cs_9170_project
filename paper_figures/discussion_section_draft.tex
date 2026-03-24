@@ -1,0 +1,150 @@
+% ──────────────────────────────────────────────────────────────────────────────
+% DISCUSSION SECTION DRAFT
+% ──────────────────────────────────────────────────────────────────────────────
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Interpretation of Main Findings}
+
+The central result — that reweighting-based methods degrade sharply under
+positive-class scarcity while the proposed framework does not — has a
+straightforward structural explanation.
+Group DRO and OT Repair both operate exclusively on the existing training
+distribution: Group DRO up-weights under-represented groups; OT Repair
+redistributes mass between group-conditional distributions.
+When the disadvantaged group retains only 43 positive examples ($p_+ = 10\%$),
+there is insufficient signal for either method to construct meaningful
+group-level gradients or a reliable transport plan.
+The RL framework sidesteps this constraint entirely by generating new minority
+positive samples rather than reweighting existing ones — making it the only
+approach that can improve representation in the region where the classifier
+currently fails.
+
+The credit card results illustrate the complementary boundary condition.
+Because the no-intervention alpha model already achieves near-zero EO on that
+dataset, the disadvantaged group's positive rate is not low enough to create
+meaningful bias in the learned classifier.
+All methods, including ours, produce modest and statistically indistinguishable
+EO changes.
+This is expected behaviour: when there is no fairness gap to close, a
+generative augmentation framework has no target to optimise toward.
+The credit results therefore do not undermine the main claim — they define
+the regime boundary beyond which the framework's advantage diminishes.
+
+CT-GAN's high variance at $p_+ = 10\%$ reflects a known weakness of
+conditional generative models at very low sample counts.
+With only 43 minority positive examples available to condition on, CT-GAN's
+training is unstable across seeds, leading to inconsistent generation quality.
+The RL framework, by operating in PCA-compressed space with bounded
+perturbations from real seed points, is less sensitive to this regime because
+it does not need to learn a full generative model from scratch — it perturbs
+existing examples rather than generating unconditionally.
+
+\subsection{Effect of Design Choices}
+
+The ablation results collectively identify three design choices as load-bearing
+for the framework's effectiveness.
+
+\textbf{PCA compression.}
+Reducing the action space from the full feature dimensionality (${\sim}100$)
+to 10 PCA components is the single most impactful design choice, producing a
+$5\times$ reduction in EO gap.
+In high-dimensional spaces, bounded delta actions cover an exponentially small
+fraction of the neighbourhood around each seed point, making directed
+exploration of the decision boundary intractable.
+PCA concentrates the principal axes of variation in the minority group's
+training distribution into a low-dimensional subspace, so each delta action
+moves the generated sample along a semantically meaningful direction rather
+than an arbitrary raw-feature direction.
+
+\textbf{Credit assignment ($\gamma = 1.0$).}
+The switch from $\gamma = 0.99$ to $\gamma = 1.0$ was the single change that
+eliminated the training deadzone — reducing the fraction of episodes where
+$\beta$ underperforms $\alpha$ from roughly 50\% to 10--12\%.
+With $\gamma = 0.99$ and a trajectory length of $T = 2000$, the effective
+credit horizon is $1/(1-\gamma) = 100$ steps; steps 500--2000 contribute a
+discount factor below $0.007$ and are effectively ignored in the policy
+gradient.
+Since the beta classifier is trained on the full 2000-step trajectory, this
+creates a systematic mismatch: the reward signal used to update the policy does
+not reflect the quality of the majority of the generated samples.
+Setting $\gamma = 1.0$ removes the discount entirely, so all 2000 trajectory
+steps contribute equally to the policy gradient and the deadzone resolves.
+
+\textbf{Delta action scale.}
+The $4\times$ EO degradation at both $\delta = 0.05$ and $\delta = 0.20$
+relative to the default $\delta = 0.10$ reflects a narrow operating regime.
+Too small a perturbation places generated samples near the training data
+manifold, where the beta classifier is already confident and the DVRL local
+reward signal is near zero.
+Too large a perturbation overshoots the current decision boundary, placing
+samples in out-of-distribution regions that do not provide useful gradient
+information and can actively destabilise beta's training.
+The optimal $\delta = 0.10$ keeps generated samples within the classifier's
+uncertainty region — consistently near the boundary but not beyond it.
+
+\subsection{Strengths}
+
+The framework's primary strength is its applicability to a regime that existing
+methods cannot address.
+It achieves the best fairness-utility tradeoff on the primary dataset under
+high scarcity, matching or exceeding all baselines on both EO and utility
+simultaneously.
+Unlike reweighting methods, it does not require a sufficient number of
+minority positive examples to function — it can improve a classifier even when
+only a handful of such examples exist in the training set.
+
+The framework also shows no degradation on unbiased data.
+Applying it to a training set where the classifier is already near-optimal does
+not harm predictive utility, which is a necessary condition for safe deployment
+in practice — a method that only works when data are biased and degrades
+otherwise is of limited practical value.
+
+The PCA-plus-delta action design is also computationally efficient relative to
+full generative models.
+CT-GAN and similar approaches require training a separate generative model,
+which is expensive and unstable at low sample counts.
+The RL framework needs only a PCA fit and bounded perturbations, making it
+deployable in low-data regimes where full generative models are impractical.
+
+\subsection{Limitations}
+
+\textbf{Seed variance.}
+The most significant practical limitation is the persistent per-seed variance.
+Across five seeds, a minority of runs degrades EO relative to the no-intervention
+baseline.
+The rogue-seed pattern is most pronounced at $p_+ = 5\%$, where only 17
+minority positive examples remain.
+At this extreme level of scarcity, the agent's ability to find the correct
+decision boundary region is sensitive to the initialisation of the beta
+classifier, and the small number of real positive examples limits the diversity
+of starting points for delta action trajectories.
+The mean results are robust, but the seed range is wide enough that individual
+deployments without ensemble averaging may not reliably improve fairness.
+
+\textbf{Low-baseline-EO datasets.}
+As demonstrated on credit card, the framework provides no benefit when the
+baseline classifier already achieves near-zero fairness gap.
+It is specifically designed for the positive-class scarcity regime, and its
+contribution is proportional to the size of the gap it has to close.
+Practitioners should assess the baseline EO gap before applying the framework.
+
+\textbf{Hyperparameter sensitivity.}
+The delta action scale $\delta$ exhibits a narrow operating range where
+performance is optimal, and this range is likely dataset-dependent.
+The current experiments use a fixed $\delta = 0.10$ tuned on Census; transfer
+to new datasets may require re-tuning, and the sensitivity to this parameter
+adds an additional calibration step relative to methods that have fewer
+hyperparameters.
+
+\textbf{Computational cost.}
+The framework retrains the beta classifier from scratch at each episode across
+$T = 800$ training episodes.
+Although each episode is lightweight, the cumulative cost scales linearly with
+the number of episodes and the classifier training depth.
+On the datasets used here this is manageable, but scaling to higher-dimensional
+feature spaces or larger training sets would require either a faster beta
+classifier or a reduced episode count.
+
+\end{document}

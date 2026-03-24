@@ -176,6 +176,13 @@ def fus(df):
     score = (1 - df['beta_eo_tpr_diff']) * df['beta_roc_auc']
     return score.mean(), score.std()
 
+def alpha_fus(df):
+    """FUS computed from alpha (no-intervention) columns."""
+    if df is None or 'alpha_eo_tpr_diff' not in df.columns:
+        return None, None
+    score = (1 - df['alpha_eo_tpr_diff']) * df['alpha_roc_auc']
+    return score.mean(), score.std()
+
 def smooth(x, w=20):
     if len(x) < w:
         return x
@@ -229,6 +236,18 @@ BIASES       = ['nobias', '005', '010']   # full set, used for degradation plot
 MAIN_BIASES  = ['nobias', '010']          # shown in main tables and tradeoff plots
 METHODS      = ['Group DRO', 'OT Repair', 'CT-GAN', 'RL Framework']
 
+# Maps beta metric columns to their alpha (no-intervention) equivalents
+ALPHA_COL_MAP = {
+    'beta_eo_tpr_diff':  'alpha_eo_tpr_diff',
+    'beta_dp_diff':      'alpha_dp_diff',
+    'beta_eod_max_diff': 'alpha_eod_max_diff',
+    'beta_roc_auc':      'alpha_roc_auc',
+    'beta_acc':          'alpha_acc',
+    'beta_f1_weighted':  'alpha_f1_weighted',
+    'beta_f1_minority':  'alpha_f1_minority',
+    'beta_brier':        'alpha_brier',
+}
+
 
 def best_in_group(dataset, bias, col, lower):
     vals = {}
@@ -280,9 +299,29 @@ def build_table(metrics_list, bias, include_fus=False, label='tab:results', capt
     ]
 
     for di, dataset in enumerate(DATASETS):
+        n_rows = len(METHODS) + 1  # +1 for No Intervention
+        # ── No Intervention row (alpha model metrics) ──
+        ni_prefix = r'\multirow{' + str(n_rows) + r'}{*}{' + dataset + '}'
+        ni_row = f'{ni_prefix} & \\textit{{No Intervention}}'
+        if dataset == 'HAR':
+            ni_row += ' & --' * n_metrics
+        else:
+            ni_df = load(RESULTS.get((dataset, bias, 'RL Framework')))
+            ni_prov = provisional(ni_df)
+            for col, _, _ in metrics_list:
+                alpha_col = ALPHA_COL_MAP.get(col, col)
+                ni_row += ' & ' + fmt_cell(ni_df, alpha_col, bold=False, prov=ni_prov)
+            if include_fus:
+                ni_fus_m, ni_fus_s = alpha_fus(ni_df)
+                if ni_fus_m is not None:
+                    dag = r'\dagger' if ni_prov else ''
+                    ni_row += ' & ' + f'{ni_fus_m:.3f}$_{{\\pm {ni_fus_s:.3f}{dag}}}$'
+                else:
+                    ni_row += ' & --'
+        lines.append(ni_row + r' \\')
+
         for mi, method in enumerate(METHODS):
-            prefix = r'\multirow{4}{*}{' + dataset + '}' if mi == 0 else ''
-            row = f'{prefix} & {method}'
+            row = f' & {method}'
             if dataset == 'HAR':
                 row += ' & --' * n_metrics
             else:
@@ -314,8 +353,6 @@ def build_table(metrics_list, bias, include_fus=False, label='tab:results', capt
     lines += [
         r'\bottomrule',
         r'\end{tabular}',
-        r'\smallskip',
-        f'\\par\\raggedright\\small {footnote}',
         r'\end{table}',
     ]
     return '\n'.join(lines)
@@ -335,12 +372,10 @@ def make_tables():
     ]:
         blocks = []
         for bias, bias_title in bias_titles.items():
-            cap_c = (
-                f'Results under {bias_title}. '
-                r'EO and DP ($\downarrow$) are fairness metrics; '
-                r'AUC and Acc ($\uparrow$) are utility metrics. '
-                r'FUS $= (1-\text{EO})\times\text{AUC}$.'
-            )
+            if bias == '010' and include_fus:
+                cap_c = r'Fairness and Utility Performance under High Bias (10\%).'
+            else:
+                cap_c = f'Results under {bias_title}.'
             cap_f = f'Full results under {bias_title} including all tracked metrics.'
             caption = cap_c if include_fus else cap_f
             label   = f'tab:{bias}_{suffix}'
