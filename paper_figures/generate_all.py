@@ -23,9 +23,10 @@ warnings.filterwarnings('ignore')
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT      = Path(__file__).parent.parent
-PAPER_TR  = ROOT / 'training_runs' / 'training_runs_paper'
-SPEC_TR   = PAPER_TR / 'training_runs'
-LOCAL_TR  = ROOT / 'training_runs'
+MAIN_TR   = ROOT / 'training_runs' / 'paper_results' / 'main_results'
+FFNN_TR   = ROOT / 'training_runs' / 'paper_results' / 'ffnn_ablation'
+BUDGET_TR = ROOT / 'training_runs' / 'paper_results' / 'budget_ablation'
+DELTA_TR  = ROOT / 'training_runs' / 'paper_results' / 'delta_ablation'
 OUT       = ROOT / 'paper_figures'
 OUT.mkdir(exist_ok=True)
 
@@ -56,57 +57,67 @@ def _s(p): return str(p)
 RESULTS = {
     # ── Census ──
     ('Census', 'nobias', 'Group DRO'):
-        _s(LOCAL_TR/'BASELINE_group_dro_p1_nobias_census_gdro_5s_5951e26e__G202603201755/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_group_dro_p1_nobias_census_gdro_5s_5951e26e__G202603201755/final_test_metrics.csv'),
     ('Census', 'nobias', 'OT Repair'):
-        _s(LOCAL_TR/'BASELINE_gaussian_ot_repair_p1_nobias_census_otrep_5s_216fbc09__G202603201755/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_gaussian_ot_repair_p1_nobias_census_otrep_5s_216fbc09__G202603201755/final_test_metrics.csv'),
     ('Census', 'nobias', 'CT-GAN'):
-        _s(LOCAL_TR/'BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_ctgan_p1_nobias_census_ctgan_5s_900a27b1__G202603201756/final_test_metrics.csv'),
     ('Census', 'nobias', 'RL Framework'):
-        _s(PAPER_TR/'SPECp1_nobias_census_ours_ep20_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_GG202603202304_352917e1/final_test_metrics.csv'),
+        _s(MAIN_TR/'SPECp1_nobias_census_ours_ep20_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_GG202603202304_352917e1/final_test_metrics.csv'),
 
     ('Census', '005', 'Group DRO'):
-        _s(LOCAL_TR/'BASELINE_group_dro_v16_bias05_gdro_census_3seeds_9ff6e175__G202603171753/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_group_dro_p1_census_bias05_gdro_5s_8bdc58e8__G202603211520/final_test_metrics.csv'),
     ('Census', '005', 'OT Repair'):
-        _s(LOCAL_TR/'BASELINE_gaussian_ot_repair_p1_census_bias05_otrep_5s_ep20_539e2739__G202603201755/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_gaussian_ot_repair_p1_census_bias05_otrep_5s_ep20_539e2739__G202603201755/final_test_metrics.csv'),
     ('Census', '005', 'CT-GAN'):
-        _s(LOCAL_TR/'BASELINE_ctgan_p1_census_bias05_ctgan_5s_ep20_6db6db20__G202603201756/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_ctgan_p1_census_bias05_ctgan_5s_ep20_6db6db20__G202603201756/final_test_metrics.csv'),
     ('Census', '005', 'RL Framework'):
-        _s(SPEC_TR/'SPECp1_main_census_bias05_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202603200009_28c96eee/final_test_metrics.csv'),
+        _s(MAIN_TR/'SPECp1_main_census_bias05_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202603200009_28c96eee/final_test_metrics.csv'),
 
     ('Census', '010', 'Group DRO'):
-        _s(LOCAL_TR/'BASELINE_group_dro_v16_bias010_gdro_census_3seeds_cd68eb16__G202603171800/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_group_dro_p1_census_bias010_gdro_5s_c5421696__G202603211538/final_test_metrics.csv'),
     ('Census', '010', 'OT Repair'):
-        _s(LOCAL_TR/'BASELINE_gaussian_ot_repair_p1_census_bias010_otrep_5s_ep20_2084dedc__G202603201755/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_gaussian_ot_repair_p1_census_bias010_otrep_5s_ep20_2084dedc__G202603201755/final_test_metrics.csv'),
     ('Census', '010', 'CT-GAN'):
-        _s(LOCAL_TR/'BASELINE_ctgan_p1_census_bias010_ctgan_5s_ep20_579aa0ca__G202603201756/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_ctgan_p1_census_bias010_ctgan_5s_ep20_579aa0ca__G202603201756/final_test_metrics.csv'),
     ('Census', '010', 'RL Framework'):
-        _s(SPEC_TR/'SPECp1_ffnn_census_ep20_bias010_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603192345_591446a3/final_test_metrics.csv'),
+        _s(FFNN_TR/'SPECp1_ffnn_census_ep20_bias010_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603192345_591446a3/final_test_metrics.csv'),
 
     # ── Credit ──
-    # Credit no-bias: pending (no run yet)
+    ('Credit', 'nobias', 'Group DRO'):
+        _s(MAIN_TR/'BASELINE_group_dro_p1_nobias_credit_gdro_5s_fc6d4e7b__G202603211540/final_test_metrics.csv'),
+    ('Credit', 'nobias', 'OT Repair'):
+        _s(MAIN_TR/'BASELINE_gaussian_ot_repair_p1_nobias_credit_otrep_5s_8edcf461__G202603211520/final_test_metrics.csv'),
+    ('Credit', 'nobias', 'CT-GAN'):
+        _s(MAIN_TR/'BASELINE_ctgan_p1_nobias_credit_ctgan_5s_eb4604c7__G202603211520/final_test_metrics.csv'),
+    ('Credit', 'nobias', 'RL Framework'):
+        _s(MAIN_TR/'SPECp1_nobias_credit_ours_ep20_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_GG202603211520_ed14ca96/final_test_metrics.csv'),
+
     ('Credit', '005', 'Group DRO'):
-        _s(LOCAL_TR/'BASELINE_group_dro_v16_bias05_gdro_credit_3seeds_c161369f__G202603171827/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/final_test_metrics.csv'),
     ('Credit', '005', 'OT Repair'):
-        _s(LOCAL_TR/'BASELINE_gaussian_ot_repair_p1_credit_bias05_otrep_5s_ep20_33727f8e__G202603201755/final_test_metrics.csv'),
-    # Credit bias=0.05 CT-GAN: no ep20 rerun available
+        _s(MAIN_TR/'BASELINE_gaussian_ot_repair_p1_credit_bias05_otrep_5s_ep20_33727f8e__G202603201755/final_test_metrics.csv'),
+    ('Credit', '005', 'CT-GAN'):
+        _s(MAIN_TR/'BASELINE_ctgan_p1_credit_bias05_ctgan_5s_ep20_0bd0101c__G202603211545/final_test_metrics.csv'),
     ('Credit', '005', 'RL Framework'):
-        _s(SPEC_TR/'SPECp1_main_credit_bias05_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202603200009_501656c4/final_test_metrics.csv'),
+        _s(MAIN_TR/'SPECp1_main_credit_bias05_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202603200009_501656c4/final_test_metrics.csv'),
 
     ('Credit', '010', 'Group DRO'):
-        _s(LOCAL_TR/'BASELINE_group_dro_v16_bias010_gdro_credit_3seeds_70d5567c__G202603171827/final_test_metrics.csv'),
+        _s(MAIN_TR/'BASELINE_group_dro_p1_credit_bias010_gdro_5s_dcca27f2__G202603211552/final_test_metrics.csv'),
     ('Credit', '010', 'OT Repair'):
-        _s(LOCAL_TR/'BASELINE_gaussian_ot_repair_p1_credit_bias010_otrep_5s_ep20_d580f330__G202603201755/final_test_metrics.csv'),
-    # Credit bias=0.10 CT-GAN: missing
+        _s(MAIN_TR/'BASELINE_gaussian_ot_repair_p1_credit_bias010_otrep_5s_ep20_d580f330__G202603201755/final_test_metrics.csv'),
+    ('Credit', '010', 'CT-GAN'):
+        _s(MAIN_TR/'BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/final_test_metrics.csv'),
     ('Credit', '010', 'RL Framework'):
-        _s(SPEC_TR/'SPECp1_main_credit_bias010_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603200009_abfd28d9/final_test_metrics.csv'),
+        _s(MAIN_TR/'SPECp1_main_credit_bias010_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603200009_abfd28d9/final_test_metrics.csv'),
 }
 
 # Learning curve run directories (seed-level, contains metrics.csv)
 LEARNING_RUNS = {
-    ('Census', 'nobias'): str(PAPER_TR / 'SPECp1_nobias_census_ours_ep20_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_GG202603202304_352917e1'),
-    ('Census', '010'):    str(SPEC_TR  / 'SPECp1_ffnn_census_ep20_bias010_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603192345_591446a3'),
-    ('Credit', '010'):    str(SPEC_TR  / 'SPECp1_main_credit_bias010_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603200009_abfd28d9'),
-    ('Credit', '005'):    str(SPEC_TR  / 'SPECp1_main_credit_bias05_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202603200009_501656c4'),
+    ('Census', 'nobias'): str(MAIN_TR / 'SPECp1_nobias_census_ours_ep20_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_GG202603202304_352917e1'),
+    ('Census', '010'):    str(FFNN_TR / 'SPECp1_ffnn_census_ep20_bias010_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603192345_591446a3'),
+    ('Credit', '010'):    str(MAIN_TR / 'SPECp1_main_credit_bias010_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603200009_abfd28d9'),
+    ('Credit', '005'):    str(MAIN_TR / 'SPECp1_main_credit_bias05_global_5s_EP800_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202603200009_501656c4'),
 }
 
 # Reward ablation: dvrl vs global, across budget configs (no curriculum)
@@ -115,10 +126,8 @@ BUDGET_CONFIGS = ['hireal', 'hisynth', 'scale1', 'scale2']
 
 def _budget_path(dataset, bias, variant, reward):
     ds  = dataset.lower()
-    b   = f'_BIAS0.{bias[-1]}' if bias != 'nobias' else ''
-    # find matching dir
     pattern = f'SPECp1_budget_{ds}_{variant}_{bias}_{reward}_5s_EP800'
-    for d in SPEC_TR.iterdir():
+    for d in BUDGET_TR.iterdir():
         if d.name.startswith(pattern):
             p = d / 'final_test_metrics.csv'
             return str(p) if p.exists() else None
@@ -127,7 +136,7 @@ def _budget_path(dataset, bias, variant, reward):
 def _ffnn_path(dataset, ep):
     ds = dataset.lower()
     pattern = f'SPECp1_ffnn_{ds}_ep{ep:02d}_bias010_global_5s'
-    for d in SPEC_TR.iterdir():
+    for d in FFNN_TR.iterdir():
         if d.name.startswith(pattern):
             p = d / 'final_test_metrics.csv'
             return str(p) if p.exists() else None
@@ -136,7 +145,7 @@ def _ffnn_path(dataset, ep):
 def _delta_path(dataset, ds_str, reward):
     ds = dataset.lower()
     pattern = f'SPECp1_delta_{ds}_{ds_str}_bias010_{reward}_5s'
-    for d in SPEC_TR.iterdir():
+    for d in DELTA_TR.iterdir():
         if d.name.startswith(pattern):
             p = d / 'final_test_metrics.csv'
             return str(p) if p.exists() else None
@@ -181,6 +190,8 @@ def load_learning_curves(run_dir):
         p = sd / 'metrics.csv'
         if p.exists():
             df = pd.read_csv(p)
+            if 'meta.phase' in df.columns:
+                df = df[df['meta.phase'] == 'phase1_class1'].reset_index(drop=True)
             dfs.append(df)
     if not dfs:
         return None
@@ -213,9 +224,10 @@ COMPRESSED_METRICS = [
     # FUS handled separately
 ]
 
-DATASETS = ['Census', 'Credit', 'HAR']
-BIASES   = ['nobias', '005', '010']
-METHODS  = ['Group DRO', 'OT Repair', 'CT-GAN', 'RL Framework']
+DATASETS     = ['Census', 'Credit', 'HAR']
+BIASES       = ['nobias', '005', '010']   # full set, used for degradation plot
+MAIN_BIASES  = ['nobias', '010']          # shown in main tables and tradeoff plots
+METHODS      = ['Group DRO', 'OT Repair', 'CT-GAN', 'RL Framework']
 
 
 def best_in_group(dataset, bias, col, lower):
@@ -314,7 +326,6 @@ def make_tables():
 
     bias_titles = {
         'nobias': 'No Bias',
-        '005':    'Moderate Bias (5\\%)',
         '010':    'High Bias (10\\%)',
     }
 
@@ -343,98 +354,148 @@ def make_tables():
 
 # ── 2. Fairness-Utility Tradeoff ───────────────────────────────────────────────
 
+MARKERS = {'Group DRO': 'o', 'OT Repair': 's', 'CT-GAN': '^', 'RL Framework': 'D'}
+BIAS_DISPLAY = {
+    'nobias': 'No Bias',
+    '005':    'Moderate Bias (5%)',
+    '010':    'High Bias (10%)',
+}
+PLOT_DATASETS = ['Census', 'Credit']
+
+
+def _draw_tradeoff_ax(ax, dataset, bias):
+    """Plot all four methods for one (dataset, bias) panel."""
+    for method in METHOD_ORDER:
+        df = load(RESULTS.get((dataset, bias, method)))
+        if df is None:
+            continue
+        eo_m, eo_s   = mean_std(df, 'beta_eo_tpr_diff')
+        auc_m, auc_s = mean_std(df, 'beta_roc_auc')
+        ax.errorbar(eo_m, auc_m, xerr=eo_s, yerr=auc_s,
+                    fmt=MARKERS[method], color=METHOD_COLORS[method],
+                    capsize=3, markersize=8, linestyle='none',
+                    label=method)
+
+    ax.set_xlabel('EO Gap ↓', fontsize=9)
+    ax.set_ylabel('ROC-AUC ↑', fontsize=9)
+    ax.axvline(0, color='gray', linewidth=0.5, linestyle='--')
+
+    # Ideal region indicator — top-left corner (low EO, high AUC)
+    ax.annotate('', xy=(0.04, 0.96), xytext=(0.14, 0.86),
+                xycoords='axes fraction', textcoords='axes fraction',
+                arrowprops=dict(arrowstyle='->', color='#888888',
+                                lw=1.2, connectionstyle='arc3,rad=0.0'))
+    ax.text(0.15, 0.85, 'Ideal', transform=ax.transAxes,
+            fontsize=7, color='#888888', va='top', ha='left', style='italic')
+
+
 def make_tradeoff_plots():
     print('Generating fairness-utility tradeoff plots...')
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=False)
-    fig.suptitle('Fairness–Utility Tradeoff (EO vs ROC-AUC)', fontsize=13, fontweight='bold')
 
-    markers = {'Group DRO': 'o', 'OT Repair': 's', 'CT-GAN': '^', 'RL Framework': 'D'}
-    bias_styles = {'nobias': '-', '005': '--', '010': ':'}
-    bias_alpha  = {'nobias': 1.0, '005': 0.75, '010': 0.55}
-
-    for ax, dataset in zip(axes, ['Census', 'Credit', 'HAR']):
-        ax.set_title(dataset, fontsize=11, fontweight='bold')
-        ax.set_xlabel('EO Gap ↓ (lower is fairer)', fontsize=9)
-        ax.set_ylabel('ROC-AUC ↑', fontsize=9)
-
-        for method in METHOD_ORDER:
-            for bias in BIASES:
-                if dataset == 'HAR':
-                    continue
-                df = load(RESULTS.get((dataset, bias, method)))
-                if df is None:
-                    continue
-                eo_m, eo_s = mean_std(df, 'beta_eo_tpr_diff')
-                auc_m, auc_s = mean_std(df, 'beta_roc_auc')
-                color = METHOD_COLORS[method]
-                ax.errorbar(eo_m, auc_m, xerr=eo_s, yerr=auc_s,
-                            fmt=markers[method], color=color,
-                            alpha=bias_alpha[bias], capsize=3,
-                            markersize=7 if bias == 'nobias' else 5,
-                            linestyle='none',
-                            label=f'{method} ({BIAS_LABELS[bias]})' if bias == 'nobias' else None)
-
-        ax.axvline(0, color='gray', linewidth=0.5, linestyle='--')
-
-    # Shared legend
     legend_handles = [
         mpatches.Patch(color=METHOD_COLORS[m], label=m) for m in METHOD_ORDER
     ]
-    bias_handles = [
-        plt.Line2D([0], [0], color='k', alpha=a, linewidth=2,
-                   label=BIAS_LABELS[b], linestyle=s)
-        for b, s, a in zip(BIASES, ['-','--',':'], [1.0,0.75,0.55])
-    ]
-    fig.legend(handles=legend_handles + bias_handles,
-               loc='lower center', ncol=4, fontsize=8,
-               bbox_to_anchor=(0.5, -0.08))
 
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    # Individual plots — one per (dataset, bias)
+    individual_figs = {}
+    for dataset in PLOT_DATASETS:
+        for bias in MAIN_BIASES:
+            fig, ax = plt.subplots(figsize=(4.5, 4))
+            _draw_tradeoff_ax(ax, dataset, bias)
+            ax.set_title(f'{dataset} — {BIAS_DISPLAY[bias]}', fontsize=10, fontweight='bold')
+            ax.legend(handles=legend_handles, fontsize=8, loc='best')
+            plt.tight_layout()
+            fname = f'fig_tradeoff_{dataset.lower()}_{bias}.png'
+            plt.savefig(OUT / fname, dpi=150, bbox_inches='tight')
+            individual_figs[(dataset, bias)] = fname
+            plt.close()
+            print(f'  Saved {fname}')
+
+    # Grid plot — 2 rows (datasets) × 2 cols (bias levels)
+    fig, axes = plt.subplots(
+        len(PLOT_DATASETS), len(MAIN_BIASES),
+        figsize=(9, 8),
+        sharey='row',
+    )
+    fig.suptitle('Fairness–Utility Tradeoff (EO vs ROC-AUC)', fontsize=13, fontweight='bold')
+
+    for row, dataset in enumerate(PLOT_DATASETS):
+        for col, bias in enumerate(MAIN_BIASES):
+            ax = axes[row][col]
+            _draw_tradeoff_ax(ax, dataset, bias)
+            if row == 0:
+                ax.set_title(BIAS_DISPLAY[bias], fontsize=10, fontweight='bold')
+            if col == 0:
+                ax.set_ylabel(f'{dataset}\nROC-AUC ↑', fontsize=9)
+            else:
+                ax.set_ylabel('')
+            if row < len(PLOT_DATASETS) - 1:
+                ax.set_xlabel('')
+
+    fig.legend(handles=legend_handles, loc='lower center', ncol=4,
+               fontsize=9, bbox_to_anchor=(0.5, -0.02))
+    plt.tight_layout(rect=[0, 0.06, 1, 1])
     plt.savefig(OUT / 'fig_tradeoff_all.png', dpi=150, bbox_inches='tight')
     plt.close()
     print('  Saved fig_tradeoff_all.png')
 
-    # Also one plot per dataset for detail
-    for dataset in ['Census', 'Credit']:
-        fig, ax = plt.subplots(figsize=(6, 5))
-        ax.set_title(f'{dataset} — Fairness–Utility Tradeoff', fontsize=12, fontweight='bold')
-        ax.set_xlabel('EO Gap ↓', fontsize=10)
-        ax.set_ylabel('ROC-AUC ↑', fontsize=10)
 
+# ── 3. EO Degradation vs Bias Level ───────────────────────────────────────────
+
+BIAS_X = {'nobias': 0, '010': 10}   # numeric x positions (%)
+
+def make_bias_degradation_plot():
+    print('Generating EO vs bias level plot...')
+
+    fig, axes = plt.subplots(1, len(PLOT_DATASETS), figsize=(11, 4.5), sharey=False)
+    fig.suptitle('EO Gap vs Positive-Class Scarcity Level', fontsize=13, fontweight='bold')
+
+    for ax, dataset in zip(axes, PLOT_DATASETS):
         for method in METHOD_ORDER:
-            xs, ys, xerrs, yerrs = [], [], [], []
-            for bias in BIASES:
+            xs, ys, errs = [], [], []
+            for bias in ['nobias', '010']:
                 df = load(RESULTS.get((dataset, bias, method)))
                 if df is None:
                     continue
-                eo_m, eo_s = mean_std(df, 'beta_eo_tpr_diff')
-                auc_m, auc_s = mean_std(df, 'beta_roc_auc')
-                ax.annotate(BIAS_LABELS[bias].split(' ')[0],
-                            (eo_m, auc_m), textcoords='offset points',
-                            xytext=(4, 4), fontsize=6, color=METHOD_COLORS[method], alpha=0.7)
-                ax.errorbar(eo_m, auc_m, xerr=eo_s, yerr=auc_s,
-                            fmt=markers[method], color=METHOD_COLORS[method],
-                            alpha=bias_alpha[bias], capsize=3, markersize=8,
-                            label=method if bias == 'nobias' else None)
-            # Connect dots across bias levels for this method
-            pts = []
-            for bias in BIASES:
-                df = load(RESULTS.get((dataset, bias, method)))
-                if df is not None:
-                    pts.append((df['beta_eo_tpr_diff'].mean(), df['beta_roc_auc'].mean()))
-            if len(pts) > 1:
-                xs2, ys2 = zip(*pts)
-                ax.plot(xs2, ys2, color=METHOD_COLORS[method], alpha=0.3, linewidth=1)
+                m, s = mean_std(df, 'beta_eo_tpr_diff')
+                xs.append(BIAS_X[bias])
+                ys.append(m)
+                errs.append(s)
 
-        handles = [mpatches.Patch(color=METHOD_COLORS[m], label=m) for m in METHOD_ORDER]
-        ax.legend(handles=handles, fontsize=9)
-        plt.tight_layout()
-        plt.savefig(OUT / f'fig_tradeoff_{dataset.lower()}.png', dpi=150, bbox_inches='tight')
-        plt.close()
-    print('  Saved per-dataset tradeoff plots')
+            if not xs:
+                continue
+
+            color = METHOD_COLORS[method]
+            ax.plot(xs, ys, marker=MARKERS[method], color=color,
+                    linewidth=2, markersize=8, label=method)
+            ax.fill_between(xs,
+                            [y - e for y, e in zip(ys, errs)],
+                            [y + e for y, e in zip(ys, errs)],
+                            color=color, alpha=0.12)
+
+        ax.set_title(dataset, fontsize=11, fontweight='bold')
+        ax.set_xlabel('Positive-Class Scarcity (bias %)', fontsize=9)
+        ax.set_ylabel('EO Gap ↓  (lower is fairer)', fontsize=9)
+        ax.set_xticks([0, 10])
+        ax.set_xticklabels(['0%\n(No Bias)', '10%\n(High)'], fontsize=8)
+        ax.set_xlim(-1, 11)
+        ax.set_ylim(bottom=0)
+        ax.axhline(0, color='gray', linewidth=0.5, linestyle='--')
+
+        # Annotate the ideal direction
+        ax.annotate('Lower = fairer', xy=(0.02, 0.08), xycoords='axes fraction',
+                    fontsize=7, color='#888888', style='italic')
+
+    handles = [mpatches.Patch(color=METHOD_COLORS[m], label=m) for m in METHOD_ORDER]
+    fig.legend(handles=handles, loc='lower center', ncol=4,
+               fontsize=9, bbox_to_anchor=(0.5, -0.04))
+    plt.tight_layout(rect=[0, 0.08, 1, 1])
+    plt.savefig(OUT / 'fig_eo_vs_bias.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    print('  Saved fig_eo_vs_bias.png')
 
 
-# ── 3. Learning Verification ───────────────────────────────────────────────────
+# ── 4. Learning Verification ───────────────────────────────────────────────────
 
 def make_learning_plots():
     print('Generating learning verification plots...')
@@ -442,8 +503,7 @@ def make_learning_plots():
     plot_cols = [
         ('fairness.eo_tpr_diff',        'EO Gap (val)', True),
         ('fairness.dp_diff',             'DP Gap (val)', True),
-        ('meta.avg_reward',              'Avg Reward',   False),
-        ('fairness.worst_group_beta',    'Worst-Group Loss β', True),
+        ('meta.episode_return',          'Episode Return', False),
     ]
 
     available = {k: v for k, v in LEARNING_RUNS.items() if Path(v).exists()}
@@ -502,75 +562,194 @@ def make_learning_plots():
     print('  Saved fig_learning_curves.png')
 
 
-# ── 4. Reward Ablation (DVRL vs Global) ───────────────────────────────────────
+# ── 4. Local vs Global Reward Ablation ────────────────────────────────────────
+# Each of the four budget variants (hireal, hisynth, scale1, scale2) was run
+# with both DVRL-weighted and Global-only reward — identical in every other way.
+# Aggregating across variants gives a robust paired estimate of reward-type
+# effect while marginalising over budget choices.
 
-def make_reward_ablation():
-    print('Generating reward ablation plots...')
-    # For each dataset × bias (excluding curriculum), aggregate across
-    # budget configs (hireal, hisynth, scale1, scale2) — same budget, only
-    # reward type differs. This gives a robust dvrl vs global comparison.
+def make_local_global_ablation():
+    print('Generating local vs global reward ablation...')
 
-    reward_labels = {'dvrl': 'DVRL-Weighted', 'global': 'Global-Only'}
+    reward_labels = {'dvrl': 'Local+Global\n(DVRL)', 'global': 'Global-Only'}
     reward_colors = {'dvrl': '#E58606', 'global': '#5D69B1'}
-    metrics_ra = [
-        ('beta_eo_tpr_diff', 'EO Gap ↓', True),
-        ('beta_dp_diff',     'DP Gap ↓', True),
-        ('beta_roc_auc',     'AUC ↑',    False),
-        ('beta_acc',         'Acc ↑',    False),
+    metrics_lg = [
+        ('beta_eo_tpr_diff', 'EO Gap ↓',  True),
+        ('beta_dp_diff',     'DP Gap ↓',  True),
+        ('beta_roc_auc',     'AUC ↑',     False),
+        ('beta_acc',         'Acc ↑',     False),
+        ('beta_f1_weighted', 'F1$_w$ ↑',  False),
     ]
 
+    # One figure per dataset; rows = bias levels that have data
     for dataset in ['Census', 'Credit']:
+        bias_with_data = []
+        rows_data = {}
         for bias in BIASES:
-            results_by_reward = {'dvrl': [], 'global': []}
+            by_reward = {'dvrl': [], 'global': []}
             for variant in BUDGET_CONFIGS:
                 for reward in ['dvrl', 'global']:
                     p = _budget_path(dataset, bias, variant, reward)
                     df = load(p)
                     if df is not None:
-                        results_by_reward[reward].append(df)
+                        by_reward[reward].append(df)
+            if any(by_reward.values()):
+                bias_with_data.append(bias)
+                rows_data[bias] = by_reward
 
-            if not any(results_by_reward.values()):
-                continue
+        if not bias_with_data:
+            continue
 
-            fig, axes = plt.subplots(1, len(metrics_ra), figsize=(14, 4))
-            fig.suptitle(f'Reward Ablation: {dataset} — {BIAS_LABELS[bias]}',
-                         fontsize=12, fontweight='bold')
+        n_rows = len(bias_with_data)
+        n_cols = len(metrics_lg)
+        fig, axes = plt.subplots(n_rows, n_cols,
+                                 figsize=(n_cols * 2.8, n_rows * 3.2),
+                                 squeeze=False)
+        fig.suptitle(f'Local vs Global Reward — {dataset}',
+                     fontsize=12, fontweight='bold')
 
-            for ax, (col, col_label, lower) in zip(axes, metrics_ra):
+        for row_i, bias in enumerate(bias_with_data):
+            by_reward = rows_data[bias]
+            axes[row_i][0].set_ylabel(BIAS_LABELS[bias], fontsize=9)
+
+            for col_i, (col, col_label, lower) in enumerate(metrics_lg):
+                ax = axes[row_i][col_i]
+                if row_i == 0:
+                    ax.set_title(col_label, fontsize=10)
+
                 vals, errs, labels, colors = [], [], [], []
                 for reward in ['dvrl', 'global']:
-                    dfs = results_by_reward[reward]
+                    dfs = by_reward[reward]
                     if not dfs:
                         continue
-                    all_vals = pd.concat([df[col] for df in dfs])
+                    all_vals = pd.concat([df[col] for df in dfs
+                                          if col in df.columns])
+                    if all_vals.empty:
+                        continue
                     vals.append(all_vals.mean())
                     errs.append(all_vals.std())
                     labels.append(reward_labels[reward])
                     colors.append(reward_colors[reward])
 
                 if not vals:
-                    ax.set_visible(False)
+                    ax.text(0.5, 0.5, 'N/A', ha='center', va='center',
+                            transform=ax.transAxes, fontsize=9, color='gray')
                     continue
 
                 x = np.arange(len(vals))
-                bars = ax.bar(x, vals, yerr=errs, capsize=5,
+                bars = ax.bar(x, vals, yerr=errs, capsize=4,
                               color=colors, alpha=0.85, width=0.5,
                               edgecolor='black', linewidth=0.5)
                 for bar, v in zip(bars, vals):
-                    ax.text(bar.get_x() + bar.get_width()/2,
-                            bar.get_height() + max(errs) * 0.05,
-                            f'{v:.3f}', ha='center', va='bottom', fontsize=9)
-                ax.set_title(col_label, fontsize=10)
+                    ax.text(bar.get_x() + bar.get_width() / 2,
+                            bar.get_height() + (max(errs) if errs else 0) * 0.05,
+                            f'{v:.3f}', ha='center', va='bottom', fontsize=8)
                 ax.set_xticks(x)
-                ax.set_xticklabels(labels, fontsize=9)
-                if lower:
-                    ax.invert_yaxis()
+                ax.set_xticklabels(labels, fontsize=8)
 
-            plt.tight_layout()
-            fname = f'fig_reward_ablation_{dataset.lower()}_{bias}.png'
-            plt.savefig(OUT / fname, dpi=150, bbox_inches='tight')
-            plt.close()
-            print(f'  Saved {fname}')
+        plt.tight_layout()
+        fname = f'fig_local_global_{dataset.lower()}.png'
+        plt.savefig(OUT / fname, dpi=150, bbox_inches='tight')
+        plt.close()
+        print(f'  Saved {fname}')
+
+
+# ── 4b. Delta Actions vs Exact-Point Generation ────────────────────────────────
+# Lookup helper for no-delta ablation runs.
+NODELTA_TR = ROOT / 'training_runs' / 'paper_results' / 'nodelta_ablation'
+
+def _nodelta_path(dataset, bias):
+    """Return path to final_test_metrics.csv for a no-delta run, or None."""
+    ds = dataset.lower()
+    pattern = f'SPECp1_nodelta_{ds}_{bias}_'
+    for root_dir in [NODELTA_TR, ROOT / 'training_runs']:
+        if not root_dir.exists():
+            continue
+        for d in root_dir.iterdir():
+            if d.name.startswith(pattern):
+                p = d / 'final_test_metrics.csv'
+                if p.exists():
+                    return str(p)
+    return None
+
+
+def make_delta_vs_nodelta():
+    print('Generating delta vs no-delta (exact point) ablation...')
+
+    metrics_dn = [
+        ('beta_eo_tpr_diff', 'EO Gap ↓',  True),
+        ('beta_dp_diff',     'DP Gap ↓',  True),
+        ('beta_roc_auc',     'AUC ↑',     False),
+        ('beta_acc',         'Acc ↑',     False),
+        ('beta_f1_weighted', 'F1$_w$ ↑',  False),
+    ]
+    variant_labels  = ['Delta\n(default)', 'Exact\nPoint']
+    variant_colors  = ['#B47CC7', '#888888']
+
+    # Census bias=010 only (where the ablation was run)
+    dataset, bias = 'Census', '010'
+
+    # Delta = main ep20 result; no-delta = nodelta ablation
+    delta_path   = RESULTS.get((dataset, bias, 'RL Framework'))
+    nodelta_path = _nodelta_path(dataset, bias)
+
+    if delta_path is None and nodelta_path is None:
+        print('  No data found for delta vs no-delta ablation, skipping')
+        return
+
+    df_delta   = load(delta_path)
+    df_nodelta = load(nodelta_path)
+
+    fig, axes = plt.subplots(1, len(metrics_dn), figsize=(len(metrics_dn) * 2.8, 3.8))
+    fig.suptitle(f'Delta Actions vs Exact-Point Generation — {dataset} (bias={bias[:-1] if bias != "nobias" else "0"}%)',
+                 fontsize=11, fontweight='bold')
+
+    for ax, (col, col_label, lower) in zip(axes, metrics_dn):
+        ax.set_title(col_label, fontsize=10)
+        vals, errs, labels, colors = [], [], [], []
+
+        for df, lbl, color in [(df_delta, variant_labels[0], variant_colors[0]),
+                                (df_nodelta, variant_labels[1], variant_colors[1])]:
+            if df is not None and col in df.columns:
+                vals.append(df[col].mean())
+                errs.append(df[col].std())
+                labels.append(lbl)
+                colors.append(color)
+
+        if not vals:
+            ax.text(0.5, 0.5, 'N/A', ha='center', va='center',
+                    transform=ax.transAxes, fontsize=9, color='gray')
+            continue
+
+        x = np.arange(len(vals))
+        bars = ax.bar(x, vals, yerr=errs, capsize=4,
+                      color=colors, alpha=0.85, width=0.5,
+                      edgecolor='black', linewidth=0.5)
+        for bar, v in zip(bars, vals):
+            ax.text(bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + (max(errs) if errs else 0) * 0.05,
+                    f'{v:.3f}', ha='center', va='bottom', fontsize=9)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, fontsize=9)
+
+        # Mark which is better
+        if len(vals) == 2:
+            better_idx = (0 if vals[0] < vals[1] else 1) if lower else \
+                         (0 if vals[0] > vals[1] else 1)
+            ax.get_children()[better_idx].set_edgecolor('#2ca02c')
+            ax.get_children()[better_idx].set_linewidth(2.0)
+
+    # Footnote: seed count per variant
+    n_delta   = len(df_delta)   if df_delta   is not None else 0
+    n_nodelta = len(df_nodelta) if df_nodelta is not None else 0
+    fig.text(0.01, 0.01, f'n seeds — Delta: {n_delta}, Exact Point: {n_nodelta}',
+             fontsize=7, color='gray')
+
+    plt.tight_layout()
+    fname = 'fig_delta_vs_nodelta.png'
+    plt.savefig(OUT / fname, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f'  Saved {fname}')
 
 
 # ── 5. Synthetic Budget Ablation ───────────────────────────────────────────────
@@ -750,9 +929,13 @@ if __name__ == '__main__':
     print()
     make_tradeoff_plots()
     print()
+    make_bias_degradation_plot()
+    print()
     make_learning_plots()
     print()
-    make_reward_ablation()
+    make_local_global_ablation()
+    print()
+    make_delta_vs_nodelta()
     print()
     make_budget_ablation()
     print()

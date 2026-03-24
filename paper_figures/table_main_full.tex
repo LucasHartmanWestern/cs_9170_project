@@ -7,44 +7,15 @@
 \toprule
 Dataset & Method & EO $\downarrow$ & DP $\downarrow$ & EOd $\downarrow$ & AUC $\uparrow$ & Acc $\uparrow$ & F1$_w$ $\uparrow$ & F1$_m$ $\uparrow$ & Brier $\downarrow$ \\
 \midrule
-\multirow{4}{*}{Census} & Group DRO & 0.031$_{\pm 0.026}$ & 0.198$_{\pm 0.019}$ & 0.102$_{\pm 0.018}$ & \textbf{0.893$_{\pm 0.004}$} & 0.807$_{\pm 0.004}$ & 0.817$_{\pm 0.004}$ & \textbf{0.670$_{\pm 0.007}$} & 0.131$_{\pm 0.001}$ \\
+\multirow{4}{*}{Census} & Group DRO & \textbf{0.031$_{\pm 0.026}$} & 0.198$_{\pm 0.019}$ & 0.102$_{\pm 0.018}$ & \textbf{0.893$_{\pm 0.004}$} & 0.807$_{\pm 0.004}$ & 0.817$_{\pm 0.004}$ & \textbf{0.670$_{\pm 0.007}$} & 0.131$_{\pm 0.001}$ \\
  & OT Repair & 0.151$_{\pm 0.036}$ & \textbf{0.076$_{\pm 0.029}$} & 0.151$_{\pm 0.036}$ & 0.873$_{\pm 0.004}$ & \textbf{0.832$_{\pm 0.005}$} & \textbf{0.827$_{\pm 0.004}$} & 0.626$_{\pm 0.016}$ & 0.119$_{\pm 0.003}$ \\
  & CT-GAN & 0.077$_{\pm 0.058}$ & 0.166$_{\pm 0.030}$ & 0.090$_{\pm 0.045}$ & 0.874$_{\pm 0.003}$ & 0.826$_{\pm 0.003}$ & 0.823$_{\pm 0.004}$ & 0.623$_{\pm 0.016}$ & 0.122$_{\pm 0.002}$ \\
- & RL Framework & \textbf{0.026$_{\pm 0.018\dagger}$} & 0.155$_{\pm 0.014\dagger}$ & \textbf{0.067$_{\pm 0.008\dagger}$} & 0.880$_{\pm 0.005\dagger}$ & 0.826$_{\pm 0.007\dagger}$ & 0.824$_{\pm 0.006\dagger}$ & 0.628$_{\pm 0.011\dagger}$ & \textbf{0.118$_{\pm 0.003\dagger}$} \\
+ & RL Framework & 0.042$_{\pm 0.031}$ & 0.158$_{\pm 0.012}$ & \textbf{0.072$_{\pm 0.012}$} & 0.880$_{\pm 0.007}$ & 0.826$_{\pm 0.010}$ & 0.825$_{\pm 0.009}$ & 0.631$_{\pm 0.013}$ & \textbf{0.118$_{\pm 0.005}$} \\
 \midrule
-\multirow{4}{*}{Credit} & Group DRO & -- & -- & -- & -- & -- & -- & -- & -- \\
- & OT Repair & -- & -- & -- & -- & -- & -- & -- & -- \\
- & CT-GAN & -- & -- & -- & -- & -- & -- & -- & -- \\
- & RL Framework & -- & -- & -- & -- & -- & -- & -- & -- \\
-\midrule
-\multirow{4}{*}{HAR} & Group DRO & -- & -- & -- & -- & -- & -- & -- & -- \\
- & OT Repair & -- & -- & -- & -- & -- & -- & -- & -- \\
- & CT-GAN & -- & -- & -- & -- & -- & -- & -- & -- \\
- & RL Framework & -- & -- & -- & -- & -- & -- & -- & -- \\
-\bottomrule
-\end{tabular}
-\smallskip
-\par\raggedright\small $\dagger$ provisional ($<$5 seeds). Best per column is \textbf{bolded}.
-\end{table}
-
-\begin{table}[t]
-\centering
-\setlength{\tabcolsep}{5pt}
-\caption{Full results under Moderate Bias (5\%) including all tracked metrics.}
-\label{tab:005_full}
-\begin{tabular}{llcccccccc}
-\toprule
-Dataset & Method & EO $\downarrow$ & DP $\downarrow$ & EOd $\downarrow$ & AUC $\uparrow$ & Acc $\uparrow$ & F1$_w$ $\uparrow$ & F1$_m$ $\uparrow$ & Brier $\downarrow$ \\
-\midrule
-\multirow{4}{*}{Census} & Group DRO & 0.247$_{\pm 0.120\dagger}$ & 0.289$_{\pm 0.029\dagger}$ & 0.262$_{\pm 0.094\dagger}$ & \textbf{0.887$_{\pm 0.007\dagger}$} & \textbf{0.814$_{\pm 0.014\dagger}$} & \textbf{0.821$_{\pm 0.012\dagger}$} & \textbf{0.660$_{\pm 0.015\dagger}$} & \textbf{0.126$_{\pm 0.005\dagger}$} \\
- & OT Repair & 0.087$_{\pm 0.043}$ & \textbf{0.021$_{\pm 0.011}$} & 0.087$_{\pm 0.043}$ & 0.861$_{\pm 0.009}$ & 0.800$_{\pm 0.003}$ & 0.747$_{\pm 0.006}$ & 0.321$_{\pm 0.020}$ & 0.157$_{\pm 0.004}$ \\
- & CT-GAN & \textbf{0.027$_{\pm 0.025}$} & 0.053$_{\pm 0.007}$ & \textbf{0.029$_{\pm 0.023}$} & 0.806$_{\pm 0.024}$ & 0.797$_{\pm 0.007}$ & 0.753$_{\pm 0.007}$ & 0.353$_{\pm 0.015}$ & 0.163$_{\pm 0.004}$ \\
- & RL Framework & 0.098$_{\pm 0.077}$ & 0.079$_{\pm 0.070}$ & 0.098$_{\pm 0.077}$ & 0.863$_{\pm 0.009}$ & 0.811$_{\pm 0.018}$ & 0.777$_{\pm 0.040}$ & 0.434$_{\pm 0.143}$ & 0.140$_{\pm 0.014}$ \\
-\midrule
-\multirow{4}{*}{Credit} & Group DRO & 0.061$_{\pm 0.019\dagger}$ & 0.055$_{\pm 0.039\dagger}$ & 0.086$_{\pm 0.024\dagger}$ & 0.663$_{\pm 0.034\dagger}$ & 0.633$_{\pm 0.052\dagger}$ & 0.661$_{\pm 0.045\dagger}$ & \textbf{0.413$_{\pm 0.035\dagger}$} & 0.224$_{\pm 0.014\dagger}$ \\
- & OT Repair & \textbf{0.006$_{\pm 0.004}$} & \textbf{0.001$_{\pm 0.001}$} & \textbf{0.006$_{\pm 0.004}$} & \textbf{0.708$_{\pm 0.014}$} & \textbf{0.781$_{\pm 0.002}$} & 0.689$_{\pm 0.005}$ & 0.030$_{\pm 0.022}$ & \textbf{0.179$_{\pm 0.003}$} \\
- & CT-GAN & -- & -- & -- & -- & -- & -- & -- & -- \\
- & RL Framework & 0.007$_{\pm 0.004}$ & 0.006$_{\pm 0.002}$ & 0.009$_{\pm 0.001}$ & 0.649$_{\pm 0.028}$ & 0.774$_{\pm 0.005}$ & \textbf{0.692$_{\pm 0.005}$} & 0.063$_{\pm 0.016}$ & 0.184$_{\pm 0.008}$ \\
+\multirow{4}{*}{Credit} & Group DRO & \textbf{0.037$_{\pm 0.016}$} & 0.029$_{\pm 0.019}$ & \textbf{0.038$_{\pm 0.014}$} & 0.736$_{\pm 0.029}$ & 0.719$_{\pm 0.029}$ & 0.736$_{\pm 0.024}$ & \textbf{0.489$_{\pm 0.028}$} & 0.201$_{\pm 0.010}$ \\
+ & OT Repair & 0.043$_{\pm 0.039}$ & \textbf{0.012$_{\pm 0.010}$} & 0.043$_{\pm 0.039}$ & \textbf{0.741$_{\pm 0.010}$} & \textbf{0.811$_{\pm 0.002}$} & \textbf{0.788$_{\pm 0.005}$} & 0.443$_{\pm 0.023}$ & \textbf{0.144$_{\pm 0.002}$} \\
+ & CT-GAN & 0.064$_{\pm 0.027}$ & 0.050$_{\pm 0.037}$ & 0.073$_{\pm 0.029}$ & 0.717$_{\pm 0.012}$ & 0.765$_{\pm 0.011}$ & 0.762$_{\pm 0.010}$ & 0.450$_{\pm 0.020}$ & 0.170$_{\pm 0.006}$ \\
+ & RL Framework & 0.041$_{\pm 0.016}$ & 0.030$_{\pm 0.009}$ & 0.041$_{\pm 0.016}$ & 0.708$_{\pm 0.011}$ & 0.785$_{\pm 0.006}$ & 0.767$_{\pm 0.007}$ & 0.406$_{\pm 0.027}$ & 0.159$_{\pm 0.003}$ \\
 \midrule
 \multirow{4}{*}{HAR} & Group DRO & -- & -- & -- & -- & -- & -- & -- & -- \\
  & OT Repair & -- & -- & -- & -- & -- & -- & -- & -- \\
@@ -65,14 +36,14 @@ Dataset & Method & EO $\downarrow$ & DP $\downarrow$ & EOd $\downarrow$ & AUC $\
 \toprule
 Dataset & Method & EO $\downarrow$ & DP $\downarrow$ & EOd $\downarrow$ & AUC $\uparrow$ & Acc $\uparrow$ & F1$_w$ $\uparrow$ & F1$_m$ $\uparrow$ & Brier $\downarrow$ \\
 \midrule
-\multirow{4}{*}{Census} & Group DRO & 0.100$_{\pm 0.038\dagger}$ & 0.262$_{\pm 0.017\dagger}$ & 0.158$_{\pm 0.024\dagger}$ & \textbf{0.891$_{\pm 0.003\dagger}$} & 0.813$_{\pm 0.014\dagger}$ & \textbf{0.821$_{\pm 0.011\dagger}$} & \textbf{0.669$_{\pm 0.010\dagger}$} & 0.127$_{\pm 0.006\dagger}$ \\
+\multirow{4}{*}{Census} & Group DRO & 0.103$_{\pm 0.027}$ & 0.259$_{\pm 0.023}$ & 0.156$_{\pm 0.027}$ & \textbf{0.894$_{\pm 0.004}$} & 0.817$_{\pm 0.014}$ & \textbf{0.825$_{\pm 0.011}$} & \textbf{0.672$_{\pm 0.009}$} & 0.125$_{\pm 0.006}$ \\
  & OT Repair & 0.105$_{\pm 0.062}$ & \textbf{0.036$_{\pm 0.016}$} & 0.105$_{\pm 0.062}$ & 0.867$_{\pm 0.008}$ & 0.817$_{\pm 0.006}$ & 0.785$_{\pm 0.009}$ & 0.456$_{\pm 0.028}$ & 0.134$_{\pm 0.003}$ \\
  & CT-GAN & 0.070$_{\pm 0.082}$ & 0.088$_{\pm 0.026}$ & 0.076$_{\pm 0.077}$ & 0.850$_{\pm 0.008}$ & 0.809$_{\pm 0.009}$ & 0.782$_{\pm 0.014}$ & 0.461$_{\pm 0.043}$ & 0.138$_{\pm 0.005}$ \\
  & RL Framework & \textbf{0.021$_{\pm 0.015}$} & 0.094$_{\pm 0.017}$ & \textbf{0.029$_{\pm 0.011}$} & 0.878$_{\pm 0.005}$ & \textbf{0.831$_{\pm 0.005}$} & 0.813$_{\pm 0.011}$ & 0.554$_{\pm 0.041}$ & \textbf{0.123$_{\pm 0.003}$} \\
 \midrule
-\multirow{4}{*}{Credit} & Group DRO & 0.051$_{\pm 0.014\dagger}$ & 0.038$_{\pm 0.028\dagger}$ & 0.059$_{\pm 0.017\dagger}$ & 0.702$_{\pm 0.041\dagger}$ & 0.686$_{\pm 0.065\dagger}$ & 0.706$_{\pm 0.054\dagger}$ & \textbf{0.457$_{\pm 0.047\dagger}$} & 0.210$_{\pm 0.018\dagger}$ \\
- & OT Repair & \textbf{0.022$_{\pm 0.014}$} & \textbf{0.005$_{\pm 0.004}$} & \textbf{0.022$_{\pm 0.013}$} & \textbf{0.724$_{\pm 0.011}$} & \textbf{0.795$_{\pm 0.004}$} & \textbf{0.732$_{\pm 0.011}$} & 0.202$_{\pm 0.045}$ & \textbf{0.159$_{\pm 0.002}$} \\
- & CT-GAN & -- & -- & -- & -- & -- & -- & -- & -- \\
+\multirow{4}{*}{Credit} & Group DRO & 0.055$_{\pm 0.019}$ & 0.052$_{\pm 0.028}$ & 0.063$_{\pm 0.016}$ & 0.708$_{\pm 0.030}$ & 0.704$_{\pm 0.060}$ & 0.722$_{\pm 0.049}$ & \textbf{0.470$_{\pm 0.039}$} & 0.207$_{\pm 0.015}$ \\
+ & OT Repair & \textbf{0.022$_{\pm 0.014}$} & \textbf{0.005$_{\pm 0.004}$} & \textbf{0.022$_{\pm 0.013}$} & \textbf{0.724$_{\pm 0.011}$} & \textbf{0.795$_{\pm 0.004}$} & 0.732$_{\pm 0.011}$ & 0.202$_{\pm 0.045}$ & \textbf{0.159$_{\pm 0.002}$} \\
+ & CT-GAN & 0.048$_{\pm 0.029}$ & 0.033$_{\pm 0.020}$ & 0.051$_{\pm 0.024}$ & 0.690$_{\pm 0.015}$ & 0.771$_{\pm 0.007}$ & \textbf{0.732$_{\pm 0.015}$} & 0.269$_{\pm 0.059}$ & 0.170$_{\pm 0.004}$ \\
  & RL Framework & 0.041$_{\pm 0.047}$ & 0.023$_{\pm 0.023}$ & 0.041$_{\pm 0.047}$ & 0.672$_{\pm 0.022}$ & 0.776$_{\pm 0.015}$ & 0.724$_{\pm 0.021}$ & 0.211$_{\pm 0.072}$ & 0.170$_{\pm 0.009}$ \\
 \midrule
 \multirow{4}{*}{HAR} & Group DRO & -- & -- & -- & -- & -- & -- & -- & -- \\

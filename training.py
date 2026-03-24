@@ -78,6 +78,10 @@ class Training:
         whiten_pca=False,
         bias_val=True,
 
+        #PAMAP2 windowing
+        win_seconds=5.0,
+        step_seconds=2.5,
+
         #two-phase generation
         gen_both_classes=False,
 
@@ -162,6 +166,8 @@ class Training:
         self.use_pca = use_pca
         self.whiten_pca = whiten_pca
         self.bias_val = bias_val
+        self.win_seconds = win_seconds
+        self.step_seconds = step_seconds
 
         self.minority_id = minority_id
         self.majority_id = majority_id
@@ -953,6 +959,8 @@ class Training:
                     drop_protected=False,
                     protected_cols=self.dataset.protected_attributes,
                     bias_val=self.bias_val,
+                    win_seconds=self.win_seconds,
+                    step_seconds=self.step_seconds,
                 )
             )
 

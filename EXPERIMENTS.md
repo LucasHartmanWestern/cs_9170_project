@@ -829,3 +829,46 @@ Paper narrative revision:
 **Ablation (complete):**
 - v17a (DVRL) vs v18 (global-only) — 5 seeds, bias=0.10 — done
 
+---
+
+## HAR / PAMAP2 Experiments (2026-03-23)
+
+### Dataset setup
+
+- **Dataset:** PAMAP2 physical activity recognition
+- **Protected attribute:** sex, derived from subject_id (subject 102 = female; all others male)
+- **Activity pair:** `minority_id=5` (running, y=1) vs `majority_id=24` (rope jumping, y=0)
+  - Natural EO gap: ~30% (Female positive rate 41.1%, Male 71.1%)
+  - Running chosen because female subject participates fully; rope jumping chosen as majority activity
+- **Windowing:** `win_seconds=1.0`, `step_seconds=0.5` (1s windows, 0.5s step)
+  - 5× more windows than default 5s/2.5s — needed to get sufficient female examples in all splits
+  - No-bias: Female train runners = 110 / 269 (40.9%), Male = 1064 / 1492 (71.3%), EO gap = 30.4%
+  - Bias=0.10: Female train runners = 9 / 168 (5.4%) — comparable scarcity level to census/credit
+- **Split strategy:** temporal within-(subject, activity) — ensures female examples appear in
+  train/val/test proportionally. Earlier subject-level split placed all female runners in training.
+- **PCA:** 10 components, same as census/credit
+
+### Specs queued (2026-03-23)
+
+**Main table — RL Framework (5 seeds 42,0,1,2,3):**
+- `p1_har_nobias_global_5s` — bias_pct=null, global-only reward, delta actions
+- `p1_har_bias010_global_5s` — bias_pct=0.10, global-only reward, delta actions
+
+**Main table — Baselines (5 seeds 42,0,1,2,3):**
+- `p1_har_nobias_gdro_5s` / `p1_har_bias010_gdro_5s` — Group DRO
+- `p1_har_nobias_otrep_5s` / `p1_har_bias010_otrep_5s` — Gaussian OT Repair
+- `p1_har_nobias_ctgan_5s` / `p1_har_bias010_ctgan_5s` — CTGAN (300 epochs, 2000 synthetic)
+
+**Delta ablation (5 seeds 42,0,1,2,3):**
+- `p1_har_nobias_nodelta_5s` — no delta actions (exact-point generation)
+- `p1_har_bias010_nodelta_5s` — no delta actions, bias=0.10
+
+### Implementation notes
+
+- `run_baseline.py` and all three baseline trainers (`group_dro.py`, `gaussian_ot_repair.py`,
+  `ctgan_baseline.py`) patched to accept and forward `win_seconds`/`step_seconds` to
+  `get_data_splits`. Default values (5.0/2.5) preserve backward compatibility for census/credit.
+- `real_data_size=null` for all HAR specs (use full dataset, no subsampling).
+- No-delta sanity check on census showed degenerate policy collapse (fixed local reward = 0.1192
+  throughout); delta actions prevent this. Expecting same pattern on HAR no-delta runs.
+

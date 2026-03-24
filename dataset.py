@@ -322,6 +322,10 @@ class Dataset:
         assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1, \
             "val_frac and test_frac must be in (0,1) and sum to < 1."
 
+        # Cache for rebuild_original_train_pool_theta consistency
+        self._win_seconds = win_seconds
+        self._step_seconds = step_seconds
+
         rng = np.random.RandomState(self.seed)
 
         # constants / helpers 
@@ -445,27 +449,32 @@ class Dataset:
         y_all = np.asarray(labels, dtype=int)
         subj_all = np.asarray(subjects)
 
-        #subject-aware split (train / val / test)
-        unique_subjects = np.unique(subj_all)
-        rng.shuffle(unique_subjects)
+        # Temporal within-(subject, activity) split: for each subject × activity
+        # block, the windows are split temporally so every activity from every
+        # subject appears in all three splits.  This is critical when a single
+        # subject holds the only female examples — it guarantees female runners
+        # appear in train, val, and test regardless of when that subject ran
+        # during the recording session.
+        train_frac = 1.0 - val_frac - test_frac
+        m_train = np.zeros(len(feat_df), dtype=bool)
+        m_val   = np.zeros(len(feat_df), dtype=bool)
+        m_test  = np.zeros(len(feat_df), dtype=bool)
 
-        n_subj = len(unique_subjects)
-        n_test = max(1, int(round(test_frac * n_subj)))
-        n_val  = max(1, int(round(val_frac  * n_subj)))
-        if n_test + n_val >= n_subj:
-            n_test = max(1, n_test)
-            n_val  = max(1, min(n_val, n_subj - n_test - 1))
-
-        test_subj = unique_subjects[:n_test]
-        val_subj  = unique_subjects[n_test:n_test + n_val]
-        train_subj = unique_subjects[n_test + n_val:]
-
-        def mask_for(subj_list):
-            return np.isin(subj_all, subj_list)
-
-        m_train = mask_for(train_subj)
-        m_val   = mask_for(val_subj)
-        m_test  = mask_for(test_subj)
+        y_all_int = y_all.astype(int)
+        for sid in np.unique(subj_all):
+            for act in np.unique(y_all_int[subj_all == sid]):
+                idx = np.where((subj_all == sid) & (y_all_int == act))[0]
+                n = len(idx)
+                if n < 3:   # too few windows to split — put in train
+                    m_train[idx] = True
+                    continue
+                n_tr   = max(1, int(np.floor(train_frac * n)))
+                n_val_ = max(1, int(np.floor(val_frac   * n)))
+                n_tr   = min(n_tr,   n - 2)
+                n_val_ = min(n_val_, n - n_tr - 1)
+                m_train[idx[:n_tr]]                = True
+                m_val  [idx[n_tr:n_tr + n_val_]]  = True
+                m_test [idx[n_tr + n_val_:]]       = True
 
         X_train_df = feat_df[m_train].copy()
         X_val_df   = feat_df[m_val].copy()
@@ -1002,10 +1011,10 @@ class Dataset:
             # ---- PAMAP2 ----
             rng = np.random.RandomState(self.seed)
 
-            # constants copied from split_pamap2 defaults
+            # constants — must match the win_seconds/step_seconds used in split_pamap2
             FS = 100
-            win_seconds = 5.0
-            step_seconds = 2.5
+            win_seconds = getattr(self, '_win_seconds', 5.0)
+            step_seconds = getattr(self, '_step_seconds', 2.5)
             WIN  = int(win_seconds * FS)
             STEP = int(step_seconds * FS)
             imu_pos = ["hand","chest","ankle"]

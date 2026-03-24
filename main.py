@@ -100,6 +100,8 @@ def run_spec_all_seeds(spec_path: str, device: str):
             use_pca=spec.get("use_pca", True),
             whiten_pca=spec.get("whiten_pca", False),
             bias_val=spec.get("bias_val", True),
+            win_seconds=float(spec.get("win_seconds", 5.0)),
+            step_seconds=float(spec.get("step_seconds", 2.5)),
 
             ffnn=spec.get("ffnn"),
             reinforce=spec.get("reinforce"),

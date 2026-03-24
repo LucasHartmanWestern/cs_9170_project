@@ -59,6 +59,9 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
         print(f"\n[run_baseline] ---- seed={seed} ----")
         _seed_everything(seed)
 
+        win_seconds  = float(spec.get("win_seconds",  5.0))
+        step_seconds = float(spec.get("step_seconds", 2.5))
+
         if baseline == "group_dro":
             from benchmarks.group_dro import GroupDROTrainer
             trainer = GroupDROTrainer(
@@ -77,6 +80,8 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 multiclass=spec.get("multiclass", False),
                 use_pca=spec.get("use_pca", False),
                 pca_components=spec.get("pca_components", 10),
+                win_seconds=win_seconds,
+                step_seconds=step_seconds,
             )
         elif baseline == "gaussian_ot_repair":
             from benchmarks.gaussian_ot_repair import GaussianOTRepairTrainer
@@ -96,6 +101,8 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 multiclass=spec.get("multiclass", False),
                 use_pca=spec.get("use_pca", False),
                 pca_components=spec.get("pca_components", 10),
+                win_seconds=win_seconds,
+                step_seconds=step_seconds,
             )
         elif baseline == "ctgan":
             from benchmarks.ctgan_baseline import CTGANBaselineTrainer
@@ -115,6 +122,8 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 multiclass=spec.get("multiclass", False),
                 use_pca=spec.get("use_pca", False),
                 pca_components=spec.get("pca_components", 10),
+                win_seconds=win_seconds,
+                step_seconds=step_seconds,
             )
         else:
             raise ValueError(

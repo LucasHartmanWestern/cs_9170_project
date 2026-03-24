@@ -156,6 +156,8 @@ class GaussianOTRepairTrainer:
         multiclass:   bool = False,
         use_pca:      bool = False,
         pca_components: int = 10,
+        win_seconds:  float = 5.0,
+        step_seconds: float = 2.5,
     ):
         self.exp_group     = exp_group
         self.spec_name     = spec_name
@@ -168,6 +170,8 @@ class GaussianOTRepairTrainer:
         self.bias_pct      = bias_pct
         self.real_data_size = real_data_size
         self.multiclass    = multiclass
+        self.win_seconds   = win_seconds
+        self.step_seconds  = step_seconds
         self.project_root  = _PROJECT_ROOT
 
         torch.manual_seed(seed)
@@ -213,6 +217,8 @@ class GaussianOTRepairTrainer:
             drop_protected = False,
             protected_cols = self.dataset.protected_attributes,
             bias_val       = True,
+            win_seconds    = self.win_seconds,
+            step_seconds   = self.step_seconds,
         )
         feature_dim = x_train.shape[1]
 

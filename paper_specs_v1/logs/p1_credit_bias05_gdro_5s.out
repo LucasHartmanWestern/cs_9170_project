@@ -1,0 +1,200 @@
+[run_baseline] baseline=group_dro
+[run_baseline] spec=paper_specs_v1/p1_credit_bias05_gdro_5s.json
+[run_baseline] device=cpu
+[run_baseline] exp_group=BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542
+[run_baseline] seeds=[42, 0, 1, 2, 3]
+
+[run_baseline] ---- seed=42 ----
+/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
+
+errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+
+Label distribution: {0: 23364, 1: 6636}
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=4918, minority=245 (4.98%)
+[TEST] size=6000, minority=1327 (22.12%)
+[GroupDRO] exp_group=BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542  seed=42
+[GroupDRO] dataset=credit_card  feature_dim=33
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_42
+[GroupDRO] epoch=   1 | dro=0.7181 | val_worst=0.7034 | q=[0.257,0.233,0.251,0.259]
+[GroupDRO] epoch=  20 | dro=0.4570 | val_worst=1.0721 | q=[0.224,0.254,0.264,0.258]
+[GroupDRO] epoch=  40 | dro=0.3590 | val_worst=1.3951 | q=[0.234,0.249,0.270,0.247]
+[GroupDRO] epoch=  60 | dro=0.2905 | val_worst=1.8667 | q=[0.231,0.224,0.289,0.255]
+[GroupDRO] epoch=  80 | dro=0.2359 | val_worst=2.1088 | q=[0.217,0.205,0.317,0.261]
+[GroupDRO] epoch= 100 | dro=0.2109 | val_worst=2.5918 | q=[0.215,0.191,0.327,0.268]
+[GroupDRO] epoch= 120 | dro=0.1706 | val_worst=3.0512 | q=[0.226,0.192,0.324,0.258]
+[GroupDRO] epoch= 140 | dro=0.1477 | val_worst=3.4669 | q=[0.236,0.193,0.319,0.253]
+[GroupDRO] epoch= 160 | dro=0.1354 | val_worst=4.0248 | q=[0.245,0.189,0.317,0.249]
+[GroupDRO] epoch= 180 | dro=0.1089 | val_worst=4.3065 | q=[0.251,0.194,0.314,0.241]
+[GroupDRO] epoch= 200 | dro=0.0976 | val_worst=5.0919 | q=[0.257,0.198,0.313,0.232]
+[GroupDRO] Training done. Best val_worst=0.6823
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_42/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_42/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_42/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.0864 | F1(maj)=0.8782 | F1(weighted)=0.7031 | F1(macro)=0.4823 | Brier=0.1739
+[TEST] Beta  -> F1(min)=0.4321 | F1(maj)=0.7479 | F1(weighted)=0.6781 | F1(macro)=0.5900 | Brier=0.2158
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/final_test_metrics.csv
+[GroupDRO] Done. seed=42 | time=22.9s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_42
+
+[run_baseline] ---- seed=0 ----
+/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
+
+errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+
+Label distribution: {0: 23364, 1: 6636}
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=4918, minority=245 (4.98%)
+[TEST] size=6000, minority=1327 (22.12%)
+[GroupDRO] exp_group=BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542  seed=0
+[GroupDRO] dataset=credit_card  feature_dim=33
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_0
+[GroupDRO] epoch=   1 | dro=0.5772 | val_worst=0.7950 | q=[0.241,0.255,0.242,0.262]
+[GroupDRO] epoch=  20 | dro=0.3890 | val_worst=1.4006 | q=[0.185,0.193,0.312,0.309]
+[GroupDRO] epoch=  40 | dro=0.2956 | val_worst=1.7947 | q=[0.172,0.179,0.328,0.321]
+[GroupDRO] epoch=  60 | dro=0.2499 | val_worst=2.1013 | q=[0.190,0.204,0.317,0.290]
+[GroupDRO] epoch=  80 | dro=0.1854 | val_worst=2.7953 | q=[0.213,0.211,0.303,0.273]
+[GroupDRO] epoch= 100 | dro=0.1618 | val_worst=3.3390 | q=[0.227,0.211,0.303,0.259]
+[GroupDRO] epoch= 120 | dro=0.1310 | val_worst=3.9114 | q=[0.224,0.204,0.315,0.257]
+[GroupDRO] epoch= 140 | dro=0.1062 | val_worst=4.2618 | q=[0.216,0.187,0.334,0.263]
+[GroupDRO] epoch= 160 | dro=0.0812 | val_worst=4.7441 | q=[0.199,0.173,0.355,0.273]
+[GroupDRO] epoch= 180 | dro=0.0784 | val_worst=4.9491 | q=[0.188,0.157,0.375,0.279]
+[GroupDRO] epoch= 200 | dro=0.0603 | val_worst=5.5760 | q=[0.174,0.146,0.393,0.288]
+[GroupDRO] Training done. Best val_worst=0.7484
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_0/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_0/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_0/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.0801 | F1(maj)=0.8787 | F1(weighted)=0.7021 | F1(macro)=0.4794 | Brier=0.1781
+[TEST] Beta  -> F1(min)=0.4341 | F1(maj)=0.7699 | F1(weighted)=0.6956 | F1(macro)=0.6020 | Brier=0.2168
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_0/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/final_test_metrics.csv
+[GroupDRO] Done. seed=0 | time=22.0s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_0
+
+[run_baseline] ---- seed=1 ----
+/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
+
+errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+
+Label distribution: {0: 23364, 1: 6636}
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=4918, minority=245 (4.98%)
+[TEST] size=6000, minority=1327 (22.12%)
+[GroupDRO] exp_group=BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542  seed=1
+[GroupDRO] dataset=credit_card  feature_dim=33
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_1
+[GroupDRO] epoch=   1 | dro=0.7019 | val_worst=0.7260 | q=[0.221,0.267,0.228,0.283]
+[GroupDRO] epoch=  20 | dro=0.4403 | val_worst=0.8981 | q=[0.166,0.170,0.330,0.334]
+[GroupDRO] epoch=  40 | dro=0.3684 | val_worst=1.0462 | q=[0.112,0.131,0.386,0.371]
+[GroupDRO] epoch=  60 | dro=0.3079 | val_worst=1.3456 | q=[0.098,0.114,0.405,0.383]
+[GroupDRO] epoch=  80 | dro=0.2506 | val_worst=1.5631 | q=[0.108,0.117,0.407,0.368]
+[GroupDRO] epoch= 100 | dro=0.2012 | val_worst=2.2964 | q=[0.127,0.131,0.397,0.345]
+[GroupDRO] epoch= 120 | dro=0.1868 | val_worst=2.4502 | q=[0.148,0.147,0.378,0.326]
+[GroupDRO] epoch= 140 | dro=0.1581 | val_worst=3.0462 | q=[0.166,0.150,0.371,0.314]
+[GroupDRO] epoch= 160 | dro=0.1403 | val_worst=2.9258 | q=[0.177,0.155,0.364,0.304]
+[GroupDRO] epoch= 180 | dro=0.1135 | val_worst=4.3013 | q=[0.181,0.153,0.368,0.299]
+[GroupDRO] epoch= 200 | dro=0.1101 | val_worst=4.3075 | q=[0.182,0.149,0.372,0.297]
+[GroupDRO] Training done. Best val_worst=0.6892
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_1/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_1/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_1/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.0134 | F1(maj)=0.8761 | F1(weighted)=0.6853 | F1(macro)=0.4448 | Brier=0.1814
+[TEST] Beta  -> F1(min)=0.3726 | F1(maj)=0.6781 | F1(weighted)=0.6105 | F1(macro)=0.5253 | Brier=0.2401
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/final_test_metrics.csv
+[GroupDRO] Done. seed=1 | time=21.8s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_1
+
+[run_baseline] ---- seed=2 ----
+/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
+
+errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+
+Label distribution: {0: 23364, 1: 6636}
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=4918, minority=245 (4.98%)
+[TEST] size=6000, minority=1327 (22.12%)
+[GroupDRO] exp_group=BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542  seed=2
+[GroupDRO] dataset=credit_card  feature_dim=33
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_2
+[GroupDRO] epoch=   1 | dro=0.7791 | val_worst=0.9852 | q=[0.287,0.206,0.275,0.233]
+[GroupDRO] epoch=  20 | dro=0.4898 | val_worst=0.8140 | q=[0.161,0.174,0.332,0.333]
+[GroupDRO] epoch=  40 | dro=0.4015 | val_worst=0.9823 | q=[0.107,0.120,0.399,0.374]
+[GroupDRO] epoch=  60 | dro=0.3120 | val_worst=1.5381 | q=[0.112,0.110,0.406,0.372]
+[GroupDRO] epoch=  80 | dro=0.2874 | val_worst=1.7703 | q=[0.135,0.126,0.393,0.346]
+[GroupDRO] epoch= 100 | dro=0.2162 | val_worst=2.4410 | q=[0.154,0.151,0.378,0.317]
+[GroupDRO] epoch= 120 | dro=0.2153 | val_worst=2.9866 | q=[0.179,0.167,0.360,0.295]
+[GroupDRO] epoch= 140 | dro=0.1686 | val_worst=3.5136 | q=[0.197,0.180,0.346,0.277]
+[GroupDRO] epoch= 160 | dro=0.1405 | val_worst=3.9469 | q=[0.210,0.185,0.340,0.265]
+[GroupDRO] epoch= 180 | dro=0.1296 | val_worst=4.3581 | q=[0.208,0.181,0.342,0.268]
+[GroupDRO] epoch= 200 | dro=0.1008 | val_worst=5.1731 | q=[0.206,0.175,0.352,0.267]
+[GroupDRO] Training done. Best val_worst=0.7488
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_2/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_2/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_2/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.0060 | F1(maj)=0.8759 | F1(weighted)=0.6835 | F1(macro)=0.4409 | Brier=0.1805
+[TEST] Beta  -> F1(min)=0.4380 | F1(maj)=0.8258 | F1(weighted)=0.7400 | F1(macro)=0.6319 | Brier=0.2009
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_2/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/final_test_metrics.csv
+[GroupDRO] Done. seed=2 | time=22.0s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_2
+
+[run_baseline] ---- seed=3 ----
+/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
+
+errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+
+Label distribution: {0: 23364, 1: 6636}
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=4918, minority=245 (4.98%)
+[TEST] size=6000, minority=1327 (22.12%)
+[GroupDRO] exp_group=BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542  seed=3
+[GroupDRO] dataset=credit_card  feature_dim=33
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_3
+[GroupDRO] epoch=   1 | dro=0.5918 | val_worst=0.7957 | q=[0.263,0.234,0.267,0.237]
+[GroupDRO] epoch=  20 | dro=0.3819 | val_worst=0.9464 | q=[0.251,0.255,0.254,0.240]
+[GroupDRO] epoch=  40 | dro=0.2921 | val_worst=1.4728 | q=[0.274,0.250,0.246,0.230]
+[GroupDRO] epoch=  60 | dro=0.2240 | val_worst=2.0635 | q=[0.282,0.239,0.252,0.227]
+[GroupDRO] epoch=  80 | dro=0.1779 | val_worst=2.7488 | q=[0.293,0.242,0.255,0.209]
+[GroupDRO] epoch= 100 | dro=0.1421 | val_worst=3.1938 | q=[0.306,0.242,0.256,0.196]
+[GroupDRO] epoch= 120 | dro=0.1210 | val_worst=3.7204 | q=[0.302,0.234,0.267,0.197]
+[GroupDRO] epoch= 140 | dro=0.0873 | val_worst=4.7171 | q=[0.297,0.219,0.281,0.203]
+[GroupDRO] epoch= 160 | dro=0.0848 | val_worst=4.7414 | q=[0.293,0.213,0.287,0.206]
+[GroupDRO] epoch= 180 | dro=0.0703 | val_worst=5.3321 | q=[0.296,0.208,0.292,0.204]
+[GroupDRO] epoch= 200 | dro=0.0646 | val_worst=4.9782 | q=[0.295,0.205,0.293,0.207]
+[GroupDRO] Training done. Best val_worst=0.7186
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_3/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_3/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_3/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.0251 | F1(maj)=0.8760 | F1(weighted)=0.6878 | F1(macro)=0.4506 | Brier=0.1806
+[TEST] Beta  -> F1(min)=0.4851 | F1(maj)=0.8517 | F1(weighted)=0.7706 | F1(macro)=0.6684 | Brier=0.1905
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/final_test_metrics.csv
+[GroupDRO] Done. seed=3 | time=22.0s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_credit_bias05_gdro_5s_3e922b9b__G202603211542/seed_3

@@ -1,0 +1,22 @@
+{
+  "baseline": "ctgan",
+  "dataset_name": "pamap2",
+  "multiclass": false,
+  "bias_pct": null,
+  "minority_id": 5,
+  "majority_id": 24,
+  "third_id": null,
+  "real_data_size": null,
+  "win_seconds": 1.0,
+  "step_seconds": 0.5,
+  "seeds": [42, 0, 1, 2, 3],
+  "ffnn": {
+    "hidden_sizes": [32, 16],
+    "epochs": 100
+  },
+  "ctgan": {
+    "epochs": 300,
+    "batch_size": 500,
+    "n_synthetic": 2000
+  }
+}
