@@ -2,7 +2,7 @@
 #SBATCH --job-name=har_b010_rl
 #SBATCH --account=def-mcapretz
 #SBATCH --time=10:00:00
-#SBATCH --mem=3G
+#SBATCH --mem=8G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/logs/p1_har_bias010_global_5s.out

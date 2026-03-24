@@ -2,7 +2,7 @@
 #SBATCH --job-name=har_nobias_nodelta
 #SBATCH --account=def-mcapretz
 #SBATCH --time=03:00:00
-#SBATCH --mem=3G
+#SBATCH --mem=8G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/logs/p1_har_nobias_nodelta_5s.out

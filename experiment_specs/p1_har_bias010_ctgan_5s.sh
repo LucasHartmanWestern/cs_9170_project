@@ -2,7 +2,7 @@
 #SBATCH --job-name=har_b010_ctgan
 #SBATCH --account=def-mcapretz
 #SBATCH --time=03:00:00
-#SBATCH --mem=8G
+#SBATCH --mem=16G
 #SBATCH --cpus-per-task=4
 #SBATCH --output=experiment_specs/logs/p1_har_bias010_ctgan_5s.out
 #SBATCH --error=experiment_specs/logs/p1_har_bias010_ctgan_5s.err
