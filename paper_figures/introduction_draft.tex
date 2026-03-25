@@ -1,0 +1,140 @@
+% ──────────────────────────────────────────────────────────────────────────────
+% INTRODUCTION DRAFT
+% ──────────────────────────────────────────────────────────────────────────────
+
+\section{Introduction}
+
+The role of machine learning models in high-stakes decision-making continues to
+expand, shaping outcomes in finance, employment, insurance, and healthcare.
+When these same models perform systematically worse for particular demographic
+or protected groups, the resulting errors can translate into unequal access to
+opportunities, heightened financial risk, and measurable downstream harms.
+These disparities arise from a combination of data, measurement, representation,
+and deployment dynamics, and can persist even when overall accuracy appears
+strong \cite{SureshGuttag2021SourcesOfHarm}.
+
+A core technical challenge is that standard empirical risk minimization (ERM),
+which serves as the foundation for the vast majority of modern supervised
+learning systems, optimizes average performance and can obscure poor outcomes
+on minority or historically disadvantaged subpopulations
+\cite{Mehrabi2021SurveyBiasFairness}.
+
+In practice, these failures often become visible during audits or
+post-deployment monitoring, motivating standardized reporting and evaluation
+tools (e.g., model documentation and subgroup evaluations)
+\cite{Mitchell2019ModelCards,Gebru2018Datasheets}.
+Empirical evidence in deployed settings further reinforces that performance can
+vary substantially across demographic intersections even for commercially used
+systems, underscoring the importance of subgroup-aware evaluation rather than
+relying on headline performance alone \cite{BuolamwiniGebru2018GenderShades}.
+
+A substantial body of work addresses fairness by modifying the training
+objective of a classifier.
+Loss regularization, constraint-based optimization, adversarial debiasing, and
+distributionally robust optimization incorporate fairness criteria directly into
+the learning process \cite{sagawa2020distributionally}.
+These methods explicitly penalize disparities in error rates or optimize
+worst-group risk during training.
+
+While such approaches can improve specific fairness metrics, they are
+inherently model-dependent.
+Fairness constraints must typically be derived for particular architectures or
+loss functions, and the resulting fairness--utility trade-offs are often
+sensitive to hyperparameters, constraint weights, and training dynamics
+\cite{Mehrabi2021SurveyBiasFairness}.
+
+Moreover, fairness improvements achieved through model-level interventions do
+not necessarily transfer across downstream tasks.
+In practical settings where multiple models are trained on shared datasets,
+potentially with heterogeneous architectures, embedding fairness constraints
+into each model pipeline increases engineering complexity and deployment
+friction.
+These considerations motivate exploration of fairness interventions that are
+less tightly coupled to specific classifier objectives.
+
+Data-level approaches attempt to mitigate bias prior to model training.
+Techniques such as reweighting, resampling, representation learning, and
+feature modification aim to adjust the empirical training distribution so that
+standard learning algorithms produce more equitable outcomes
+\cite{kamiran2012data}.
+Synthetic data methods extend this paradigm by generating additional samples
+for underrepresented or disadvantaged groups.
+
+A particularly challenging regime — which we term positive-class outcome
+scarcity — arises when historical discrimination has directly suppressed
+favourable outcomes for disadvantaged groups, leaving training data with
+structurally few positive-class examples for those groups.
+This pattern is directly observable in benchmark fairness datasets: in the
+UCI Adult Census Income dataset, the positive-class rate (income $>$\$50K)
+is approximately 30\% for male and 11\% for female individuals
+\cite{goldin2000orchestrating}, reflecting documented employment and wage
+barriers; analogous disparities have been identified in medical AI systems
+trained on sex-imbalanced clinical records \cite{cirillo2020sex} and in
+credit markets where access restrictions have produced corpora with
+structurally fewer positive outcomes for women \cite{bartlett2022consumer}.
+In this regime, reweighting and redistribution-based methods face a
+structural constraint: with only a handful of minority-positive examples
+available, there is insufficient signal to construct reliable
+group-conditional gradients or transport plans, and oversampling amplifies
+noise rather than true signal.
+This motivates a generative approach — synthesising new minority-positive
+samples can improve representation without requiring a sufficient supply of
+existing positive examples to reweight from.
+
+However, many existing data-level interventions rely on static heuristics or
+distribution-matching objectives.
+Synthetic data generation methods are often designed to replicate the original
+data distribution or to enforce fixed fairness constraints during generation
+\cite{Xu2019CTGAN}.
+While such methods may improve representation balance, they are not explicitly
+optimized for downstream worst-group performance.
+
+Crucially, fairness metrics, particularly loss-based notions such as
+worst-group risk, are defined in terms of model outcomes rather than purely
+distributional properties.
+Without feedback from downstream validation behaviour, data-level adjustments
+may fail to target the specific regions of feature space responsible for
+subgroup degradation.
+This gap suggests a need for adaptive, outcome-aware data interventions.
+
+In this work, we formulate fairness improvement as an outcome-driven synthetic
+data generation problem.
+Instead of modifying the classifier objective, we intervene at the data level
+by learning to generate synthetic samples that reshape the effective training
+distribution.
+Generation is explicitly guided by feedback from downstream group-conditional
+validation performance.
+
+We model synthetic data generation as a sequential decision process and
+optimize a generation policy using reinforcement learning.
+The policy receives signals derived from worst-group validation loss, enabling
+it to adaptively target regions of the feature space associated with
+disadvantaged-group error concentration.
+By coupling generation to outcome-level objectives, the framework directly
+optimizes for worst-case group performance rather than distributional
+similarity alone.
+
+This formulation offers two key advantages.
+First, fairness optimization remains largely model-agnostic: the generation
+policy interacts with downstream models through outcome metrics rather than
+architecture-specific constraints.
+Second, the adaptive feedback loop allows the synthetic data mechanism to
+focus on empirically observed failure modes, aligning data augmentation with
+measurable subgroup risk.
+
+The contributions of this work are as follows:
+\begin{itemize}
+    \item We formulate fairness-aware synthetic data generation as an
+    outcome-driven optimization problem in which generation is guided by
+    downstream worst-group validation risk.
+
+    \item We introduce a reinforcement learning framework that adaptively
+    reshapes the training distribution through targeted synthetic sample
+    generation, without modifying the classifier objective.
+
+    \item We demonstrate that the framework maintains low worst-group disparity
+    under severe positive-class scarcity ($p_+ \leq 10\%$), a regime in which
+    reweighting-based baselines degrade substantially, while preserving
+    competitive predictive performance across multiple datasets and protected
+    attributes.
+\end{itemize}

@@ -1,3 +1,4 @@
+import ast
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,14 @@ class Dataset:
         "credit_card": {
             "data_path":"datasets/default+of+credit+card+clients/default of credit card clients.xls",
             "protected_attributes": ["SEX", "AGE"]
+        },
+        "ptb_xl": {
+            "data_path": "datasets/ptb-xl",
+            "protected_attributes": ["sex"]
+        },
+        "capture24": {
+            "data_path": "datasets/capture24",
+            "protected_attributes": ["sex"]
         }
     }
     def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
@@ -903,6 +912,510 @@ class Dataset:
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
 
+    def split_ptb_xl(
+        self,
+        train_size=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        return_test_df: bool = False,
+        return_raw: bool = False,
+        bias_val: bool = True,
+        dp_protected_col: str = "sex",
+        mi_threshold: float = 50.0,
+        feature_cache: bool = True,
+    ):
+        """
+        PTB-XL ECG dataset: MI (y=1) vs NORM (y=0) binary classification.
+        Protected attribute: sex (0=male, 1=female in PTB-XL; female is the
+        disadvantaged group due to historically lower MI diagnosis rates).
+
+        Feature extraction: 8 per-lead statistics (mean, std, min, max, rms,
+        p25, p75, iqr) across all 12 leads → 96 features total.
+        Signals loaded at 100 Hz from records100/ using wfdb.
+
+        Pipeline mirrors split_census_income: split → bias per split →
+        fit scaler/PCA on train only → tensors.
+        """
+        import wfdb
+
+        assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
+
+        data_dir = Path(self.data_path)
+        db_path = data_dir / "ptbxl_database.csv"
+        scp_path = data_dir / "scp_statements.csv"
+
+        if not db_path.exists():
+            raise FileNotFoundError(f"ptbxl_database.csv not found at {db_path}")
+        if not scp_path.exists():
+            raise FileNotFoundError(f"scp_statements.csv not found at {scp_path}")
+
+        # ---- 1) Load metadata and classify labels ----
+        db = pd.read_csv(db_path)
+        scp_stmts = pd.read_csv(scp_path, index_col=0)
+
+        mi_codes = set(scp_stmts[scp_stmts["diagnostic_class"] == "MI"].index.tolist())
+        norm_codes = set(scp_stmts[scp_stmts["diagnostic_class"] == "NORM"].index.tolist())
+
+        def _classify(scp_str):
+            try:
+                codes = ast.literal_eval(scp_str)
+            except (ValueError, SyntaxError):
+                return -1
+            is_mi   = any(codes.get(c, 0) >= mi_threshold for c in mi_codes)
+            is_norm = any(codes.get(c, 0) >= mi_threshold for c in norm_codes)
+            if is_mi and not is_norm:
+                return 1
+            if is_norm and not is_mi:
+                return 0
+            return -1  # ambiguous → discard
+
+        db["y"] = db["scp_codes"].apply(_classify)
+        db = db[db["y"] >= 0].reset_index(drop=True)
+
+        # PTB-XL sex coding: 0=male, 1=female
+        # We keep this as-is; female (1) is the historically disadvantaged group.
+        db["a"] = db["sex"].astype(int)
+
+        print(f"[ptb_xl] After MI/NORM filter: {len(db)} records "
+              f"(MI={int((db['y']==1).sum())}, NORM={int((db['y']==0).sum())})")
+        print(f"[ptb_xl] Sex: male={int((db['a']==0).sum())}, female={int((db['a']==1).sum())}")
+
+        # ---- 2) Extract ECG features ----
+        LEAD_NAMES = ["I","II","III","aVR","aVL","aVF","V1","V2","V3","V4","V5","V6"]
+        STAT_NAMES = ["mean","std","min","max","rms","p25","p75","iqr"]
+        feature_names = [f"{lead}_{stat}" for lead in LEAD_NAMES for stat in STAT_NAMES]
+
+        cache_path = data_dir / "ptbxl_features_cache.npz"
+        if feature_cache and cache_path.exists():
+            cache = np.load(cache_path, allow_pickle=True)
+            cached_ids = cache["ecg_ids"].tolist()
+            cached_X   = cache["X"]
+            id_to_row  = {eid: i for i, eid in enumerate(cached_ids)}
+            valid_mask = db["ecg_id"].isin(set(cached_ids))
+            db = db[valid_mask].reset_index(drop=True)
+            row_indices = [id_to_row[eid] for eid in db["ecg_id"]]
+            X_raw = cached_X[row_indices]
+            print(f"[ptb_xl] Loaded {len(db)} features from cache.")
+        else:
+            def _extract_features(filename_lr):
+                record_path = str(data_dir / filename_lr)
+                try:
+                    record = wfdb.rdrecord(record_path)
+                except Exception:
+                    return None
+                sig = record.p_signal  # shape (samples, 12)
+                if sig is None or sig.shape[1] != 12:
+                    return None
+                feats = []
+                for lead_idx in range(12):
+                    x = sig[:, lead_idx]
+                    x = x[~np.isnan(x)]
+                    if len(x) == 0:
+                        feats.extend([0.0] * 8)
+                        continue
+                    feats.append(float(np.mean(x)))
+                    feats.append(float(np.std(x)))
+                    feats.append(float(np.min(x)))
+                    feats.append(float(np.max(x)))
+                    feats.append(float(np.sqrt(np.mean(x ** 2))))
+                    feats.append(float(np.percentile(x, 25)))
+                    feats.append(float(np.percentile(x, 75)))
+                    feats.append(float(np.percentile(x, 75) - np.percentile(x, 25)))
+                return feats
+
+            print(f"[ptb_xl] Extracting features from {len(db)} records...")
+            all_feats = []
+            valid_mask = []
+            for _, row in db.iterrows():
+                f = _extract_features(row["filename_lr"])
+                if f is not None:
+                    all_feats.append(f)
+                    valid_mask.append(True)
+                else:
+                    all_feats.append([0.0] * 96)
+                    valid_mask.append(False)
+
+            valid_mask = np.array(valid_mask)
+            db = db[valid_mask].reset_index(drop=True)
+            X_raw = np.array([all_feats[i] for i in range(len(valid_mask)) if valid_mask[i]], dtype=np.float32)
+
+            if feature_cache:
+                np.savez(cache_path, ecg_ids=db["ecg_id"].to_numpy(), X=X_raw)
+                print(f"[ptb_xl] Feature cache saved to {cache_path}")
+
+        y_all = db["y"].to_numpy(dtype=int)
+        a_all = db["a"].to_numpy(dtype=int)
+        fold_all = db["strat_fold"].to_numpy(dtype=int)
+
+        print(f"[ptb_xl] Feature matrix: {X_raw.shape}, "
+              f"MI={int((y_all==1).sum())}, NORM={int((y_all==0).sum())}")
+
+        # ---- 3) Strat-fold split: folds 1-6 = train, 7-8 = val, 9-10 = test ----
+        # Uses the official PTB-XL fold structure to prevent patient-level leakage.
+        # val_frac/test_frac are ignored (splits are fixed by strat_fold).
+        X_df = pd.DataFrame(X_raw, columns=feature_names)
+        X_df["__fold__"] = fold_all
+        A_df = pd.Series(a_all, name="sex")
+        y_series = pd.Series(y_all)
+
+        tr_mask = (fold_all <= 6)
+        va_mask = (fold_all == 7) | (fold_all == 8)
+        te_mask = (fold_all == 9) | (fold_all == 10)
+
+        X_train_df = X_df[tr_mask].drop(columns=["__fold__"]).reset_index(drop=True)
+        X_val_df   = X_df[va_mask].drop(columns=["__fold__"]).reset_index(drop=True)
+        X_test_df  = X_df[te_mask].drop(columns=["__fold__"]).reset_index(drop=True)
+        y_train = y_all[tr_mask]
+        y_val   = y_all[va_mask]
+        y_test  = y_all[te_mask]
+        A_train = A_df[tr_mask].reset_index(drop=True)
+        A_val   = A_df[va_mask].reset_index(drop=True)
+        A_test  = A_df[te_mask].reset_index(drop=True)
+
+        # ---- 4) Bias injection (downsample y=1 globally) ----
+        def apply_bias(df_split, y_split, a_split, target_pct):
+            df = df_split.copy()
+            df["__y__"] = y_split
+            df["__a__"] = a_split.to_numpy() if hasattr(a_split, "to_numpy") else a_split
+            maj  = df[df["__y__"] == 0]
+            mino = df[df["__y__"] == 1]
+            if len(maj) == 0 or len(mino) == 0:
+                out = df
+            else:
+                keep = int(np.floor((target_pct * len(maj)) / (1 - target_pct)))
+                keep = min(len(mino), max(1, keep))
+                mino_b = mino.sample(n=keep, random_state=self.seed, replace=False)
+                out = (pd.concat([maj, mino_b])
+                         .sample(frac=1.0, random_state=self.seed)
+                         .reset_index(drop=True))
+            y_out = out["__y__"].to_numpy(dtype=int)
+            a_out = out["__a__"].to_numpy(dtype=np.int64)
+            X_out = out.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        if bias_pct is not None:
+            X_train_b, y_train_b, a_train = apply_bias(X_train_df, y_train, A_train, bias_pct)
+            if bias_val:
+                X_val_b, y_val_b, a_val = apply_bias(X_val_df, y_val, A_val, bias_pct)
+            else:
+                X_val_b   = X_val_df.copy().reset_index(drop=True)
+                y_val_b   = y_val.copy()
+                a_val     = A_val.to_numpy(dtype=np.int64)
+        else:
+            X_train_b = X_train_df.copy().reset_index(drop=True)
+            y_train_b = y_train.copy()
+            a_train   = A_train.to_numpy(dtype=np.int64)
+            X_val_b   = X_val_df.copy().reset_index(drop=True)
+            y_val_b   = y_val.copy()
+            a_val     = A_val.to_numpy(dtype=np.int64)
+
+        X_test_b = X_test_df.copy().reset_index(drop=True)
+        y_test_b = y_test.copy()
+        a_test   = A_test.to_numpy(dtype=np.int64)
+
+        # ---- Optional: subsample train ----
+        if train_size is not None and train_size < len(X_train_b):
+            X_train_b, _, y_train_b, _, a_train, _ = train_test_split(
+                X_train_b, y_train_b, a_train,
+                train_size=train_size, random_state=self.seed, stratify=y_train_b
+            )
+
+        # ---- 5) Fit scaler on train only ----
+        scaler = StandardScaler()
+        Xtr_z  = scaler.fit_transform(X_train_b.values)
+        Xva_z  = scaler.transform(X_val_b.values)
+        Xte_z  = scaler.transform(X_test_b.values)
+
+        # ---- 6) PCA (if enabled) ----
+        X_train_theta_np, X_val_theta_np, X_test_theta_np, pca = self._to_theta(
+            Xtr_z, Xva_z, Xte_z, pca_components=pca_components
+        )
+
+        # ---- 7) Tensors ----
+        X_train_theta = torch.tensor(X_train_theta_np, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_val_theta_np,   dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_test_theta_np,  dtype=torch.float32, device=self.device)
+
+        y_train_theta = torch.tensor(y_train_b, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_val_b,   dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_test_b,  dtype=torch.long, device=self.device)
+
+        self.a_train = torch.tensor(a_train, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_val,   dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        # ---- Logging ----
+        def _log(name, ysplit, asplit):
+            n = len(ysplit)
+            n1 = int(np.sum(ysplit == 1))
+            n_female = int(np.sum(asplit == 1))
+            n_female_pos = int(np.sum((ysplit == 1) & (asplit == 1)))
+            n_male_pos   = int(np.sum((ysplit == 1) & (asplit == 0)))
+            print(f"[{name}] size={n}, MI={n1} ({100.*n1/n:.1f}%), "
+                  f"female={n_female}, female_MI={n_female_pos}, male_MI={n_male_pos}")
+
+        _log("TRAIN", y_train_b, a_train)
+        _log("VAL",   y_val_b,   a_val)
+        _log("TEST",  y_test_b,  a_test)
+        print(f"use_pca={self.use_pca} | theta_dim={X_train_theta.shape[1]}")
+
+        # Cache GAN view
+        try:
+            self._gan_view_cache = {
+                "supported": True,
+                "X_train_unbiased_df": X_train_df.copy(),
+                "y_train_unbiased": y_train.astype(int).copy(),
+                "encoder": None,
+                "scaler": scaler,
+                "pca": pca,
+                "use_pca": self.use_pca,
+                "pca_components": int(pca_components),
+                "cat_cols": [],
+                "num_cols": feature_names,
+            }
+        except Exception:
+            pass
+
+        if return_test_df:
+            return (
+                X_train_theta, X_val_theta, X_test_theta,
+                y_train_theta, y_val_theta, y_test_theta,
+                X_test_b.copy()
+            )
+        if return_raw:
+            return (
+                X_train_theta, X_val_theta, X_test_theta,
+                y_train_theta, y_val_theta, y_test_theta,
+                X_test_b.copy(), y_test_b.copy()
+            )
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+    def split_capture24(
+        self,
+        train_size=None,
+        val_size=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        return_test_df: bool = False,
+        return_raw: bool = False,
+        bias_val: bool = True,
+        dp_protected_col: str = "sex",
+    ):
+        """
+        CAPTURE-24 wrist accelerometer dataset: MVPA (y=1) vs non-MVPA (y=0).
+        Protected attribute: sex (0=male, 1=female).
+
+        Requires the feature cache built by:
+            python scripts/download_capture24.py --data-dir datasets/capture24
+
+        The cache contains per-window features (32-dim: mean/std/min/max/rms/p25/p75/iqr
+        for each of x, y, z, vector-magnitude axes over 5 s windows at 100 Hz).
+
+        Split is subject-level (no window leakage between train/val/test).
+        """
+        data_dir   = Path(self.data_path)
+        cache_path = data_dir / "capture24_features_cache.npz"
+
+        if not cache_path.exists():
+            raise FileNotFoundError(
+                f"CAPTURE-24 feature cache not found at {cache_path}.\n"
+                "Run: python scripts/download_capture24.py --data-dir datasets/capture24"
+            )
+
+        cache   = np.load(cache_path, allow_pickle=True)
+        X_all   = cache["X"]                        # (N, 32)
+        y_all   = cache["y"].astype(int)
+        a_all   = cache["a"].astype(int)            # 0=male, 1=female
+        sid_all = cache["subject_ids"].astype(int)  # 0..n_subjects-1
+
+        n_subjects = int(sid_all.max()) + 1
+        print(f"[capture24] Cache: {len(X_all):,} windows, {n_subjects} participants")
+        print(f"[capture24] MVPA={int((y_all==1).sum()):,}  "
+              f"({100.*(y_all==1).mean():.1f}%),  "
+              f"female={int((a_all==1).sum()):,}  "
+              f"({100.*(a_all==1).mean():.1f}%)")
+
+        # Feature names (32-dim)
+        feature_names = [
+            f"{ax}_{stat}"
+            for ax in ("x", "y", "z", "vm")
+            for stat in ("mean", "std", "min", "max", "rms", "p25", "p75", "iqr")
+        ]
+
+        # ---- Subject-level train / val / test split -------------------------
+        # Stratify by sex so each split contains both groups.
+        rng = np.random.default_rng(self.seed)
+
+        subject_sex = np.array([
+            int(np.bincount(a_all[sid_all == s]).argmax())
+            for s in range(n_subjects)
+        ])
+        female_subs = np.where(subject_sex == 1)[0]
+        male_subs   = np.where(subject_sex == 0)[0]
+        rng.shuffle(female_subs)
+        rng.shuffle(male_subs)
+
+        def _split_subs(subs):
+            n     = len(subs)
+            n_te  = max(1, round(n * test_frac))
+            n_va  = max(1, round(n * val_frac))
+            n_tr  = n - n_te - n_va
+            return subs[:n_tr], subs[n_tr:n_tr + n_va], subs[n_tr + n_va:]
+
+        f_tr, f_va, f_te = _split_subs(female_subs)
+        m_tr, m_va, m_te = _split_subs(male_subs)
+
+        train_subs = np.concatenate([f_tr, m_tr])
+        val_subs   = np.concatenate([f_va, m_va])
+        test_subs  = np.concatenate([f_te, m_te])
+
+        tr_mask = np.isin(sid_all, train_subs)
+        va_mask = np.isin(sid_all, val_subs)
+        te_mask = np.isin(sid_all, test_subs)
+
+        X_train_df = pd.DataFrame(X_all[tr_mask], columns=feature_names)
+        X_val_df   = pd.DataFrame(X_all[va_mask], columns=feature_names)
+        X_test_df  = pd.DataFrame(X_all[te_mask], columns=feature_names)
+
+        y_train = y_all[tr_mask]
+        y_val   = y_all[va_mask]
+        y_test  = y_all[te_mask]
+
+        A_train = pd.Series(a_all[tr_mask], name="sex")
+        A_val   = pd.Series(a_all[va_mask], name="sex")
+        A_test  = pd.Series(a_all[te_mask], name="sex")
+
+        # ---- Bias injection -------------------------------------------------
+        def apply_bias(df_split, y_split, a_split, target_pct):
+            df = df_split.copy()
+            df["__y__"] = y_split
+            df["__a__"] = a_split.to_numpy() if hasattr(a_split, "to_numpy") else a_split
+            maj  = df[df["__y__"] == 0]
+            mino = df[df["__y__"] == 1]
+            if len(maj) == 0 or len(mino) == 0:
+                out = df
+            else:
+                keep = int(np.floor((target_pct * len(maj)) / (1 - target_pct)))
+                keep = min(len(mino), max(1, keep))
+                mino_b = mino.sample(n=keep, random_state=self.seed, replace=False)
+                out = (pd.concat([maj, mino_b])
+                         .sample(frac=1.0, random_state=self.seed)
+                         .reset_index(drop=True))
+            y_out = out["__y__"].to_numpy(dtype=int)
+            a_out = out["__a__"].to_numpy(dtype=np.int64)
+            X_out = out.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        if bias_pct is not None:
+            X_train_b, y_train_b, a_train = apply_bias(X_train_df, y_train, A_train, bias_pct)
+            if bias_val:
+                X_val_b, y_val_b, a_val = apply_bias(X_val_df, y_val, A_val, bias_pct)
+            else:
+                X_val_b = X_val_df.copy().reset_index(drop=True)
+                y_val_b = y_val.copy()
+                a_val   = A_val.to_numpy(dtype=np.int64)
+        else:
+            X_train_b = X_train_df.copy().reset_index(drop=True)
+            y_train_b = y_train.copy()
+            a_train   = A_train.to_numpy(dtype=np.int64)
+            X_val_b   = X_val_df.copy().reset_index(drop=True)
+            y_val_b   = y_val.copy()
+            a_val     = A_val.to_numpy(dtype=np.int64)
+
+        X_test_b = X_test_df.copy().reset_index(drop=True)
+        y_test_b = y_test.copy()
+        a_test   = A_test.to_numpy(dtype=np.int64)
+
+        # ---- Optional: subsample train --------------------------------------
+        if train_size is not None and train_size < len(X_train_b):
+            X_train_b, _, y_train_b, _, a_train, _ = train_test_split(
+                X_train_b, y_train_b, a_train,
+                train_size=train_size, random_state=self.seed, stratify=y_train_b,
+            )
+
+        # ---- Optional: subsample val (keeps val set comparable to train) ----
+        # If val_size not given but train_size is, auto-cap val at train_size
+        # so the reward signal is not dominated by millions of unbiased windows.
+        _effective_val_size = val_size or (train_size if train_size is not None else None)
+        if _effective_val_size is not None and _effective_val_size < len(X_val_b):
+            X_val_b, _, y_val_b, _, a_val, _ = train_test_split(
+                X_val_b, y_val_b, a_val,
+                train_size=_effective_val_size, random_state=self.seed, stratify=y_val_b,
+            )
+
+        # ---- Scaler (fit on train only) -------------------------------------
+        scaler = StandardScaler()
+        Xtr_z  = scaler.fit_transform(X_train_b.values)
+        Xva_z  = scaler.transform(X_val_b.values)
+        Xte_z  = scaler.transform(X_test_b.values)
+
+        # ---- PCA (optional) -------------------------------------------------
+        X_tr_th, X_va_th, X_te_th, pca = self._to_theta(
+            Xtr_z, Xva_z, Xte_z, pca_components=pca_components
+        )
+
+        # ---- Tensors --------------------------------------------------------
+        X_train_theta = torch.tensor(X_tr_th, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_va_th, dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_te_th, dtype=torch.float32, device=self.device)
+
+        y_train_theta = torch.tensor(y_train_b, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_val_b,   dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_test_b,  dtype=torch.long, device=self.device)
+
+        self.a_train        = torch.tensor(a_train, dtype=torch.long, device=self.device)
+        self.a_val          = torch.tensor(a_val,   dtype=torch.long, device=self.device)
+        self.a_test         = torch.tensor(a_test,  dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        # ---- Logging --------------------------------------------------------
+        def _log(tag, ys, as_):
+            n = len(ys)
+            n1 = int((ys == 1).sum())
+            nf = int((as_ == 1).sum())
+            nfp = int(((ys == 1) & (as_ == 1)).sum())
+            nmp = int(((ys == 1) & (as_ == 0)).sum())
+            print(f"[{tag}] size={n:,}, MVPA={n1:,} ({100.*n1/n:.1f}%), "
+                  f"female={nf:,}, female_MVPA={nfp:,}, male_MVPA={nmp:,}")
+
+        _log("TRAIN", y_train_b, a_train)
+        _log("VAL",   y_val_b,   a_val)
+        _log("TEST",  y_test_b,  a_test)
+        print(f"use_pca={self.use_pca} | theta_dim={X_train_theta.shape[1]}")
+
+        # ---- GAN view (for CTGAN/CTAB-GAN baselines) ------------------------
+        try:
+            self._gan_view_cache = {
+                "supported":           True,
+                "X_train_unbiased_df": X_train_df.copy(),
+                "y_train_unbiased":    y_train.astype(int).copy(),
+                "encoder":             None,
+                "scaler":              scaler,
+                "pca":                 pca,
+                "use_pca":             self.use_pca,
+                "pca_components":      int(pca_components),
+                "cat_cols":            [],
+                "num_cols":            feature_names,
+            }
+        except Exception:
+            pass
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_b.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_b.copy(), y_test_b.copy())
+        return (X_train_theta, X_val_theta, X_test_theta,
+                y_train_theta, y_val_theta, y_test_theta)
+
     def get_data_splits(self, **kwargs):
         if self.dataset_name == "census_income":
             return self.split_census_income(**kwargs)
@@ -913,6 +1426,16 @@ class Dataset:
             return self.split_pamap2(**pamap_kwargs)
         elif self.dataset_name == "credit_card":
             return self.split_credit_card(**kwargs)
+        elif self.dataset_name == "ptb_xl":
+            ptbxl_kwargs = {k: v for k, v in kwargs.items()
+                            if k not in ("drop_protected", "protected_cols",
+                                         "win_seconds", "step_seconds")}
+            return self.split_ptb_xl(**ptbxl_kwargs)
+        elif self.dataset_name == "capture24":
+            c24_kwargs = {k: v for k, v in kwargs.items()
+                          if k not in ("drop_protected", "protected_cols",
+                                       "win_seconds", "step_seconds")}
+            return self.split_capture24(**c24_kwargs)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 

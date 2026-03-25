@@ -872,3 +872,98 @@ Paper narrative revision:
 - No-delta sanity check on census showed degenerate policy collapse (fixed local reward = 0.1192
   throughout); delta actions prevent this. Expecting same pattern on HAR no-delta runs.
 
+---
+
+## Episode Convergence Sweep (2026-03-24)
+
+**Goal:** Demonstrate that 800 episodes is a well-chosen training budget by showing the
+fairness-utility tradeoff as a function of episode count. Addresses reviewer question of
+whether the policy has converged or would continue to improve with more training.
+
+**Base config:** Identical to main results (census bias=0.10, global-only reward, gamma=1.0,
+curriculum disabled, delta_scale=0.10, ffnn epochs=20, 5 seeds). Only `total_episodes` varies.
+
+**Specs submitted (2026-03-24):**
+
+| Spec | Episodes | Time alloc |
+|---|---|---|
+| `p1_conv_census_bias010_ep600_5s` | 600 | 4:30:00 |
+| *(main result — already exists)* | 800 | — |
+| `p1_conv_census_bias010_ep1000_5s` | 1000 | 7:00:00 |
+| `p1_conv_census_bias010_ep1500_5s` | 1500 | 10:00:00 |
+
+**Expected outcomes:**
+- Plateau at ~800 → confirms training budget is well-chosen
+- Continued improvement at 1000–1500 → justifies extending the budget for the final config
+
+**Status:** Running (submitted 2026-03-24)
+
+---
+
+## HAR (PAMAP2) RL Full Run — bias=0.10 (2026-03-24)
+
+**Goal:** Confirm whether RL can improve EO on HAR with a full 5-seed, 800-episode run.
+Earlier smoke test (seed_42, 150 eps) showed promising improvement (0.330 → 0.221).
+
+**Spec:** `p1_har_bias010_gpu0_s3` (seeds 42,0,1) + `p1_har_bias010_gpu1_s2` (seeds 2,3),
+both run locally on two GPUs. Merged for analysis.
+
+**Results (5 seeds, 800 episodes):**
+
+| Seed | α-EO | β-EO | Δ EO | α-F1w | β-F1w | Note |
+|------|------|------|------|-------|-------|------|
+| 42   | 0.330 | 0.207 | −0.123 ✅ | 0.818 | 0.872 | Only seed that improved |
+| 0    | 0.208 | 0.227 | +0.019 ❌ | 0.848 | 0.859 | Slight degradation |
+| 1    | 0.026 | 0.204 | +0.179 ❌ | 0.866 | 0.877 | α already near-zero; group flipped |
+| 2    | 0.166 | 0.189 | +0.023 ❌ | 0.869 | 0.869 | Slight degradation |
+| 3    | 0.024 | 0.126 | +0.102 ❌ | 0.831 | 0.815 | α already near-zero; group flipped |
+
+**Mean: α-EO=0.151 → β-EO=0.191 — net degradation of 0.040.**
+
+**Diagnosis:** Seeds 1 and 3 show α-EO ≈ 0.02–0.03, meaning alpha itself assigned the
+disadvantaged label to the WRONG group (flipped due to extreme scarcity — only 9 female
+positive training examples at bias=0.10). The RL agent then generates samples for the
+"disadvantaged" group based on alpha's potentially-flipped assessment, actively harming
+fairness. Seeds 0 and 2 show moderate α-EO but the agent still fails to improve.
+Only seed_42 shows the correct behaviour, matching the smoke test.
+
+**Conclusion: HAR (PAMAP2) is unsuitable for this paper.**
+
+Root causes:
+1. Only 1 female subject (subject 102) → distributional gap is physiological, not outcome-suppressed
+2. Disadvantaged group identification flips across seeds due to extreme female positive scarcity
+3. RL agent cannot reliably close a gap it cannot stably identify
+4. High α-EO variance across seeds (0.024–0.330) makes any result unreproducible
+
+**Decision:** Drop HAR from the paper. Replace with PTB-XL ECG dataset.
+
+---
+
+## PTB-XL Dataset Integration (2026-03-24)
+
+**Motivation:** Replace PAMAP2 with a third dataset that has genuine fairness properties
+suitable for the positive-class scarcity narrative. PTB-XL is a large public 12-lead ECG
+dataset with documented sex-based MI underdiagnosis.
+
+**Dataset properties:**
+- 21,799 records; 11,354 male / 10,445 female (near-balanced)
+- MI vs NORM binary classification: 4,134 MI, 9,438 NORM (post-filter: 13,572 records)
+- Male MI rate: 2,595/(2,595+4,349) = 37.4%; Female MI rate: 1,539/(1,539+5,089) = 23.2%
+- Natural sex-based MI disparity supports the positive-class outcome scarcity narrative
+- At bias_pct=0.10: ~146 female MI training examples (vs ~483 male MI) — much better than
+  PAMAP2's 9 examples; enough for stable group identification across seeds
+
+**Feature extraction:** 8 per-lead statistics (mean, std, min, max, rms, p25, p75, iqr)
+across all 12 leads → 96 features → PCA to 10 components (same pipeline as census/credit).
+
+**Implementation (2026-03-24):**
+- `split_ptb_xl()` added to `dataset.py`
+- `ptb_xl` entry added to `DATASET_REGISTRY`
+- `get_data_splits()` extended with `ptb_xl` branch (strips PAMAP2-specific kwargs)
+- Feature caching to `datasets/ptb-xl/ptbxl_features_cache.npz` to avoid re-extraction
+- Specs created: `smoke_ptbxl_bias010_rl.json` (150 eps, seeds [42,0]) and
+  `p1_ptbxl_bias010_global_5s.json` (800 eps, seeds [42,0,1,2,3])
+- Signal files (records100, MI+NORM subset only, 27,144 files) downloaded locally
+
+**Status:** Signal files downloading. Run smoke test once download completes.
+

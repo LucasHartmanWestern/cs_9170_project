@@ -21,16 +21,22 @@ positive samples rather than reweighting existing ones — making it the only
 approach that can improve representation in the region where the classifier
 currently fails.
 
-The credit card results illustrate the complementary boundary condition.
-Because the no-intervention alpha model already achieves near-zero EO on that
-dataset, the disadvantaged group's positive rate is not low enough to create
-meaningful bias in the learned classifier.
-All methods, including ours, produce modest and statistically indistinguishable
-EO changes.
-This is expected behaviour: when there is no fairness gap to close, a
-generative augmentation framework has no target to optimise toward.
-The credit results therefore do not undermine the main claim — they define
-the regime boundary beyond which the framework's advantage diminishes.
+The credit card dataset is included to assess generalisability beyond the
+primary fairness setting.
+Because the no-intervention baseline already achieves near-zero EO on this
+dataset, the method has no meaningful fairness gap to close, and the results
+reflect this: EO changes across all methods are small and within the margin
+of uncertainty.
+On utility, the RL framework records the lowest AUC at both bias levels,
+suggesting a marginal cost from generating synthetic samples when the
+classifier has no clear decision boundary to be guided toward.
+This is consistent with the framework's design — it is optimised for the
+positive-class scarcity regime, and its benefit is proportional to the
+size of the gap that exists.
+The credit results therefore serve to delineate the applicability boundary:
+the framework is most valuable when a genuine fairness gap is present and
+should be expected to offer limited or no benefit in settings where the
+baseline classifier is already near-fair.
 
 CT-GAN's high variance at $p_+ = 10\%$ reflects a known weakness of
 conditional generative models at very low sample counts.
