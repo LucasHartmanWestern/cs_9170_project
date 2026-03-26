@@ -1417,15 +1417,18 @@ class Dataset:
                 y_train_theta, y_val_theta, y_test_theta)
 
     def get_data_splits(self, **kwargs):
+        _tabular_drop = ("win_seconds", "step_seconds")
         if self.dataset_name == "census_income":
-            return self.split_census_income(**kwargs)
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_census_income(**kw)
         elif self.dataset_name == "pamap2":
             # split_pamap2 doesn't accept drop_protected / protected_cols
             pamap_kwargs = {k: v for k, v in kwargs.items()
                            if k not in ("drop_protected", "protected_cols")}
             return self.split_pamap2(**pamap_kwargs)
         elif self.dataset_name == "credit_card":
-            return self.split_credit_card(**kwargs)
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_credit_card(**kw)
         elif self.dataset_name == "ptb_xl":
             ptbxl_kwargs = {k: v for k, v in kwargs.items()
                             if k not in ("drop_protected", "protected_cols",
