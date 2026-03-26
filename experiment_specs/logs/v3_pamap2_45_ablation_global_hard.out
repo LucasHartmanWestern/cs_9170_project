@@ -1,0 +1,11 @@
+[main] spec=v3_pamap2_45_ablation_global_hard.json device=cuda:0
+[main] exp_group=SPEC_v3_pamap2_45_ablation_global_hard_ce9c0bf4__G202603092342
+[main] seeds=[42, 123, 999]
+[main] ---- running seed=42 ----
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[Tracker] Experiment: SPECv3_pamap2_45_ablation_global_hard_EP6000_PCA6_REWfairness_minID4_majID5_TRJ2000_REAL3000_GG202603092342_1d86ed48
+[Tracker] Seed folder: training_runs/SPECv3_pamap2_45_ablation_global_hard_EP6000_PCA6_REWfairness_minID4_majID5_TRJ2000_REAL3000_GG202603092342_1d86ed48/seed_42
+[Tracker] Run: 2026-03-09_23-42-32_seed42_2952215_05cc42ef
+[Tracker] Metrics CSV: training_runs/SPECv3_pamap2_45_ablation_global_hard_EP6000_PCA6_REWfairness_minID4_majID5_TRJ2000_REAL3000_GG202603092342_1d86ed48/seed_42/metrics.csv
+[Tracker] Mirroring console to: training_runs/SPECv3_pamap2_45_ablation_global_hard_EP6000_PCA6_REWfairness_minID4_majID5_TRJ2000_REAL3000_GG202603092342_1d86ed48/seed_42/console.log

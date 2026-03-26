@@ -1,0 +1,180 @@
+[run_baseline] baseline=group_dro
+[run_baseline] spec=experiment_specs/p1_har_nobias_gdro_5s.json
+[run_baseline] device=cpu
+[run_baseline] exp_group=BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145
+[run_baseline] seeds=[42, 0, 1, 2, 3]
+
+[run_baseline] ---- seed=42 ----
+[TRAIN] size=1686, rope=1174 (69.63%), class0=512, class1=1174
+[VAL] size=560, rope=390 (69.64%), class0=170, class1=390
+[TEST] size=568, rope=395 (69.54%), class0=173, class1=395
+use_pca=False | theta_dim=14 | features_in=14 | classes=[np.int64(0), np.int64(1)]
+[GroupDRO] exp_group=BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145  seed=42
+[GroupDRO] dataset=pamap2  feature_dim=14
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_42
+[GroupDRO] epoch=   1 | dro=0.4411 | val_worst=0.3332 | q=[0.241,0.256,0.248,0.254]
+[GroupDRO] epoch=  20 | dro=0.0409 | val_worst=0.0056 | q=[0.224,0.256,0.261,0.259]
+[GroupDRO] epoch=  40 | dro=0.0259 | val_worst=0.0024 | q=[0.224,0.244,0.259,0.274]
+[GroupDRO] epoch=  60 | dro=0.0231 | val_worst=0.0033 | q=[0.230,0.229,0.244,0.298]
+[GroupDRO] epoch=  80 | dro=0.0223 | val_worst=0.0029 | q=[0.236,0.211,0.227,0.326]
+[GroupDRO] epoch= 100 | dro=0.0211 | val_worst=0.0021 | q=[0.243,0.193,0.211,0.353]
+[GroupDRO] epoch= 120 | dro=0.0196 | val_worst=0.0017 | q=[0.250,0.176,0.195,0.378]
+[GroupDRO] epoch= 140 | dro=0.0204 | val_worst=0.0026 | q=[0.258,0.159,0.178,0.404]
+[GroupDRO] epoch= 160 | dro=0.0201 | val_worst=0.0010 | q=[0.266,0.144,0.163,0.427]
+[GroupDRO] epoch= 180 | dro=0.0210 | val_worst=0.0019 | q=[0.273,0.130,0.150,0.447]
+[GroupDRO] epoch= 200 | dro=0.0193 | val_worst=0.0015 | q=[0.281,0.117,0.139,0.463]
+[GroupDRO] Training done. Best val_worst=0.0008
+[GroupDRO] Training metrics -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_42/metrics.csv
+[GroupDRO] Best model saved -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_42/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_42/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.8859 | F1(maj)=0.7900 | F1(weighted)=0.8567 | F1(macro)=0.8379 | Brier=0.1272
+[TEST] Beta  -> F1(min)=0.8929 | F1(maj)=0.8153 | F1(weighted)=0.8693 | F1(macro)=0.8541 | Brier=0.1303
+[TestSuite] Final test metrics appended to (seed): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/final_test_metrics.csv
+[GroupDRO] Done. seed=42 | time=145.6s
+[GroupDRO] Results in /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_42
+
+[run_baseline] ---- seed=0 ----
+[TRAIN] size=1686, rope=1174 (69.63%), class0=512, class1=1174
+[VAL] size=560, rope=390 (69.64%), class0=170, class1=390
+[TEST] size=568, rope=395 (69.54%), class0=173, class1=395
+use_pca=False | theta_dim=14 | features_in=14 | classes=[np.int64(0), np.int64(1)]
+[GroupDRO] exp_group=BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145  seed=0
+[GroupDRO] dataset=pamap2  feature_dim=14
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_0
+[GroupDRO] epoch=   1 | dro=0.5819 | val_worst=1.0370 | q=[0.225,0.253,0.233,0.289]
+[GroupDRO] epoch=  20 | dro=0.0442 | val_worst=0.0382 | q=[0.184,0.232,0.236,0.348]
+[GroupDRO] epoch=  40 | dro=0.0284 | val_worst=0.0224 | q=[0.189,0.216,0.237,0.358]
+[GroupDRO] epoch=  60 | dro=0.0221 | val_worst=0.0160 | q=[0.201,0.197,0.223,0.379]
+[GroupDRO] epoch=  80 | dro=0.0236 | val_worst=0.0106 | q=[0.214,0.178,0.206,0.403]
+[GroupDRO] epoch= 100 | dro=0.0254 | val_worst=0.0085 | q=[0.227,0.160,0.188,0.424]
+[GroupDRO] epoch= 120 | dro=0.0223 | val_worst=0.0085 | q=[0.241,0.144,0.171,0.444]
+[GroupDRO] epoch= 140 | dro=0.0235 | val_worst=0.0064 | q=[0.253,0.129,0.156,0.462]
+[GroupDRO] epoch= 160 | dro=0.0250 | val_worst=0.0084 | q=[0.266,0.116,0.142,0.476]
+[GroupDRO] epoch= 180 | dro=0.0283 | val_worst=0.0057 | q=[0.278,0.103,0.129,0.489]
+[GroupDRO] epoch= 200 | dro=0.0198 | val_worst=0.0051 | q=[0.289,0.092,0.118,0.500]
+[GroupDRO] Training done. Best val_worst=0.0037
+[GroupDRO] Training metrics -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_0/metrics.csv
+[GroupDRO] Best model saved -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_0/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_0/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.9059 | F1(maj)=0.8214 | F1(weighted)=0.8802 | F1(macro)=0.8637 | Brier=0.1118
+[TEST] Beta  -> F1(min)=0.8873 | F1(maj)=0.8058 | F1(weighted)=0.8625 | F1(macro)=0.8465 | Brier=0.1370
+[TestSuite] Final test metrics appended to (seed): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_0/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/final_test_metrics.csv
+[GroupDRO] Done. seed=0 | time=141.7s
+[GroupDRO] Results in /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_0
+
+[run_baseline] ---- seed=1 ----
+[TRAIN] size=1686, rope=1174 (69.63%), class0=512, class1=1174
+[VAL] size=560, rope=390 (69.64%), class0=170, class1=390
+[TEST] size=568, rope=395 (69.54%), class0=173, class1=395
+use_pca=False | theta_dim=14 | features_in=14 | classes=[np.int64(0), np.int64(1)]
+[GroupDRO] exp_group=BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145  seed=1
+[GroupDRO] dataset=pamap2  feature_dim=14
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_1
+[GroupDRO] epoch=   1 | dro=0.6575 | val_worst=0.8378 | q=[0.219,0.275,0.222,0.285]
+[GroupDRO] epoch=  20 | dro=0.0417 | val_worst=0.0209 | q=[0.189,0.244,0.231,0.336]
+[GroupDRO] epoch=  40 | dro=0.0271 | val_worst=0.0076 | q=[0.198,0.221,0.229,0.351]
+[GroupDRO] epoch=  60 | dro=0.0254 | val_worst=0.0045 | q=[0.209,0.200,0.215,0.375]
+[GroupDRO] epoch=  80 | dro=0.0283 | val_worst=0.0031 | q=[0.222,0.179,0.199,0.400]
+[GroupDRO] epoch= 100 | dro=0.0230 | val_worst=0.0021 | q=[0.233,0.160,0.184,0.424]
+[GroupDRO] epoch= 120 | dro=0.0233 | val_worst=0.0016 | q=[0.245,0.142,0.170,0.443]
+[GroupDRO] epoch= 140 | dro=0.0221 | val_worst=0.0018 | q=[0.255,0.127,0.157,0.461]
+[GroupDRO] epoch= 160 | dro=0.0228 | val_worst=0.0011 | q=[0.265,0.114,0.145,0.476]
+[GroupDRO] epoch= 180 | dro=0.0235 | val_worst=0.0009 | q=[0.275,0.102,0.134,0.490]
+[GroupDRO] epoch= 200 | dro=0.0250 | val_worst=0.0010 | q=[0.284,0.091,0.124,0.501]
+[GroupDRO] Training done. Best val_worst=0.0008
+[GroupDRO] Training metrics -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_1/metrics.csv
+[GroupDRO] Best model saved -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_1/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_1/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.9158 | F1(maj)=0.8450 | F1(weighted)=0.8942 | F1(macro)=0.8804 | Brier=0.1041
+[TEST] Beta  -> F1(min)=0.8997 | F1(maj)=0.8278 | F1(weighted)=0.8778 | F1(macro)=0.8637 | Brier=0.1227
+[TestSuite] Final test metrics appended to (seed): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/final_test_metrics.csv
+[GroupDRO] Done. seed=1 | time=141.6s
+[GroupDRO] Results in /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_1
+
+[run_baseline] ---- seed=2 ----
+[TRAIN] size=1686, rope=1174 (69.63%), class0=512, class1=1174
+[VAL] size=560, rope=390 (69.64%), class0=170, class1=390
+[TEST] size=568, rope=395 (69.54%), class0=173, class1=395
+use_pca=False | theta_dim=14 | features_in=14 | classes=[np.int64(0), np.int64(1)]
+[GroupDRO] exp_group=BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145  seed=2
+[GroupDRO] dataset=pamap2  feature_dim=14
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_2
+[GroupDRO] epoch=   1 | dro=0.4505 | val_worst=0.6273 | q=[0.250,0.242,0.247,0.261]
+[GroupDRO] epoch=  20 | dro=0.0318 | val_worst=0.0243 | q=[0.229,0.212,0.253,0.307]
+[GroupDRO] epoch=  40 | dro=0.0231 | val_worst=0.0119 | q=[0.237,0.197,0.235,0.330]
+[GroupDRO] epoch=  60 | dro=0.0225 | val_worst=0.0054 | q=[0.244,0.179,0.217,0.360]
+[GroupDRO] epoch=  80 | dro=0.0247 | val_worst=0.0028 | q=[0.253,0.161,0.197,0.389]
+[GroupDRO] epoch= 100 | dro=0.0222 | val_worst=0.0023 | q=[0.260,0.145,0.179,0.416]
+[GroupDRO] epoch= 120 | dro=0.0226 | val_worst=0.0027 | q=[0.267,0.130,0.163,0.439]
+[GroupDRO] epoch= 140 | dro=0.0215 | val_worst=0.0019 | q=[0.273,0.117,0.150,0.460]
+[GroupDRO] epoch= 160 | dro=0.0201 | val_worst=0.0017 | q=[0.280,0.105,0.137,0.478]
+[GroupDRO] epoch= 180 | dro=0.0206 | val_worst=0.0015 | q=[0.285,0.095,0.127,0.493]
+[GroupDRO] epoch= 200 | dro=0.0199 | val_worst=0.0012 | q=[0.290,0.086,0.118,0.507]
+[GroupDRO] Training done. Best val_worst=0.0012
+[GroupDRO] Training metrics -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_2/metrics.csv
+[GroupDRO] Best model saved -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_2/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_2/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.8989 | F1(maj)=0.8168 | F1(weighted)=0.8739 | F1(macro)=0.8579 | Brier=0.1158
+[TEST] Beta  -> F1(min)=0.8950 | F1(maj)=0.8155 | F1(weighted)=0.8708 | F1(macro)=0.8553 | Brier=0.1317
+[TestSuite] Final test metrics appended to (seed): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_2/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/final_test_metrics.csv
+[GroupDRO] Done. seed=2 | time=144.7s
+[GroupDRO] Results in /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_2
+
+[run_baseline] ---- seed=3 ----
+[TRAIN] size=1686, rope=1174 (69.63%), class0=512, class1=1174
+[VAL] size=560, rope=390 (69.64%), class0=170, class1=390
+[TEST] size=568, rope=395 (69.54%), class0=173, class1=395
+use_pca=False | theta_dim=14 | features_in=14 | classes=[np.int64(0), np.int64(1)]
+[GroupDRO] exp_group=BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145  seed=3
+[GroupDRO] dataset=pamap2  feature_dim=14
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_3
+[GroupDRO] epoch=   1 | dro=0.5351 | val_worst=0.5095 | q=[0.232,0.256,0.245,0.266]
+[GroupDRO] epoch=  20 | dro=0.0362 | val_worst=0.0146 | q=[0.193,0.213,0.250,0.344]
+[GroupDRO] epoch=  40 | dro=0.0245 | val_worst=0.0173 | q=[0.201,0.194,0.242,0.363]
+[GroupDRO] epoch=  60 | dro=0.0258 | val_worst=0.0154 | q=[0.209,0.176,0.231,0.385]
+[GroupDRO] epoch=  80 | dro=0.0230 | val_worst=0.0199 | q=[0.217,0.159,0.217,0.406]
+[GroupDRO] epoch= 100 | dro=0.0258 | val_worst=0.0144 | q=[0.227,0.144,0.203,0.427]
+[GroupDRO] epoch= 120 | dro=0.0170 | val_worst=0.0109 | q=[0.235,0.130,0.189,0.445]
+[GroupDRO] epoch= 140 | dro=0.0209 | val_worst=0.0093 | q=[0.243,0.118,0.176,0.463]
+[GroupDRO] epoch= 160 | dro=0.0201 | val_worst=0.0067 | q=[0.251,0.107,0.165,0.477]
+[GroupDRO] epoch= 180 | dro=0.0198 | val_worst=0.0070 | q=[0.258,0.097,0.155,0.490]
+[GroupDRO] epoch= 200 | dro=0.0194 | val_worst=0.0057 | q=[0.265,0.087,0.146,0.502]
+[GroupDRO] Training done. Best val_worst=0.0050
+[GroupDRO] Training metrics -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_3/metrics.csv
+[GroupDRO] Best model saved -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_3/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_3/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.8999 | F1(maj)=0.8206 | F1(weighted)=0.8757 | F1(macro)=0.8603 | Brier=0.1039
+[TEST] Beta  -> F1(min)=0.8988 | F1(maj)=0.8241 | F1(weighted)=0.8760 | F1(macro)=0.8614 | Brier=0.1278
+[TestSuite] Final test metrics appended to (seed): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/final_test_metrics.csv
+[GroupDRO] Done. seed=3 | time=142.9s
+[GroupDRO] Results in /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_group_dro_p1_har_nobias_gdro_5s_b9dc964a__G202603241145/seed_3

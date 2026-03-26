@@ -1,0 +1,11 @@
+[main] spec=p1_conv_census_bias010_ep600_5s.json device=cuda:0
+[main] exp_group=SPEC_p1_conv_census_bias010_ep600_5s_0eef126b__G202603241840
+[main] seeds=[42, 0, 1, 2, 3]
+[main] ---- running seed=42 ----
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[Tracker] Experiment: SPECp1_conv_census_bias010_ep600_5s_EP600_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603241840_21204439
+[Tracker] Seed folder: training_runs/SPECp1_conv_census_bias010_ep600_5s_EP600_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603241840_21204439/seed_42
+[Tracker] Run: 2026-03-24_18-40-42_seed42_3238977_58f6af5f
+[Tracker] Metrics CSV: training_runs/SPECp1_conv_census_bias010_ep600_5s_EP600_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603241840_21204439/seed_42/metrics.csv
+[Tracker] Mirroring console to: training_runs/SPECp1_conv_census_bias010_ep600_5s_EP600_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.1_GG202603241840_21204439/seed_42/console.log

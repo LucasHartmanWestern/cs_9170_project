@@ -1,0 +1,7 @@
+/lustre09/project/6000743/epigou/cs_9170_project/dataset.py:692: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  df[c] = pd.to_numeric(df[c], errors="ignore")
+/lustre09/project/6000743/epigou/cs_9170_project/dataset.py:692: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  df[c] = pd.to_numeric(df[c], errors="ignore")
+/lustre09/project/6000743/epigou/cs_9170_project/dataset.py:692: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  df[c] = pd.to_numeric(df[c], errors="ignore")
+slurmstepd: error: *** STEP 7155253.1 ON rg32103 CANCELLED AT 2026-02-20T23:54:47 DUE TO TIME LIMIT ***
