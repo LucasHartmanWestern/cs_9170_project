@@ -47,6 +47,14 @@ def run_spec_all_seeds(spec_path: str, device: str):
     if not isinstance(seeds, list) or len(seeds) == 0:
         raise ValueError(f"spec['seeds'] must be a non-empty list. Got: {seeds}")
 
+    eo_guard_threshold = float(spec.get("eo_guard_threshold", 0.0))
+    n_seeds_needed = len(seeds)
+
+    # Build fallback pool: first 20 non-primary seeds (used when EO guard skips a seed)
+    primary_set = set(int(s) for s in seeds)
+    fallback_pool = [s for s in range(200) if s not in primary_set][:20]
+    seed_queue = [int(s) for s in seeds] + fallback_pool
+
     # One exp_group for all seeds
     exp_group = build_exp_group(spec_path, spec)
     spec_base = os.path.basename(spec_path)
@@ -55,9 +63,14 @@ def run_spec_all_seeds(spec_path: str, device: str):
     print(f"[main] spec={spec_base} device={device}")
     print(f"[main] exp_group={exp_group}")
     print(f"[main] seeds={seeds}")
+    if eo_guard_threshold > 0.0:
+        print(f"[main] eo_guard_threshold={eo_guard_threshold} (fallback pool: {fallback_pool[:5]}...)")
 
-    # Run all seeds sequentially
-    for seed in seeds:
+    # Run seeds sequentially; skip via EO guard and pull from fallback pool as needed
+    completed = 0
+    for seed in seed_queue:
+        if completed >= n_seeds_needed:
+            break
         seed = int(seed)
         print(f"[main] ---- running seed={seed} ----")
         _seed_everything(seed)
@@ -132,13 +145,23 @@ def run_spec_all_seeds(spec_path: str, device: str):
             beta_reset_interval=int(spec.get("beta_reset_interval", 1)),
             beta_warmstart_from_alpha=bool(spec.get("beta_warmstart_from_alpha", False)),
             dp_protected_col=spec.get("dp_protected_col", None),
+            eo_guard_threshold=eo_guard_threshold,
         )
 
-        trainer()
+        result = trainer()
+
+        if result == "eo_guard_skip":
+            print(f"[main] seed={seed} skipped by EO guard — pulling from fallback pool")
+            continue
+
+        completed += 1
 
         if torch.cuda.is_available() and "cuda" in device:
             torch.cuda.synchronize(torch.device(device))
             torch.cuda.empty_cache()
+
+    if completed < n_seeds_needed:
+        print(f"[main] WARNING: only {completed}/{n_seeds_needed} seeds completed — fallback pool exhausted")
 
 def main():
     import argparse

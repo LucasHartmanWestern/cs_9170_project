@@ -22,6 +22,7 @@
   "gen_both_classes": false,
   "win_seconds": 1.0,
   "step_seconds": 0.5,
+  "eo_guard_threshold": 0.10,
   "seeds": [42, 0, 1, 2, 3],
   "reward_shaping": {
     "global_sigmoid_k": 10.0,

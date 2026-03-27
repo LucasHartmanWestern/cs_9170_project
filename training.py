@@ -118,6 +118,9 @@ class Training:
         beta_reset_interval: int = 1,       # 1 = reset every episode (default); N>1 = warm-start
         beta_warmstart_from_alpha: bool = False,  # if True, reset beta to alpha weights instead of random init
 
+        #EO guard
+        eo_guard_threshold: float = 0.0,  # 0.0 = disabled; 0.10 = skip seeds with alpha-EO < 0.10
+
         #misc
         seed=42,
         device='cpu',
@@ -125,6 +128,7 @@ class Training:
         self.exp_group = exp_group
         self.spec_name = spec_name
         self.seed = seed
+        self.eo_guard_threshold = eo_guard_threshold
         self.device = torch.device(device)
 
         torch.manual_seed(self.seed)
@@ -1034,6 +1038,9 @@ class Training:
 
             print(f"[disadv] group={disadv} per_g={per_g} worst_4g={self.disadv_worst_loss_alpha:.4f} soft_eo_alpha={self.eo_alpha_baseline:.4f}")
 
+            if self.eo_guard_threshold > 0.0 and self.eo_alpha_baseline < self.eo_guard_threshold:
+                print(f"[EO guard] alpha-EO={self.eo_alpha_baseline:.4f} < threshold={self.eo_guard_threshold:.4f} — skipping seed {self.seed}")
+                return "eo_guard_skip"
 
             # Build anchor set: real TRAIN points that are (y=1) AND (a=disadvantaged group)
             a_train = self.dataset.a_train
