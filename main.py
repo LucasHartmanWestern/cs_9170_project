@@ -131,6 +131,7 @@ def run_spec_all_seeds(spec_path: str, device: str):
             phase2_episodes=spec.get("phase2_episodes", None),
             beta_reset_interval=int(spec.get("beta_reset_interval", 1)),
             beta_warmstart_from_alpha=bool(spec.get("beta_warmstart_from_alpha", False)),
+            dp_protected_col=spec.get("dp_protected_col", None),
         )
 
         trainer()

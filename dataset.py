@@ -31,6 +31,10 @@ class Dataset:
         "capture24": {
             "data_path": "datasets/capture24",
             "protected_attributes": ["sex"]
+        },
+        "compas": {
+            "data_path": "datasets/compas",
+            "protected_attributes": ["race", "sex"]
         }
     }
     def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
@@ -912,6 +916,236 @@ class Dataset:
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
 
+    def split_compas(
+        self,
+        train_size=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=2,
+        drop_protected: bool = False,
+        protected_cols=None,
+        return_test_df: bool = False,
+        return_raw: bool = False,
+        bias_val: bool = True,
+        dp_protected_col: str = "race",
+    ):
+        """
+        COMPAS Recidivism dataset (ProPublica, 2016).
+        CSV: datasets/compas/compas-scores-two-years.csv
+
+        Applies standard ProPublica filters then restricts to African-American
+        and Caucasian defendants (the two largest groups). Race is encoded as
+        binary: 0=Caucasian, 1=African-American.
+
+        Label: two_year_recid (0=no recidivism, 1=recidivism).
+        Protected attr: race (binary) or sex (binary).
+        Disadvantaged group: Caucasian (minority_id=0) — naturally fewer
+        positive examples, so positive-class scarcity is most pronounced.
+
+        Pipeline mirrors split_census_income: split → bias per split →
+        fit encoder/scaler on train only → PCA → tensors.
+        """
+        assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
+
+        if protected_cols is None:
+            protected_cols = ["race", "sex"]
+
+        # ---- 1) Load and filter ----
+        df = pd.read_csv(Path(self.data_path) / "compas-scores-two-years.csv")
+
+        # Standard ProPublica filters
+        df = df[df["days_b_screening_arrest"] <= 30]
+        df = df[df["days_b_screening_arrest"] >= -30]
+        df = df[df["is_recid"] != -1]
+        df = df[df["c_charge_degree"] != "O"]
+        df = df[df["score_text"] != "N/A"]
+
+        if dp_protected_col == "race":
+            df = df[df["race"].isin(["African-American", "Caucasian"])].copy()
+        df = df.reset_index(drop=True)
+
+        label_col = "two_year_recid"
+        y_raw = df[label_col].astype(int).to_numpy()
+
+        vals, cnts = np.unique(y_raw, return_counts=True)
+        print("[compas] Label distribution:", dict(zip(vals.tolist(), cnts.tolist())))
+        if set(vals.tolist()) != {0, 1}:
+            raise ValueError("Label parsing failed; expected binary {0,1}")
+
+        A_df_raw = df[[dp_protected_col]].copy()
+
+        # Feature columns (ProPublica canonical set)
+        num_cols_all = ["age", "juv_fel_count", "juv_misd_count", "juv_other_count",
+                        "priors_count", "days_b_screening_arrest", "c_days_from_compas"]
+        cat_cols_all = ["sex", "age_cat", "c_charge_degree"]
+
+        feature_cols = num_cols_all + cat_cols_all
+        X_df_raw = df[feature_cols].copy()
+
+        # ---- 2) Optional: drop protected ----
+        if drop_protected:
+            drop_c = [c for c in protected_cols if c in X_df_raw.columns]
+            if drop_c:
+                X_df_raw = X_df_raw.drop(columns=drop_c)
+
+        cat_cols = [c for c in cat_cols_all if c in X_df_raw.columns]
+        num_cols = [c for c in num_cols_all if c in X_df_raw.columns]
+
+        # ---- 3) Split ----
+        X_train_df, X_temp_df, y_train, y_temp, A_train_df, A_temp_df = train_test_split(
+            X_df_raw, y_raw, A_df_raw,
+            test_size=(val_frac + test_frac),
+            random_state=self.seed,
+            stratify=y_raw,
+        )
+        rel_test = test_frac / (val_frac + test_frac)
+        X_val_df, X_test_df, y_val, y_test, A_val_df, A_test_df = train_test_split(
+            X_temp_df, y_temp, A_temp_df,
+            test_size=rel_test,
+            random_state=self.seed,
+            stratify=y_temp,
+        )
+
+        # ---- Protected attribute mapping ----
+        def _map_protected(a_series):
+            if dp_protected_col == "race":
+                # 0 = Caucasian (disadvantaged/minority), 1 = African-American
+                return (a_series != "Caucasian").astype(np.int64).to_numpy()
+            elif dp_protected_col == "sex":
+                # 0 = Female (minority), 1 = Male
+                return (a_series.str.lower() == "male").astype(np.int64).to_numpy()
+            else:
+                raise ValueError(f"Unsupported dp_protected_col: {dp_protected_col!r}")
+
+        # ---- 4) Bias injection ----
+        def apply_bias(df_split, y_split, a_split_df, target_minority_pct):
+            dfb = df_split.copy()
+            dfb["__y__"] = y_split
+            dfb["__a__"] = a_split_df[dp_protected_col].to_numpy()
+
+            df_maj = dfb[dfb["__y__"] == 0]
+            df_min = dfb[dfb["__y__"] == 1]
+
+            if len(df_maj) == 0 or len(df_min) == 0:
+                out = dfb
+            else:
+                keep_min = int(np.floor((target_minority_pct * len(df_maj)) / (1 - target_minority_pct)))
+                keep_min = min(len(df_min), max(1, keep_min))
+                df_min_b = df_min.sample(n=keep_min, random_state=self.seed, replace=False)
+                out = pd.concat([df_maj, df_min_b], axis=0).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
+
+            y_out = out["__y__"].to_numpy(dtype=int)
+            a_out = _map_protected(out["__a__"])
+            X_out = out.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        if bias_pct is not None:
+            X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, float(bias_pct))
+            if bias_val:
+                X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, float(bias_pct))
+            else:
+                X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+                y_val_biased = y_val.copy()
+                a_val = _map_protected(A_val_df[dp_protected_col])
+        else:
+            X_train_biased_df = X_train_df.copy().reset_index(drop=True)
+            y_train_biased = y_train.copy()
+            a_train = _map_protected(A_train_df[dp_protected_col])
+            X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+            y_val_biased = y_val.copy()
+            a_val = _map_protected(A_val_df[dp_protected_col])
+
+        X_test_biased_df = X_test_df.copy().reset_index(drop=True)
+        y_test_biased = y_test.copy()
+        a_test = _map_protected(A_test_df[dp_protected_col])
+
+        # ---- Optional train subsample ----
+        if train_size is not None and train_size < len(X_train_biased_df):
+            X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
+                X_train_biased_df, y_train_biased, a_train,
+                train_size=train_size,
+                random_state=self.seed,
+                stratify=y_train_biased,
+            )
+
+        # ---- 5) Fit encoder + scaler on train only ----
+        try:
+            encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        except TypeError:
+            encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
+        scaler = StandardScaler()
+
+        Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if cat_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])  if num_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_all = np.hstack([Xtr_num, Xtr_cat])
+
+        Xva_cat = encoder.transform(X_val_biased_df[cat_cols]) if cat_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_num = scaler.transform(X_val_biased_df[num_cols])  if num_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_all = np.hstack([Xva_num, Xva_cat])
+
+        Xte_cat = encoder.transform(X_test_biased_df[cat_cols]) if cat_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_num = scaler.transform(X_test_biased_df[num_cols])  if num_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_all = np.hstack([Xte_num, Xte_cat])
+
+        # ---- 6) PCA ----
+        X_train_theta_np, X_val_theta_np, X_test_theta_np, pca = self._to_theta(
+            Xtr_all, Xva_all, Xte_all, pca_components=pca_components
+        )
+
+        # ---- 7) Tensors ----
+        X_train_theta = torch.tensor(X_train_theta_np, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_val_theta_np,   dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_test_theta_np,  dtype=torch.float32, device=self.device)
+
+        y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_val_biased,   dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_test_biased,  dtype=torch.long, device=self.device)
+
+        self.a_train = torch.tensor(a_train, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_val,   dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        def log_dist(name, y_split):
+            n = len(y_split); n1 = int(np.sum(y_split == 1))
+            print(f"[compas/{name}] size={n}, minority={n1} ({100.*n1/n if n else 0:.2f}%)")
+        log_dist("TRAIN", y_train_biased)
+        log_dist("VAL",   y_val_biased)
+        log_dist("TEST",  y_test_biased)
+
+        try:
+            self._gan_view_cache = {
+                "supported": True,
+                "X_train_unbiased_df": X_train_df.copy(),
+                "y_train_unbiased": y_train.astype(int).copy(),
+                "encoder": encoder,
+                "scaler": scaler,
+                "pca": pca,
+                "use_pca": self.use_pca,
+                "pca_components": int(pca_components),
+                "cat_cols": list(cat_cols),
+                "num_cols": list(num_cols),
+                "drop_protected": bool(drop_protected),
+                "protected_cols": list(protected_cols),
+                "label_col": label_col,
+                "dp_protected_col": dp_protected_col,
+            }
+        except Exception:
+            pass
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_biased_df.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_biased_df.copy(), y_test_biased.copy())
+
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+
     def split_ptb_xl(
         self,
         train_size=None,
@@ -1439,6 +1673,9 @@ class Dataset:
                           if k not in ("drop_protected", "protected_cols",
                                        "win_seconds", "step_seconds")}
             return self.split_capture24(**c24_kwargs)
+        elif self.dataset_name == "compas":
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_compas(**kw)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 

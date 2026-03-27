@@ -82,6 +82,9 @@ class Training:
         win_seconds=5.0,
         step_seconds=2.5,
 
+        #dataset protected attribute column (passed to get_data_splits)
+        dp_protected_col: str | None = None,
+
         #two-phase generation
         gen_both_classes=False,
 
@@ -168,6 +171,7 @@ class Training:
         self.bias_val = bias_val
         self.win_seconds = win_seconds
         self.step_seconds = step_seconds
+        self.dp_protected_col = dp_protected_col
 
         self.minority_id = minority_id
         self.majority_id = majority_id
@@ -961,6 +965,7 @@ class Training:
                     bias_val=self.bias_val,
                     win_seconds=self.win_seconds,
                     step_seconds=self.step_seconds,
+                    **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
                 )
             )
 

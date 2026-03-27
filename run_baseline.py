@@ -82,6 +82,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 pca_components=spec.get("pca_components", 10),
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
+                dp_protected_col=spec.get("dp_protected_col", None),
             )
         elif baseline == "gaussian_ot_repair":
             from benchmarks.gaussian_ot_repair import GaussianOTRepairTrainer
@@ -103,6 +104,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 pca_components=spec.get("pca_components", 10),
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
+                dp_protected_col=spec.get("dp_protected_col", None),
             )
         elif baseline == "ctgan":
             from benchmarks.ctgan_baseline import CTGANBaselineTrainer
@@ -124,6 +126,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 pca_components=spec.get("pca_components", 10),
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
+                dp_protected_col=spec.get("dp_protected_col", None),
             )
         elif baseline == "fairness_loss_balancing":
             from benchmarks.fairness_loss_balancing import FairnessLossBalancingTrainer
@@ -145,6 +148,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 pca_components=spec.get("pca_components", 10),
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
+                dp_protected_col=spec.get("dp_protected_col", None),
             )
         elif baseline == "fairtabddpm":
             from benchmarks.fairtabddpm_baseline import FairTabDDPMTrainer
@@ -166,6 +170,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 pca_components=spec.get("pca_components", 10),
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
+                dp_protected_col=spec.get("dp_protected_col", None),
             )
         else:
             raise ValueError(

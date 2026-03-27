@@ -7,13 +7,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Target venue:** Neurocomputing (Elsevier journal)
 
-**Core contribution:** An RL-based framework for generating synthetic training data that improves classifier fairness under *positive-class outcome scarcity* — a regime where standard reweighting methods (GroupDRO, OT Repair) degrade because there are too few minority positive examples to reweight from. This is an underexplored area; existing fairness literature focuses on reweighting or in-processing, not generative augmentation under severe label scarcity.
+**Core contribution:** An RL-based framework for generating synthetic training data that improves classifier fairness under *positive-class outcome scarcity* — a regime where standard reweighting methods (GroupDRO, OT Repair) degrade because there are too few minority-group positive examples to reweight from. This is an underexplored area; existing fairness literature focuses on reweighting or in-processing, not generative augmentation under severe label scarcity.
 
 **Three claims that must be supported by results:**
 
-1. **Motivation claim** — Reweighting baselines (GroupDRO, OT Repair) fail under severe positive-class scarcity (bias_pct ≤ 0.10). We do not. Well-supported by v18 results.
+1. **Motivation claim** — Reweighting baselines (GroupDRO, OT Repair) fail under severe positive-class scarcity (DA+ ≤ 43 training examples). We do not. Well-supported by v18 results on census.
 
-2. **Competitive performance claim** — Our method achieves comparable or better fairness-utility tradeoff vs all baselines including CTGAN. v18 at census bias=0.10 (EO=0.063±0.059, F1w=0.811, AUC=0.877) is the best result. Beats GroupDRO and CTGAN on both axes; near-OT-Repair EO with much better utility.
+2. **Competitive performance claim** — Our method achieves comparable or better fairness-utility tradeoff vs all baselines including CTGAN. v18 at census (EO=0.063±0.059, F1w=0.811, AUC=0.877) is the best result. Beats GroupDRO and CTGAN on both axes; near-OT-Repair EO with much better utility.
 
 3. **Ablation / design validation claim** — v17a (DVRL local reward) vs v18 (global-only) is the key ablation. Result is a clean negative: global-only is better. Paper narrative: global-only is the proposed design; DVRL is tested and shown not to improve, validating the simpler design.
 
@@ -36,13 +36,12 @@ ffnn: hidden=[32,16], lr=0.001, batch=64, epochs=20
 reinforce: hidden=[64,64], lr=0.0003, entropy_start=0.02, entropy_end=0.005
 pca_components: 10
 ```
-**Do NOT change these unless a new experiment explicitly beats v18.** Apply this config to all new datasets (CAPTURE-24, etc.) — only change dataset-specific fields (dataset_name, bias_pct, minority_id, win_seconds, step_seconds).
+**Do NOT change these unless a new experiment explicitly beats v18.** Apply this config to all new datasets — only change dataset-specific fields (dataset_name, bias_pct, dp_protected_col, minority_id, win_seconds, step_seconds).
 
-**Current paper status:** v18 is the confirmed primary method. Main results (census) done. CAPTURE-24 results in progress (2026-03-25). Credit card results needed.
+**Current paper status:** v18 is the confirmed primary method. Main results (census, CAPTURE-24) done. COMPAS experiments being set up (2026-03-27). Credit dataset DROPPED.
 
 **Results still needed before submission:**
-- CAPTURE-24 5-seed v18 run (in progress locally, 2026-03-25)
-- v18 credit bias=0.10 and bias=0.05 — 5 seeds each (queue for DRAC)
+- COMPAS 5-seed full run — all methods (queue for DRAC, specs ready)
 - v18 census bias=0.05 — 5 seeds (queue for DRAC)
 
 ## Experiment Log
@@ -51,7 +50,9 @@ See **`EXPERIMENTS.md`** for the full chronological record of every experiment: 
 
 ## Project Overview
 
-Fairness-aware synthetic data generation using reinforcement learning. An RL agent (REINFORCE) learns to generate synthetic minority-positive training samples that improve classifier fairness (Equal Opportunity gap) while preserving utility (F1-weighted, AUC). The problem setting is *positive-class outcome scarcity*: the disadvantaged group has very few positive-class examples due to simulated historical bias (`bias_pct` downsampling), making reweighting-based baselines ineffective.
+Fairness-aware synthetic data generation using reinforcement learning. An RL agent (REINFORCE) learns to generate synthetic minority-positive training samples that improve classifier fairness (Equal Opportunity gap) while preserving utility (F1-weighted, AUC).
+
+**Problem setting:** *positive-class outcome scarcity* — the disadvantaged group has very few positive-class examples in the training data (DA+ ≤ ~50), making reweighting-based baselines ineffective. Each dataset is configured via `bias_pct` (an internal implementation parameter) to achieve a target DA+ count. Do NOT lead with `bias_pct` in paper text — always frame in terms of DA+.
 
 ## Commands
 
@@ -98,7 +99,7 @@ Each episode: generate synthetic trajectory → train beta on real+synthetic →
 ### Key Modules
 - **`training.py`**: Core `Training` class with full training loop
 - **`env.py`**: `Environment` class with delta actions, radius clipping, and curriculum learning (disabled in current best config — full 10D PCA from episode 1)
-- **`dataset.py`**: `Dataset` class handling census_income, credit_card, PAMAP2. Includes bias injection, PCA encoding, stratified splitting
+- **`dataset.py`**: `Dataset` class handling census_income, compas, capture24, ptb_xl. Includes bias injection, PCA encoding, stratified splitting
 - **`reward_helpers.py`**: Loss functions, fairness metrics (EO gap, worst-group loss), local reward components
 - **`episode_tracker.py`**: `EpisodeTracker` context manager for CSV logging, checkpointing, console mirroring
 - **`test_suite.py`**: `TestSuite` class for post-training evaluation (DP, EO, EOd, F1, Brier)
@@ -113,6 +114,8 @@ Each episode: generate synthetic trajectory → train beta on real+synthetic →
 ### Experiment Configuration
 JSON specs in `experiment_specs/` define all hyperparameters: dataset, reward mode, lambda schedule, PCA components, trajectory length, curriculum settings, network architectures, seeds. Multi-seed runs execute sequentially from a single spec.
 
+The `dp_protected_col` field in a spec selects which column is used as the protected attribute (passed through `training.py` and all baseline trainers to `get_data_splits`). Defaults to each dataset's natural default if omitted.
+
 ### Output Structure
 Results go to `training_runs/SPEC_{name}_{hash}__G{timestamp}/seed_{N}/` containing:
 - `metrics.csv`: Per-episode metrics (50+ columns, flattened from nested dicts with prefixes: global, utility, fairness, local, extra, align)
@@ -122,30 +125,36 @@ Results go to `training_runs/SPEC_{name}_{hash}__G{timestamp}/seed_{N}/` contain
 
 ## Datasets
 
-- **census_income**: Adult income with sex/race/age/country protected attributes. Primary dataset for all fairness experiments. Most results and ablations are on this dataset.
-- **credit_card**: Credit default with sex/age protected attributes. Secondary fairness dataset. Alpha-EO is near-zero at both bias levels so it contributes primarily to the utility preservation story, not the fairness story.
-- **PAMAP2**: Physical activity recognition. DROPPED — full 5-seed run at bias=0.10 showed mean EO degradation (α=0.151 → β=0.191). Root cause: only 1 female subject (sub102), 9 female positive examples at bias=0.10, disadvantaged group identification flips across seeds. Not suitable for the positive-class scarcity narrative.
+**Active datasets (paper):** census_income, capture24, compas. Credit card DROPPED.
 
-- **Third dataset (IoT/wearable, REQUIRED for funding)**: Replacement for PAMAP2 pending. See "Third Dataset — Work In Progress" note below.
+### Scarcity Metric: DA+
+**DA+** = number of disadvantaged-group positive (y=1) training examples. This is the primary metric defining the scarcity regime. All three datasets are configured so DA+ ≈ 43, the level at which reweighting methods demonstrably fail. `bias_pct` is an internal implementation parameter used to achieve the target DA+; it is NOT a paper-level framing variable.
 
-Bias is injected via `bias_pct` parameter which downsamples y=1 (positive class) examples to simulate historical outcome bias. At bias_pct=0.05 only 17 minority-positive training examples remain; at 0.10, 43 remain (census numbers).
+**DA+ log — confirmed values (seed=42, mean across seeds similar):**
 
-**Dataset priority:** Validate and finalise all census and credit results first. Third dataset (IoT) comes last.
+| Dataset | bias_pct | real_data_size | DA+ | Protected attr | Disadv. group |
+|---------|----------|----------------|-----|----------------|---------------|
+| census_income | 0.10 | 3000 | **43** | sex | female (a=0) |
+| capture24 | 0.02 | 3000 | **45** | sex | female (a=1) |
+| compas | 0.14 | — (no cap, ~2346 train) | **43** | sex | female (a=0) |
 
-## Third Dataset — Work In Progress (2026-03-25)
+Secondary scarcity level (census only, for motivation curve):
 
-**Funding requirement:** Third dataset must be IoT / wearable sensor data (not tabular). PAMAP2 dropped; replacement needed.
+| Dataset | bias_pct | DA+ |
+|---------|----------|-----|
+| census_income | 0.05 | 17 |
 
-**PTB-XL ECG (paused, not confirmed for use):**
-- 21,799 records, sex-balanced (11,354 male / 10,445 female)
-- Binary: MI (y=1) vs NORM (y=0), 13,572 records post-filter
-- Female MI rate naturally lower (23.2% vs 37.4% male) → positive-class scarcity narrative
-- Implementation COMPLETE: `split_ptb_xl()` in `dataset.py`, strat_fold-based splits (no patient leakage), feature cache, all experiment specs created
-- Signal files: 13,395/13,572 downloaded to `datasets/ptb-xl/records100/` (98.7% complete — ~177 files remain, can resume with filelist at `/tmp/ptbxl_filelist.txt`)
-- **Status: PAUSED** — ECG is clinical, not traditional IoT; user reviewing whether this satisfies funding requirement
-- To resume: delete partial cache (`datasets/ptb-xl/ptbxl_features_cache.npz` if it exists), finish download, run `smoke_ptbxl_bias010_rl.json`
+### Dataset Details
 
-**Open question for user:** Does PTB-XL (clinical ECG) qualify as "IoT" for funding? If not, alternative IoT options being evaluated (see EXPERIMENTS.md).
+- **census_income**: Adult income (UCI). Protected attr: sex. Female (a=0) is disadvantaged — naturally low positive rate (~7%) creates scarcity at bias_pct=0.10. Primary dataset; most ablations here. Path: `datasets/census+income/adult.data`.
+
+- **capture24**: Wearable accelerometer sleep/activity (Oxford). Protected attr: sex. Female (a=1) is disadvantaged. Requires windowing (win_seconds=1.0, step_seconds=0.5). Path: `datasets/capture24/`. bias_pct=0.02 (real_data_size=3000 cap drives DA+≈45).
+
+- **compas**: COMPAS recidivism (ProPublica). Protected attr: sex (dp_protected_col="sex"). Female (a=0) is disadvantaged — lower recidivism positive rate (35% vs 48% male). ProPublica standard filters applied; all races included (not filtered). bias_pct=0.14 → DA+=43. EO gap at alpha: ~0.10–0.15. Path: `datasets/compas/compas-scores-two-years.csv`. Specs: `p1_compas_bias014_*.json`.
+
+- **PAMAP2**: DROPPED — disadvantaged group identification unstable across seeds (only 1 female subject).
+- **credit_card**: DROPPED — DA+ too high (~136 at bias=0.10), alpha-EO near-zero, not in the scarcity regime.
+- **ptb_xl**: PAUSED — ECG implementation complete; pending decision on whether it satisfies IoT funding requirement.
 
 ## Paper-Writing Guidance
 
@@ -154,3 +163,5 @@ When making decisions about experiments, code changes, or analysis, prioritise i
 2. **Is it reproducible?** Always report seed count, mean ± std, and range. 3 seeds is provisional; 5+ seeds is required for the final results table.
 3. **Is the ablation clean?** Change one thing at a time between compared configs. If multiple things changed between versions, note the confounds.
 4. **Reviewer questions to anticipate:** Why RL over simpler generative methods? Why DVRL local reward vs no local reward? Why PCA space? Does the agent actually learn (vs random search)? Have answers or experiments ready for each.
+
+**On the DA+ scarcity framing:** Reviewers may ask whether DA+≈43 is realistic. It is — hospital datasets for rare conditions, small-jurisdiction criminal justice records, and internal HR datasets routinely produce comparable minority-positive counts. The key point is that DA+≈43 is the regime where reweighting methods empirically fail (shown in our census baseline degradation curve); the specific mechanism creating that scarcity (historical underrecording, small group size, rare outcome) does not affect the algorithmic behavior we study. Framing: "we study the regime where DA+ is severely limited; our bias injection *simulates* this condition, following standard practice in fairness ML."

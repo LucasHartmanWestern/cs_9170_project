@@ -1,0 +1,20 @@
+\begin{table}[ht]
+  \centering
+  \small
+  \caption{Credit Card, $\texttt{bias\_pct}=0.10$. \textit{Note:} the unconstrained baseline achieves $\alpha_\text{EO} \approx 0.037$, indicating minimal positive-class scarcity; results included for completeness.}
+  \label{tab:credit_b010}
+  \begin{tabular}{lrrrr}
+    \toprule
+    \textbf{Method} & $\alpha_\text{EO}$ & $\beta_\text{EO}$ $\downarrow$ & $\beta$ F1$_w$ $\uparrow$ & $\beta$ AUC $\uparrow$ \\
+    \midrule
+    \textit{No Intervention} & 0.037$_{\pm 0.023}$ & -- & 0.732 & 0.726 \\
+    \midrule
+    Group DRO & 0.037$_{\pm 0.023}$ & 0.055$_{\pm 0.017}$ & 0.722 & 0.708 \\
+    OT Repair & 0.014$_{\pm 0.009}$ & \textbf{0.022$_{\pm 0.012}$} & 0.732 & 0.724 \\
+    CT-GAN & 0.037$_{\pm 0.023}$ & 0.048$_{\pm 0.026}$ & 0.732 & 0.690 \\
+    FairTabDDPM & 0.056$_{\pm 0.018}$ & 0.069$_{\pm 0.046}$ & 0.745 & 0.677 \\
+    FLB & 0.056$_{\pm 0.018}$ & 0.068$_{\pm 0.025}$ & 0.706 & 0.693 \\
+    \textbf{RL Framework} & 0.024$_{\pm 0.019}$ & 0.041$_{\pm 0.042}$ & 0.724 & 0.672 \\
+    \bottomrule
+  \end{tabular}
+\end{table}

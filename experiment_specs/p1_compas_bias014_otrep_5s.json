@@ -1,0 +1,25 @@
+{
+  "baseline": "gaussian_ot_repair",
+  "dataset_name": "compas",
+  "multiclass": false,
+  "bias_pct": 0.14,
+  "dp_protected_col": "sex",
+  "minority_id": 0,
+  "majority_id": 1,
+  "third_id": null,
+  "real_data_size": null,
+  "seeds": [42, 0, 1, 2, 3],
+  "ffnn": {
+    "hidden_sizes": [32, 16],
+    "lr": 0.001,
+    "batch_size": 64,
+    "epochs": 100
+  },
+  "ot_repair": {
+    "lam": 1.0,
+    "n_groups": 2,
+    "cov_reg": 1e-5,
+    "barycenter_iters": 100,
+    "repair_test": true
+  }
+}

@@ -1,0 +1,22 @@
+\begin{table}[ht]
+  \centering
+  \small
+  \caption{CAPTURE-24, $\texttt{bias\_pct}=0.02$ (${\sim}47$ minority-positive training examples). Seeds 2 and 3 produced degenerate subject-level splits ($\alpha_\text{EO} \in \{0.635, 0.048\}$) outside the positive-class scarcity regime and are reported separately in the appendix.}
+  \label{tab:capture24_b002}
+  \begin{tabular}{lrrrr}
+    \toprule
+    \textbf{Method} & $\alpha_\text{EO}$ & $\beta_\text{EO}$ $\downarrow$ & $\beta$ F1$_w$ $\uparrow$ & $\beta$ AUC $\uparrow$ \\
+    \midrule
+    \textit{No Intervention} & 0.200$_{\pm 0.097}$ & -- & 0.950 & 0.915 \\
+    \midrule
+    Group DRO & 0.200$_{\pm 0.097}$ & 0.156$_{\pm 0.085}$ & 0.915 & 0.910 \\
+    OT Repair & 0.108$_{\pm 0.029}$ & 0.072$_{\pm 0.058}$ & 0.951 & 0.908 \\
+    CT-GAN & 0.200$_{\pm 0.097}$ & 0.128$_{\pm 0.088}$ & 0.959 & 0.917 \\
+    FairTabDDPM & 0.200$_{\pm 0.097}$ & 0.137$_{\pm 0.086}$ & 0.955 & 0.923 \\
+    FLB & 0.200$_{\pm 0.097}$ & 0.080$_{\pm 0.034}$ & 0.907 & 0.925 \\
+    \textbf{RL Framework} & 0.158$_{\pm 0.026}$ & \textbf{0.037$_{\pm 0.022}$} & 0.956 & 0.922 \\
+    \bottomrule
+  \end{tabular}
+  \vspace{2pt}
+  {\footnotesize \dag~3-seed result (see caption).}
+\end{table}
