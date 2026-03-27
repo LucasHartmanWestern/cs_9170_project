@@ -38,12 +38,70 @@ def _build_exp_group(baseline: str, spec_name: str, spec: dict) -> str:
     return f"BASELINE_{baseline}_{slug}_{h}__G{ts}"
 
 
+def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
+    """Train alpha on real data for this seed/split and return soft EO gap.
+    Uses PCA-transformed features (pca_components=10) to match the RL framework."""
+    import torch
+    from torch.utils.data import DataLoader, TensorDataset
+    from dataset import Dataset
+    from agents.ffnn_agent2 import FFNNAgent
+    import reward_helpers as rh
+
+    ds = Dataset(
+        spec["dataset_name"],
+        minority_id=spec.get("minority_id"),
+        majority_id=spec.get("majority_id"),
+        third_id=spec.get("third_id"),
+        pca_components=10,
+        seed=seed,
+        device=torch.device(device),
+        use_pca=True,
+    )
+
+    dp_col = spec.get("dp_protected_col")
+    x_tr, x_val, _, y_tr, y_val, _ = ds.get_data_splits(
+        train_size=spec.get("real_data_size"),
+        bias_pct=spec.get("bias_pct"),
+        pca_components=10,
+        drop_protected=False,
+        protected_cols=ds.protected_attributes,
+        bias_val=True,
+        win_seconds=float(spec.get("win_seconds", 5.0)),
+        step_seconds=float(spec.get("step_seconds", 2.5)),
+        **({"dp_protected_col": dp_col} if dp_col is not None else {}),
+    )
+
+    ffnn_cfg   = spec.get("ffnn", {})
+    hidden     = ffnn_cfg.get("hidden_sizes", [32, 16])
+    lr         = float(ffnn_cfg.get("learning_rate", ffnn_cfg.get("lr", 0.001)))
+    batch_size = int(ffnn_cfg.get("batch_size", 64))
+    epochs     = int(ffnn_cfg.get("epochs", 20))
+
+    alpha = FFNNAgent(x_tr.shape[1], hidden_sizes=hidden, output_size=1,
+                      learning_rate=lr, batch_size=batch_size, epochs=epochs,
+                      device=device, seed=seed)
+    loader = DataLoader(TensorDataset(x_tr, y_tr), batch_size=batch_size, shuffle=True)
+    alpha.train(loader)
+
+    with torch.no_grad():
+        p1  = rh.p1_from_agent(alpha, x_val)
+        eo  = rh.soft_eo_gap(ds.a_val, y_val, p1)
+
+    return float(eo.item())
+
+
 def run_baseline_all_seeds(spec_path: str, device: str) -> None:
     spec     = _load_spec(spec_path)
     baseline = spec.get("baseline", "group_dro")
     seeds    = spec.get("seeds", [42])
     if not isinstance(seeds, list) or len(seeds) == 0:
         raise ValueError(f"spec['seeds'] must be a non-empty list. Got: {seeds!r}")
+
+    eo_guard_threshold = float(spec.get("eo_guard_threshold", 0.0))
+    n_seeds_needed     = len(seeds)
+    primary_set        = set(int(s) for s in seeds)
+    fallback_pool      = [s for s in range(200) if s not in primary_set][:20]
+    seed_queue         = [int(s) for s in seeds] + fallback_pool
 
     spec_name = os.path.splitext(os.path.basename(spec_path))[0]
     exp_group = _build_exp_group(baseline, spec_name, spec)
@@ -53,11 +111,23 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
     print(f"[run_baseline] device={device}")
     print(f"[run_baseline] exp_group={exp_group}")
     print(f"[run_baseline] seeds={seeds}")
+    if eo_guard_threshold > 0.0:
+        print(f"[run_baseline] eo_guard_threshold={eo_guard_threshold} (fallback pool: {fallback_pool[:5]}...)")
 
-    for seed in seeds:
+    completed = 0
+    for seed in seed_queue:
+        if completed >= n_seeds_needed:
+            break
         seed = int(seed)
         print(f"\n[run_baseline] ---- seed={seed} ----")
         _seed_everything(seed)
+
+        if eo_guard_threshold > 0.0:
+            eo = _compute_alpha_eo(spec, seed, device)
+            if eo < eo_guard_threshold:
+                print(f"[EO guard] alpha-EO={eo:.4f} < threshold={eo_guard_threshold:.4f} — skipping seed {seed}")
+                continue
+            print(f"[EO guard] alpha-EO={eo:.4f} >= threshold={eo_guard_threshold:.4f} — proceeding")
 
         win_seconds  = float(spec.get("win_seconds",  5.0))
         step_seconds = float(spec.get("step_seconds", 2.5))
@@ -180,10 +250,14 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
             )
 
         trainer()
+        completed += 1
 
         if torch.cuda.is_available() and "cuda" in device:
             torch.cuda.synchronize(torch.device(device))
             torch.cuda.empty_cache()
+
+    if completed < n_seeds_needed:
+        print(f"[run_baseline] WARNING: only {completed}/{n_seeds_needed} seeds completed — fallback pool exhausted")
 
 
 def main():

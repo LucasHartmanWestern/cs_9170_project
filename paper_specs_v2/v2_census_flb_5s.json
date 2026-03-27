@@ -7,6 +7,7 @@
   "majority_id": 0,
   "third_id": null,
   "real_data_size": 3000,
+  "eo_guard_threshold": 0.10,
   "seeds": [42, 0, 1, 2, 3],
   "ffnn": {
     "hidden_sizes": [32, 16],
