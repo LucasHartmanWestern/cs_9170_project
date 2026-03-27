@@ -967,3 +967,94 @@ across all 12 leads → 96 features → PCA to 10 components (same pipeline as c
 
 **Status:** Signal files downloading. Run smoke test once download completes.
 
+---
+
+## v2 Paper Reframing: DA+ Scarcity Framing + COMPAS Dataset (2026-03-27)
+
+### Motivation & Decisions
+
+**Problem reframing:** The paper is now framed around *positive-class outcome scarcity* as
+measured by DA+ (disadvantaged-group positive count) rather than `bias_pct`. `bias_pct` is
+an internal implementation parameter only; DA+ is the paper-level concept. All three datasets
+are calibrated to DA+ ≈ 43 using different `bias_pct` values.
+
+**Dataset changes:**
+- Credit card DROPPED: DA+ ≈ 136 at bias_pct=0.10, alpha-EO near-zero — not in the scarcity
+  regime. Not a valid test case.
+- COMPAS added as third dataset (replacing credit). ProPublica recidivism data; protected
+  attribute = sex (female, a=0 is disadvantaged); bias_pct=0.14 → DA+=43.
+- Final three paper datasets: **census_income, capture24, compas**.
+
+**DA+ calibration (seed=42):**
+
+| Dataset | bias_pct | real_data_size | DA+ | Protected attr | Disadv. group |
+|---------|----------|----------------|-----|----------------|---------------|
+| census_income | 0.10 | 3000 | 43 | sex | female (a=0) |
+| capture24 | 0.02 | 3000 | ~45 | sex | female (a=1) |
+| compas | 0.14 | ~2346 (no cap) | 43 | sex | female (a=0) |
+
+**EO guard:** Seeds where alpha-EO < 0.10 are excluded (replaced with next available seed).
+This ensures a meaningful fairness gap exists before RL intervention. Stated as an inclusion
+criterion in the paper methodology.
+
+**COMPAS setup details:**
+- Protected attribute: `dp_protected_col="sex"` (NOT race — cleaner framing, sex gives
+  stable DA+ of 43)
+- ProPublica standard filters applied: days_b_screening_arrest ±30, is_recid != -1,
+  c_charge_degree != 'O', score_text != 'N/A'. All races included.
+- Data downloaded to `datasets/compas/compas-scores-two-years.csv` (7215 rows).
+- EO gap at alpha: ~0.10–0.15 (confirmed meaningful, sufficient to solve).
+
+### Infrastructure Changes
+
+- `dp_protected_col` field added to all specs and wired through `training.py`, `main.py`,
+  `run_baseline.py`, and all 5 baseline trainers.
+- `split_compas()` implemented in `dataset.py` with ProPublica filters and sex-based
+  protected attribute mapping.
+- New `paper_specs_v2/` directory created at project root for all paper-final specs.
+
+### paper_specs_v2 — Main Result Specs
+
+All use v18 config (global-only reward, lambda=[1,1], gen_both_classes=true,
+phase2_episodes=200, total_episodes=800, 5 seeds). 18 JSON + 18 .sh files.
+SLURM resources: 2 CPUs, 4G memory.
+
+| Dataset | Methods | Spec prefix |
+|---------|---------|-------------|
+| census_income | global, gdro, otrep, ctgan, fairtabddpm, flb | `v2_census_*_5s` |
+| capture24 | global, gdro, otrep, ctgan, fairtabddpm, flb | `v2_capture24_*_5s` |
+| compas | global, gdro, otrep, ctgan, fairtabddpm, flb | `v2_compas_*_5s` |
+
+### paper_specs_v2 — Episode Ablation Specs
+
+4 configs × 3 datasets = 12 JSON + 12 .sh files. RL only (no baselines).
+Goal: identify best episode budget across datasets; ablate phase 2 contribution.
+
+| Config | total_episodes | phase2_episodes | gen_both_classes | Purpose |
+|--------|---------------|-----------------|-----------------|---------|
+| ep800ph0 | 800 | 0 | false | Phase 1 only — isolates phase 2 |
+| ep800ph200 | 800 | 200 | true | v18 anchor (same as main result) |
+| ep1500ph400 | 1500 | 400 | true | Scaling test |
+| ep2000ph600 | 2000 | 600 | true | Scaling test |
+
+### Current Status (2026-03-27)
+
+**Running locally (both GPUs):**
+- `v2_compas_gdro_5s` → `v2_compas_otrep_5s` → `v2_compas_flb_5s` on cuda:0 (PID 121995)
+- `v2_compas_ctgan_5s` → `v2_compas_fairtabddpm_5s` on cuda:1 (PID 122101)
+- Logs: `paper_specs_v2/logs/v2_compas_fast_baselines.out` and `v2_compas_slow_baselines.out`
+
+**Queued for DRAC (not yet submitted):**
+- All 12 ablation RL jobs (`ablation_{dataset}_ep{N}ph{M}_5s.sh`)
+- Main RL jobs: `v2_census_global_5s`, `v2_capture24_global_5s`, `v2_compas_global_5s`
+
+**Already complete (from prior runs, results valid for v2):**
+- Census baselines (gdro, otrep, flb, ctgan, fairtabddpm) — in `training_runs/BASELINE_*census_b010*`
+- Capture24 baselines (gdro, otrep, flb, ctgan, fairtabddpm) — in `training_runs/BASELINE_*capture24*`
+
+**Next steps (pending COMPAS baseline results):**
+1. Verify COMPAS baseline results: check alpha-EO ≥ 0.10 for all 5 seeds
+2. If results are clean: begin paper draft
+3. Submit ablation RL jobs to DRAC in parallel with paper writing
+4. Use best episode config per dataset as the main RL result in the final table
+
