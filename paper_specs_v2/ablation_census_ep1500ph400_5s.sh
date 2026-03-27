@@ -2,17 +2,17 @@
 #SBATCH --job-name=abl_cens_ep1500ph400
 #SBATCH --account=def-mcapretz
 #SBATCH --time=09:00:00
-#SBATCH --mem=16G
-#SBATCH --cpus-per-task=4
+#SBATCH --mem=4G
+#SBATCH --cpus-per-task=2
 #SBATCH --output=paper_specs_v2/logs/ablation_census_ep1500ph400_5s.out
 #SBATCH --error=paper_specs_v2/logs/ablation_census_ep1500ph400_5s.err
 
 set -euo pipefail
 
-export OMP_NUM_THREADS=4
-export MKL_NUM_THREADS=4
-export OPENBLAS_NUM_THREADS=4
-export NUMEXPR_NUM_THREADS=4
+export OMP_NUM_THREADS=2
+export MKL_NUM_THREADS=2
+export OPENBLAS_NUM_THREADS=2
+export NUMEXPR_NUM_THREADS=2
 
 module purge
 module load python/3.12.4 cuda cudnn
