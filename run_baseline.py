@@ -221,6 +221,28 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
             )
+        elif baseline == "smote":
+            from benchmarks.smote_baseline import SMOTEBaselineTrainer
+            trainer = SMOTEBaselineTrainer(
+                exp_group=exp_group,
+                spec_name=spec_name,
+                dataset_name=spec["dataset_name"],
+                seed=seed,
+                device=device,
+                minority_id=spec.get("minority_id"),
+                majority_id=spec.get("majority_id"),
+                third_id=spec.get("third_id"),
+                bias_pct=spec.get("bias_pct"),
+                real_data_size=spec.get("real_data_size", 3000),
+                ffnn=spec.get("ffnn"),
+                smote=spec.get("smote"),
+                multiclass=spec.get("multiclass", False),
+                use_pca=spec.get("use_pca", True),
+                pca_components=spec.get("pca_components", 10),
+                win_seconds=win_seconds,
+                step_seconds=step_seconds,
+                dp_protected_col=spec.get("dp_protected_col", None),
+            )
         elif baseline == "fairtabddpm":
             from benchmarks.fairtabddpm_baseline import FairTabDDPMTrainer
             trainer = FairTabDDPMTrainer(
@@ -247,7 +269,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
             raise ValueError(
                 f"Unknown baseline: {baseline!r}. "
                 "Supported: 'group_dro', 'gaussian_ot_repair', 'ctgan', "
-                "'fairness_loss_balancing', 'fairtabddpm'"
+                "'fairness_loss_balancing', 'fairtabddpm', 'smote'"
             )
 
         trainer()
