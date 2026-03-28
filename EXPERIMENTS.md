@@ -1203,3 +1203,80 @@ than random interpolation, validating the learned policy.
 4. If SMOTE ≈ RL: honest reporting; contribution is the two-phase framework design, cite
    RL as the search mechanism with the same practical outcome as SMOTE at this scale.
 5. Once all baselines complete: build final comparison table and begin paper draft.
+
+---
+
+## Status Snapshot — End of Session (2026-03-28)
+
+### SMOTE Baseline Results (complete)
+
+SMOTE ran on identical seeds to the RL framework (eo_guard disabled, seeds hardcoded).
+Results on same data splits, same PCA-10 feature space, n_synthetic=2000 two-phase:
+
+| Dataset | SMOTE EO | RL ep2k/ph6 EO | RL advantage |
+|---------|----------|----------------|-------------|
+| census_income | 0.133 ± 0.064 | 0.082 ± 0.073 | −0.051 |
+| compas | 0.507 ± 0.138 | 0.016 ± 0.012 | **−0.491** |
+| capture24 | 0.232 ± 0.170 | 0.069 ± 0.039 | −0.164 |
+
+**Interpretation:** RL substantially beats SMOTE on all datasets. COMPAS is most striking —
+SMOTE worsens EO to 0.507 (far above alpha ~0.052), while RL achieves 0.016. Flooding
+training with SMOTE-interpolated minority examples in PCA space does not generalise well
+for COMPAS; the RL policy is finding meaningfully better augmentations. This resolves the
+concern that high early episode returns implied simple oversampling was sufficient.
+
+The "high early returns" finding stands as a nuance (initial policy already helps due to
+severe scarcity) but the policy gradient is demonstrably learning something beyond SMOTE-
+level interpolation.
+
+### Scarcity Sensitivity Smokes (running overnight)
+
+**Motivation:** At DA+≈43 (bias=0.10), initial episode return is ~0.93 even at episode 1.
+Goal: identify whether at less severe scarcity (higher DA+), the initial random policy helps
+less and the learning curve shows more genuine improvement over training.
+
+**Specs created:** `experiment_specs/smoke_census_bias{05,15,20}_scarcity.json`
+2 seeds each (seeds [0, 2]), eo_guard disabled, ep800/ph200 config.
+
+| Spec | bias_pct | DA+ (approx) |
+|------|----------|--------------|
+| bias05 | 0.05 | 17 (more scarce) |
+| bias15 | 0.15 | 77 (less scarce) |
+| bias20 | 0.20 | 96 (less scarce) |
+
+**Auto-monitor running** (`/tmp/scarcity_monitor.sh`, PID 102612):
+- Checks every 5 min until all 3 smokes complete
+- Computes mean initial episode return (first 5 eps) per bias level
+- If any level shows init_return < 0.88 (below the 0.93 baseline at bias=0.10),
+  automatically launches 3 more seeds (seeds [3, 5, 42]) on cuda:0
+- Full log: `/tmp/scarcity_monitor.log`
+
+**Expected outcome:** bias=0.15 and bias=0.20 likely show lower initial returns since
+the disadvantaged group already has more real examples, reducing the marginal value of
+random augmentation. If confirmed, these levels provide a cleaner learning curve for
+the paper's scarcity motivation figure.
+
+### Baselines on DRAC (submitted)
+
+All 18 baseline jobs submitted to DRAC after `git pull`. Seeds are hardcoded in SMOTE
+specs but still use eo_guard for other baselines — see open question about seed matching.
+
+**Fast jobs** (gdro, flb, otrep, smote × 3 datasets = 12 jobs):
+Expected runtime: 1–2h each. Seeds may differ from RL for non-SMOTE baselines.
+
+**Slow jobs** (ctgan, fairtabddpm × 3 datasets = 6 jobs):
+Expected runtime: 4–12h each.
+
+**Open question before paper:** Should all baseline specs have seeds hardcoded to match
+RL (like SMOTE)? Currently only SMOTE specs have eo_guard=0.0 + hardcoded seeds. Other
+baselines use eo_guard=0.10 and may select different seeds, making per-seed comparison
+invalid. Decision needed when baselines return.
+
+### Next Steps (priority order)
+
+1. **Morning:** Check scarcity smoke results + monitor decision log
+2. **When DRAC baselines return:** Decide on seed-matching fix for non-SMOTE baselines
+3. **Build full comparison table:** RL (ep2000/ph600) vs all baselines vs SMOTE, 3 datasets
+4. **Write paper:** Contribution reframed as two-phase reward-guided augmentation framework;
+   RL as search mechanism validated by SMOTE comparison
+5. **Nice-to-have:** Scarcity sensitivity curve if bias=0.15/0.20 smokes are promising
