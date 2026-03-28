@@ -5,3 +5,5 @@ data/Protocol/*
 .idea/*
 training_runs*/
 datasets/
+paper_results_v2/
+paper_figures/
