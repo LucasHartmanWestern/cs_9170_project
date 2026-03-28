@@ -9,8 +9,8 @@
   "real_data_size": 3000,
   "win_seconds": 1.0,
   "step_seconds": 0.5,
-  "eo_guard_threshold": 0.10,
-  "seeds": [42, 0, 1, 2, 3],
+  "eo_guard_threshold": 0.0,
+  "seeds": [0, 4, 5, 7, 42],
   "ffnn": {
     "hidden_sizes": [32, 16],
     "epochs": 100

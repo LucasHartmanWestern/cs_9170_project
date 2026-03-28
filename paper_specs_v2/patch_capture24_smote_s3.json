@@ -1,17 +1,23 @@
 {
   "baseline": "smote",
-  "dataset_name": "census_income",
+  "dataset_name": "capture24",
   "multiclass": false,
-  "bias_pct": 0.10,
-  "dp_protected_col": null,
-  "minority_id": 0,
-  "majority_id": 1,
+  "bias_pct": 0.02,
+  "minority_id": 1,
+  "majority_id": 0,
   "third_id": null,
   "real_data_size": 3000,
+  "win_seconds": 1.0,
+  "step_seconds": 0.5,
   "eo_guard_threshold": 0.0,
-  "seeds": [0, 2, 5, 6, 7],
+  "seeds": [
+    3
+  ],
   "ffnn": {
-    "hidden_sizes": [32, 16],
+    "hidden_sizes": [
+      32,
+      16
+    ],
     "lr": 0.001,
     "batch_size": 64,
     "epochs": 100
