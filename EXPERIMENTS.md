@@ -1058,3 +1058,148 @@ Goal: identify best episode budget across datasets; ablate phase 2 contribution.
 3. Submit ablation RL jobs to DRAC in parallel with paper writing
 4. Use best episode config per dataset as the main RL result in the final table
 
+
+---
+
+## Episode Ablation Results + SMOTE Validity Challenge (2026-03-28)
+
+### Episode Ablation — Full Results (5 seeds, all 3 datasets)
+
+RL ablation jobs completed on DRAC and downloaded to `paper_results_v2/`. All 12 configs
+(3 datasets × 4 episode budgets) have exactly 5 seeds each, with EO guard applied. Seeds
+differ per dataset based on which passed the alpha-EO ≥ 0.10 threshold:
+
+| Dataset | Seeds used |
+|---------|-----------|
+| census_income | 0, 2, 3, 5, 42 |
+| compas | 1, 3, 6, 7, 42 |
+| capture24 | 0, 3, 4, 5, 42 |
+
+#### Results by dataset
+
+**Census Income** (alpha-EO = 0.196 ± 0.066)
+
+| Config | EO ↓ | F1w ↑ | AUC ↑ |
+|--------|------|-------|-------|
+| ep800/ph0 | 0.188 ± 0.047 | 0.786 ± 0.016 | 0.876 ± 0.009 |
+| ep800/ph200 | 0.076 ± 0.048 | 0.729 ± 0.036 | 0.852 ± 0.012 |
+| ep1500/ph400 | **0.070 ± 0.078** | 0.719 ± 0.042 | 0.852 ± 0.013 |
+| ep2000/ph600 | 0.082 ± 0.073 | 0.729 ± 0.039 | 0.845 ± 0.011 |
+
+**COMPAS** (alpha-EO = 0.052 ± 0.017)
+
+| Config | EO ↓ | F1w ↑ | AUC ↑ |
+|--------|------|-------|-------|
+| ep800/ph0 | 0.047 ± 0.017 | **0.457 ± 0.024** | **0.703 ± 0.019** |
+| ep800/ph200 | 0.038 ± 0.034 | 0.436 ± 0.038 | 0.672 ± 0.020 |
+| ep1500/ph400 | 0.039 ± 0.027 | 0.444 ± 0.030 | 0.668 ± 0.015 |
+| ep2000/ph600 | **0.016 ± 0.012** | 0.440 ± 0.035 | 0.659 ± 0.007 |
+
+**Capture-24** (alpha-EO = 0.231 ± 0.164)
+
+| Config | EO ↓ | F1w ↑ | AUC ↑ |
+|--------|------|-------|-------|
+| ep800/ph0 | 0.150 ± 0.109 | 0.939 ± 0.032 | 0.905 ± 0.031 |
+| ep800/ph200 | 0.082 ± 0.084 | **0.940 ± 0.027** | 0.868 ± 0.039 |
+| ep1500/ph400 | 0.195 ± 0.104 | 0.946 ± 0.021 | 0.893 ± 0.035 |
+| ep2000/ph600 | **0.069 ± 0.039** | 0.938 ± 0.023 | 0.862 ± 0.066 |
+
+#### Episode config recommendation
+
+ep2000/ph600 wins or ties on 2/3 datasets (compas, capture24) and is competitive on census.
+Using a single config across all datasets is cleaner for the paper. **Tentative main config:
+ep2000/ph600.** Census ep1500/ph400 has lowest mean EO (0.070) but highest std (0.078) —
+ep800/ph200 may be more reliable there.
+
+### Convergence Analysis — Phase Reset Bug Found
+
+Initial per-episode return plots were incorrect. Episode numbers reset to 1 at the start of
+phase 2 in `metrics.csv`, causing `pivot_table(index='episode')` to average phase-1 and
+phase-2 rows for episodes 1–200. Fixed by using row index (`global_ep = range(len(df))`)
+as the x-axis. Corrected plots saved to `paper_figures/fig_episode_return_fixed.png` and
+`paper_figures/fig_eo_convergence_fixed.png`.
+
+**Corrected convergence findings:**
+
+- **Census/COMPAS:** Episode return starts high (~0.9) at episode 1, drops dramatically
+  during phase 1 (reaching near 0 by episode 400–600), then jumps back to ~0.9 at the
+  phase 2 boundary. EO gap worsens during phase 1 then drops sharply in phase 2.
+- **Capture-24:** Return stable and high (~0.85–0.9) throughout both phases. EO declines
+  continuously.
+
+The per-episode EO plot shows *current-episode* beta's EO, not best_beta. Final test
+uses the combined beta trained on best_phase1_synthetic + best_phase2_synthetic (see
+`training.py` lines 1225–1251).
+
+### Critical Finding: High Early Returns Complicate the Learning Claim
+
+**Observation:** At episode 1 (before any RL gradient updates), episode returns are already
+~0.9 for census/COMPAS (e.g., census seed_0: return=0.953, alpha-EO=0.196, beta-EO=0.068).
+This means the near-zero-delta initial policy — which generates near-distribution minority
+positive examples — already substantially beats alpha's worst-group BCE loss.
+
+**Why this matters:** If random or near-random minority augmentation produces high reward from
+episode 1, it is unclear whether the RL policy gradient is learning anything beyond what a
+simple oversampling approach (SMOTE, random oversampling) would achieve. The agent's
+"learning" may reduce to: find which near-distribution perturbations are best, rather than
+learning a meaningful generative policy.
+
+**Complicating factors for the paper contribution claim:**
+
+1. The high early reward is genuine — near-distribution minority examples immediately help
+   beta beat alpha because the DA+≈43 regime means even a handful of extra minority positives
+   shifts the decision boundary. This is consistent with the DA+ scarcity framing, but also
+   suggests the problem may partially be solved by simple oversampling.
+
+2. Phase 1 alone (ep800/ph0) gives final EO=0.188 vs alpha=0.196 — barely any improvement
+   despite 800 episodes of "learning." The best_synthetic selected over 800 phase-1 episodes
+   is not notably better than random augmentation would be. The real EO gain (0.076) only
+   comes from the two-phase combination.
+
+3. The contribution is more defensible as a *two-phase structured augmentation framework*
+   than as "RL learns to generate fair synthetic data." The reward-guided search over PCA
+   space is the mechanism; whether it outperforms simpler search strategies is an open
+   empirical question.
+
+**Paper framing adjustment:** Do not claim the RL agent "learns" a meaningful generative
+policy. Frame as: "a reward-guided two-phase augmentation framework that jointly searches
+for minority-augmenting and majority-recovering synthetic examples under positive-class
+scarcity." The RL component is the search mechanism, not an end in itself.
+
+### SMOTE Baseline Added (2026-03-28)
+
+To directly test whether near-distribution augmentation is sufficient, a SMOTE baseline
+was implemented (`benchmarks/smote_baseline.py`) and queued.
+
+**Design:** Two-phase SMOTE in PCA-10 space (same feature space as RL), n_synthetic=2000
+per phase (matches RL traj_length), same FFNN architecture, same EO guard and seed selection.
+Phase 1: SMOTE on minority-group y=1. Phase 2: SMOTE on majority-group y=0.
+
+This is the cleanest possible comparison: same feature space, same data budget, same model,
+same seeds. If SMOTE ≈ RL → the RL policy gradient adds negligible value and the contribution
+is the two-phase structure alone. If SMOTE << RL → RL is finding better augmentation points
+than random interpolation, validating the learned policy.
+
+**Specs:** `paper_specs_v2/v2_{census,compas,capture24}_smote_5s.json`
+**Status:** Running locally on both GPUs, queued after existing baseline chains.
+**Results pending.** Will be added to this log when complete.
+
+### Current Status (2026-03-28)
+
+**Running locally:**
+- GPU0: census gdro → flb → otrep → ctgan → fairtabddpm → compas gdro → flb → otrep →
+  *smote census → smote compas*
+- GPU1: compas ctgan → fairtabddpm → capture24 gdro → flb → otrep → ctgan → fairtabddpm →
+  *smote capture24*
+
+**Complete:**
+- All 12 RL ablation configs (paper_results_v2/) — 5 seeds each, results analysed above.
+
+**Next steps:**
+1. Wait for SMOTE results — compare EO/F1w/AUC against RL ep2000/ph600.
+2. If SMOTE >> RL: reframe more aggressively toward two-phase structure; consider dropping
+   RL framing entirely in favour of a simpler search-based method.
+3. If SMOTE << RL: strong validation of the learned policy — use this comparison prominently.
+4. If SMOTE ≈ RL: honest reporting; contribution is the two-phase framework design, cite
+   RL as the search mechanism with the same practical outcome as SMOTE at this scale.
+5. Once all baselines complete: build final comparison table and begin paper draft.
