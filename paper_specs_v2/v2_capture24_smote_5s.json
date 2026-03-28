@@ -8,8 +8,8 @@
   "majority_id": 0,
   "third_id": null,
   "real_data_size": 3000,
-  "eo_guard_threshold": 0.10,
-  "seeds": [42, 0, 1, 2, 3],
+  "eo_guard_threshold": 0.0,
+  "seeds": [0, 3, 4, 5, 42],
   "win_seconds": 1.0,
   "step_seconds": 0.5,
   "ffnn": {

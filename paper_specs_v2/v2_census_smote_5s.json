@@ -8,8 +8,8 @@
   "majority_id": 1,
   "third_id": null,
   "real_data_size": 3000,
-  "eo_guard_threshold": 0.10,
-  "seeds": [42, 0, 1, 2, 3],
+  "eo_guard_threshold": 0.0,
+  "seeds": [0, 2, 3, 5, 42],
   "ffnn": {
     "hidden_sizes": [32, 16],
     "lr": 0.001,
