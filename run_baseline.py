@@ -49,6 +49,7 @@ def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
 
     ds = Dataset(
         spec["dataset_name"],
+        spec.get("multiclass", False),
         minority_id=spec.get("minority_id"),
         majority_id=spec.get("majority_id"),
         third_id=spec.get("third_id"),
@@ -77,10 +78,10 @@ def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
     batch_size = int(ffnn_cfg.get("batch_size", 64))
     epochs     = int(ffnn_cfg.get("epochs", 20))
 
-    alpha = FFNNAgent(x_tr.shape[1], hidden_sizes=hidden, output_size=1,
-                      learning_rate=lr, batch_size=batch_size, epochs=epochs,
-                      device=device, seed=seed)
-    loader = DataLoader(TensorDataset(x_tr, y_tr), batch_size=batch_size, shuffle=True)
+    alpha = FFNNAgent(x_tr.shape[1], hidden_sizes=hidden, output_size=2,
+                      classes=[0, 1], type="classification", learning_rate=lr,
+                      batch_size=batch_size, epochs=epochs, device=device, seed=seed)
+    loader = DataLoader(TensorDataset(x_tr, y_tr.float()), batch_size=batch_size, shuffle=True)
     alpha.train(loader)
 
     with torch.no_grad():
