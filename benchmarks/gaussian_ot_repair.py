@@ -359,7 +359,8 @@ class GaussianOTRepairTrainer:
 
             test_row = tests.log_final_test(
                 alpha_model       = alpha_agent,
-                x_test            = x_test_eval,
+                x_test            = x_test_eval,   # beta evaluated on repaired test features
+                x_test_alpha      = x_test,         # alpha evaluated on original test features
                 y_test            = y_test,
                 f1_thresh         = 0.5,
                 prefer_best_beta  = True,

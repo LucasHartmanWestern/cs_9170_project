@@ -187,10 +187,7 @@ class Training:
 
         # state_dim and agent configs are finalized in __call__ after data loading
         # (feature_dim may differ from pca_components when use_pca=False)
-        if self.curriculum_learning:
-            self.state_dim = 1 + 2 * self.pca_components
-        else:
-            self.state_dim = 2
+        self.state_dim = 1 + 2 * self.pca_components
 
         # ENV hyperparams
         self.use_delta_actions = use_delta_actions
@@ -754,10 +751,7 @@ class Training:
                 next_states[t] = next_state
                 dones[t] = done
 
-                if self.curriculum_learning:
-                    pca_sample = info.get("current_pca", action)
-                else:
-                    pca_sample = action
+                pca_sample = info["current_pca"]
 
                 x_syn_tensor[t] = pca_sample
                 y_syn_tensor[t] = info["sampled_target"]

@@ -125,9 +125,6 @@ class Environment:
         return stage_idx, max(1, min(int(active_dims), self.A))
 
     def _build_state(self, frac_done: float) -> torch.Tensor:
-        if not self.curriculum:
-            return torch.tensor([1.0, frac_done], dtype=torch.float32, device=self.device)
-
         frac_done_t = torch.tensor([frac_done], dtype=torch.float32, device=self.device)
         return torch.cat([frac_done_t, self.current_pca, self.editable_mask], dim=0)
 
@@ -183,41 +180,40 @@ class Environment:
     def step(self, action: torch.Tensor, curr_length: int):
         self.step_idx = int(curr_length)
 
-        if self.curriculum:
-            # Ensure float tensor on device
-            if not isinstance(action, torch.Tensor):
-                action = torch.tensor(action, dtype=torch.float32, device=self.device)
-            else:
-                action = action.to(self.device).float()
+        # Ensure float tensor on device
+        if not isinstance(action, torch.Tensor):
+            action = torch.tensor(action, dtype=torch.float32, device=self.device)
+        else:
+            action = action.to(self.device).float()
 
-            if action.shape[-1] != self.A:
-                raise ValueError(f"Expected action dim={self.A}, got {action.shape[-1]}.")
+        if action.shape[-1] != self.A:
+            raise ValueError(f"Expected action dim={self.A}, got {action.shape[-1]}.")
 
-            editable = self.editable_mask.bool()
+        editable = self.editable_mask.bool()
 
-            if self.use_delta_actions:
-                delta = action
+        if self.use_delta_actions:
+            delta = action
 
-                if self.delta_scale != 1.0:
-                    delta = delta * self.delta_scale
+            if self.delta_scale != 1.0:
+                delta = delta * self.delta_scale
 
-                if self.delta_clip is not None:
-                    delta = torch.clamp(delta, -self.delta_clip, +self.delta_clip)
+            if self.delta_clip is not None:
+                delta = torch.clamp(delta, -self.delta_clip, +self.delta_clip)
 
-                new_pca = self.current_pca.clone()
-                new_pca[editable] = new_pca[editable] + delta[editable]
+            new_pca = self.current_pca.clone()
+            new_pca[editable] = new_pca[editable] + delta[editable]
 
-            else:
-                new_pca = self.current_pca.clone()
-                new_pca[editable] = action[editable]
+        else:
+            new_pca = self.current_pca.clone()
+            new_pca[editable] = action[editable]
 
-            if self.pca_clip is not None:
-                new_pca = torch.clamp(new_pca, -self.pca_clip, +self.pca_clip)
+        if self.pca_clip is not None:
+            new_pca = torch.clamp(new_pca, -self.pca_clip, +self.pca_clip)
 
-            new_pca = self._apply_radius_clip(new_pca)
+        new_pca = self._apply_radius_clip(new_pca)
 
-            self.current_pca = new_pca
-            self.generated_buffer.append(self.current_pca.detach().cpu().numpy())
+        self.current_pca = new_pca
+        self.generated_buffer.append(self.current_pca.detach().cpu().numpy())
 
         frac_done = float(curr_length) / float(self.max_actions)
         frac_done = max(0.0, min(1.0, frac_done))
@@ -226,10 +222,9 @@ class Environment:
         done = curr_length >= self.max_actions
 
         info = {
-            "sampled_target": torch.tensor(self.target, device=self.device, dtype=torch.long)
+            "sampled_target": torch.tensor(self.target, device=self.device, dtype=torch.long),
+            "current_pca":    self.current_pca.detach().clone(),
         }
-        if self.curriculum:
-            info["current_pca"] = self.current_pca.detach().clone()
 
         return state_vec, done, info
 

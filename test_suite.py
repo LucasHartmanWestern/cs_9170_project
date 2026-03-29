@@ -976,6 +976,7 @@ class TestSuite:
         pca_components: int | None = None,
         seed: int | None = None,
         a_test: torch.Tensor | None = None,   # <--- NEW
+        x_test_alpha: torch.Tensor | None = None,  # if set, alpha is evaluated on this instead of x_test
     ):
         """
         End-of-run θ_test evaluation.
@@ -996,8 +997,9 @@ class TestSuite:
         else:
             print("[TestSuite] No β available for TEST evaluation (skipping β metrics).")
 
+        x_test_for_alpha = x_test_alpha if x_test_alpha is not None else x_test
         with torch.no_grad():
-            p1_alpha = self._p1_from_agent(alpha_model, x_test)
+            p1_alpha = self._p1_from_agent(alpha_model, x_test_for_alpha)
             a_f1_min, a_f1_maj, a_f1_w, a_f1_macro = self._all_f1_from_probs(y_test, p1_alpha, f1_thresh)
             a_brier = self._brier_mean(y_test, p1_alpha)
             a_acc   = self._acc_from_probs(y_test, p1_alpha, f1_thresh)
