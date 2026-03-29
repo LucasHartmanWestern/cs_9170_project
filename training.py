@@ -708,10 +708,7 @@ class Training:
 
         for episode in range(n_episodes):
             A = self.pca_components
-            if self.curriculum_learning:
-                D = 1 + A + A
-            else:
-                D = 2
+            D = 1 + 2 * A
 
             # Pre-allocate GPU tensors
             states = torch.zeros((self.traj_length, D), dtype=torch.float32, device=self.device)
@@ -971,10 +968,7 @@ class Training:
             feature_dim = x_theta_train.shape[1]
             self.pca_components = feature_dim
 
-            if self.curriculum_learning:
-                self.state_dim = 1 + 2 * feature_dim
-            else:
-                self.state_dim = 2
+            self.state_dim = 1 + 2 * feature_dim
 
             # Update configs and rebuild agents with correct dimensions
             self.ffnn_config["input_size"] = feature_dim
