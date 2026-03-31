@@ -978,7 +978,13 @@ class Dataset:
         # Feature columns (ProPublica canonical set)
         num_cols_all = ["age", "juv_fel_count", "juv_misd_count", "juv_other_count",
                         "priors_count", "days_b_screening_arrest", "c_days_from_compas"]
-        cat_cols_all = ["sex", "age_cat", "c_charge_degree"]
+        # Include the protected attribute as a feature (same convention as sex
+        # experiments where sex is both feature and protected attr).
+        # drop_protected=True will remove it later if needed.
+        if dp_protected_col == "race":
+            cat_cols_all = ["race", "sex", "age_cat", "c_charge_degree"]
+        else:
+            cat_cols_all = ["sex", "age_cat", "c_charge_degree"]
 
         feature_cols = num_cols_all + cat_cols_all
         X_df_raw = df[feature_cols].copy()
@@ -1024,16 +1030,39 @@ class Dataset:
             dfb["__y__"] = y_split
             dfb["__a__"] = a_split_df[dp_protected_col].to_numpy()
 
-            df_maj = dfb[dfb["__y__"] == 0]
-            df_min = dfb[dfb["__y__"] == 1]
-
-            if len(df_maj) == 0 or len(df_min) == 0:
-                out = dfb
+            if dp_protected_col == "race":
+                # Group-specific bias: reduce only Caucasian (a=0) positives.
+                # African-American records are kept at their natural rate so the
+                # classifier can learn the positive class from the advantaged group.
+                # target_minority_pct = target positive rate *within* Caucasian subgroup.
+                is_cauc     = dfb["__a__"] == "Caucasian"
+                df_cauc     = dfb[is_cauc]
+                df_aa       = dfb[~is_cauc]
+                df_cauc_neg = df_cauc[df_cauc["__y__"] == 0]
+                df_cauc_pos = df_cauc[df_cauc["__y__"] == 1]
+                if len(df_cauc_neg) == 0 or len(df_cauc_pos) == 0:
+                    out = dfb
+                else:
+                    keep_min = int(np.floor(
+                        (target_minority_pct * len(df_cauc_neg)) / (1 - target_minority_pct)
+                    ))
+                    keep_min = min(len(df_cauc_pos), max(1, keep_min))
+                    df_cauc_pos_b = df_cauc_pos.sample(
+                        n=keep_min, random_state=self.seed, replace=False
+                    )
+                    out = pd.concat(
+                        [df_aa, df_cauc_neg, df_cauc_pos_b], axis=0
+                    ).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
             else:
-                keep_min = int(np.floor((target_minority_pct * len(df_maj)) / (1 - target_minority_pct)))
-                keep_min = min(len(df_min), max(1, keep_min))
-                df_min_b = df_min.sample(n=keep_min, random_state=self.seed, replace=False)
-                out = pd.concat([df_maj, df_min_b], axis=0).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
+                df_maj = dfb[dfb["__y__"] == 0]
+                df_min = dfb[dfb["__y__"] == 1]
+                if len(df_maj) == 0 or len(df_min) == 0:
+                    out = dfb
+                else:
+                    keep_min = int(np.floor((target_minority_pct * len(df_maj)) / (1 - target_minority_pct)))
+                    keep_min = min(len(df_min), max(1, keep_min))
+                    df_min_b = df_min.sample(n=keep_min, random_state=self.seed, replace=False)
+                    out = pd.concat([df_maj, df_min_b], axis=0).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
 
             y_out = out["__y__"].to_numpy(dtype=int)
             a_out = _map_protected(out["__a__"])

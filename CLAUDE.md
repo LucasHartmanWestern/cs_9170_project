@@ -158,6 +158,12 @@ Secondary scarcity level (census only, for motivation curve):
 
 ## Paper-Writing Guidance
 
+**Style rules (apply to all paper text):**
+- Do not use emphasis dashes (em-dashes) in prose. Use commas, semicolons, or restructure the sentence instead.
+- Do not make model-agnostic claims unless directly supported by experiments (the current results use a fixed FFNN classifier; model-agnostic generality is not demonstrated).
+- Do not introduce specific numeric thresholds (e.g., "fewer than 15%") without a citation. Use qualitative language instead.
+- Frame scarcity in terms of positive-class rate percentages (e.g., "~11% for the disadvantaged group") rather than raw DA+ counts in paper text. DA+ is for internal tracking only.
+
 When making decisions about experiments, code changes, or analysis, prioritise in this order:
 1. **Does this strengthen or weaken a specific paper claim?** If a result is ambiguous, flag it explicitly rather than presenting it optimistically.
 2. **Is it reproducible?** Always report seed count, mean ± std, and range. 3 seeds is provisional; 5+ seeds is required for the final results table.
