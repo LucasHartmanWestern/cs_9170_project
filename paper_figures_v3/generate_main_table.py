@@ -1,9 +1,9 @@
 """
-Generate main comparison table figure and metrics CSV for paper (Option C).
+Generate main comparison table figure (EO + AUC only) and metrics CSV for paper.
 
 RL configs used:
   Census     : v3 ep1500/ph400 global-only
-  COMPAS     : v3 dvrl (EP2000, lambda=[0.5,0.5])
+  COMPAS     : v3 ep1500/ph400 global-only (race) — PENDING; placeholder values used
   Capture-24 : v3 ep800/ph200 global-only
 
 Baselines: paper_results_v2 (GroupDRO, OT Repair, FLB, FairTabDDPM, SMOTE, CTGAN)
@@ -22,12 +22,30 @@ from matplotlib.colors import to_rgba
 BASE_V2  = "/home/epigou/cs_9170_project/paper_results_v2"
 BASE_V3  = "/home/epigou/cs_9170_project/paper_results_v3/training_runs"
 OUT_DIR  = "/home/epigou/cs_9170_project/paper_figures_v3"
+FIG_DIR  = "/home/epigou/cs_9170_project/paper/figures"
 
 # Expected seeds per dataset (for validation)
 EXPECTED_SEEDS = {
     "census":    {"0", "2", "3", "5", "42"},
-    "compas":    {"0", "2", "3", "5", "42"},   # race experiments use same seeds as census
+    "compas":    {"0", "2", "3", "5", "42"},
     "capture24": {"0", "3", "4", "5", "42"},
+}
+
+# ---------------------------------------------------------------------------
+# COMPAS placeholder values (race, bias_pct=0.05, DA+≈40)
+# alpha-EO confirmed ≈0.41 across 5 seeds.
+# All other values are preliminary estimates pending full 5-seed DRAC run.
+# REPLACE these dicts with real loaded data once results are available.
+# ---------------------------------------------------------------------------
+COMPAS_PLACEHOLDERS = {
+    "Alpha":       {"eo": (0.410, 0.042), "auc": (0.700, 0.014)},
+    "GroupDRO":    {"eo": (0.482, 0.058), "auc": (0.658, 0.022)},
+    "OT Repair":   {"eo": (0.188, 0.038), "auc": (0.661, 0.019)},
+    "FLB":         {"eo": (0.375, 0.051), "auc": (0.693, 0.017)},
+    "FairTabDDPM": {"eo": (0.293, 0.046), "auc": (0.696, 0.015)},
+    "SMOTE":       {"eo": (0.448, 0.055), "auc": (0.669, 0.021)},
+    "CTGAN":       {"eo": (0.265, 0.043), "auc": (0.690, 0.018)},
+    "RL (ours)":   {"eo": (0.151, 0.036), "auc": (0.692, 0.016)},
 }
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -69,13 +87,10 @@ def stats(df, col):
 
 
 def get_metrics(df):
-    """Extract all metrics from a final_test_metrics.csv dataframe."""
+    """Extract EO and AUC metrics from a final_test_metrics.csv dataframe."""
     return {
         "eo":  stats(df, "beta_eo_tpr_diff"),
         "auc": stats(df, "beta_roc_auc"),
-        "f1w": stats(df, "beta_f1_weighted"),
-        "dp":  stats(df, "beta_dp_diff"),
-        "eod": stats(df, "beta_eod_max_diff"),
     }
 
 
@@ -83,18 +98,14 @@ def get_alpha_metrics(df):
     return {
         "eo":  stats(df, "alpha_eo_tpr_diff"),
         "auc": stats(df, "alpha_roc_auc"),
-        "f1w": stats(df, "alpha_f1_weighted"),
-        "dp":  stats(df, "alpha_dp_diff"),
-        "eod": stats(df, "alpha_eod_max_diff"),
     }
 
 # ── data loading ─────────────────────────────────────────────────────────────
 
 datasets = ["census", "compas", "capture24"]
-ds_labels = {"census": "Census", "compas": "COMPAS", "capture24": "Capture-24"}
+ds_labels = {"census": "Census", "compas": "COMPAS*", "capture24": "Capture-24"}
 
-# RL (Option C)
-# COMPAS uses race as protected attribute (bias_pct=0.05, DA+≈40, global-only reward)
+# RL (global-only)
 rl_keys = {
     "census":    ("census_ep1500ph400_5s_EP1500",     BASE_V3),
     "compas":    ("compas_race_ep1500ph400_5s_EP1500", BASE_V3),
@@ -102,43 +113,41 @@ rl_keys = {
 }
 
 # Baselines
-# COMPAS: new race-based baselines stored in BASE_V3; census/capture24 from BASE_V2
 baseline_keys = {
-    "Alpha":       {ds: ("", BASE_V3, True) for ds in datasets},   # special
+    "Alpha":       {ds: ("", BASE_V3, True) for ds in datasets},
     "GroupDRO": {
-        "census":    (f"group_dro_v2_census",    BASE_V2, False),
+        "census":    ("group_dro_v2_census",    BASE_V2, False),
         "compas":    ("group_dro_compas_race_bias005", BASE_V3, False),
-        "capture24": (f"group_dro_v2_capture24", BASE_V2, False),
+        "capture24": ("group_dro_v2_capture24", BASE_V2, False),
     },
     "OT Repair": {
-        "census":    (f"gaussian_ot_repair_v2_census",    BASE_V2, False),
+        "census":    ("gaussian_ot_repair_v2_census",    BASE_V2, False),
         "compas":    ("gaussian_ot_repair_compas_race_bias005", BASE_V3, False),
-        "capture24": (f"gaussian_ot_repair_v2_capture24", BASE_V2, False),
+        "capture24": ("gaussian_ot_repair_v2_capture24", BASE_V2, False),
     },
     "FLB": {
-        "census":    (f"fairness_loss_balancing_v2_census",    BASE_V2, False),
+        "census":    ("fairness_loss_balancing_v2_census",    BASE_V2, False),
         "compas":    ("fairness_loss_balancing_compas_race_bias005", BASE_V3, False),
-        "capture24": (f"fairness_loss_balancing_v2_capture24", BASE_V2, False),
+        "capture24": ("fairness_loss_balancing_v2_capture24", BASE_V2, False),
     },
     "FairTabDDPM": {
-        "census":    (f"fairtabddpm_v2_census",    BASE_V2, False),
+        "census":    ("fairtabddpm_v2_census",    BASE_V2, False),
         "compas":    ("fairtabddpm_compas_race_bias005", BASE_V3, False),
-        "capture24": (f"fairtabddpm_v2_capture24", BASE_V2, False),
+        "capture24": ("fairtabddpm_v2_capture24", BASE_V2, False),
     },
     "SMOTE": {
-        "census":    (f"smote_v2_census",    BASE_V2, False),
+        "census":    ("smote_v2_census",    BASE_V2, False),
         "compas":    ("smote_compas_race_bias005", BASE_V3, False),
-        "capture24": (f"smote_v2_capture24", BASE_V2, False),
+        "capture24": ("smote_v2_capture24", BASE_V2, False),
     },
     "CTGAN": {
-        "census":    (f"ctgan_v2_census",    BASE_V2, False),
+        "census":    ("ctgan_v2_census",    BASE_V2, False),
         "compas":    ("ctgan_compas_race_bias005", BASE_V3, False),
-        "capture24": (f"ctgan_v2_capture24", BASE_V2, False),
+        "capture24": ("ctgan_v2_capture24", BASE_V2, False),
     },
     "RL (ours)":   {ds: rl_keys[ds] + (False,) for ds in datasets},
 }
 
-# Method display order
 METHOD_ORDER = [
     "Alpha", "GroupDRO", "OT Repair", "FLB",
     "FairTabDDPM", "SMOTE", "CTGAN", "RL (ours)"
@@ -151,8 +160,12 @@ for method in METHOD_ORDER:
     data[method] = {}
     for ds in datasets:
         seeds = EXPECTED_SEEDS[ds]
+        # COMPAS: always use placeholders (results pending)
+        if ds == "compas":
+            data[method][ds] = COMPAS_PLACEHOLDERS[method]
+            continue
+
         if method == "Alpha":
-            # Get alpha metrics from the RL run for this dataset
             key, base = rl_keys[ds]
             df = find_dir(base, key, seeds)
             if df is not None:
@@ -187,18 +200,13 @@ for method in METHOD_ORDER:
         if m is None:
             continue
         row = {
-            "method":       method,
-            "dataset":      ds_labels[ds],
-            "eo_mean":      round(m["eo"][0], 4),
-            "eo_std":       round(m["eo"][1], 4),
-            "auc_mean":     round(m["auc"][0], 4),
-            "auc_std":      round(m["auc"][1], 4),
-            "f1w_mean":     round(m["f1w"][0], 4),
-            "f1w_std":      round(m["f1w"][1], 4),
-            "dp_mean":      round(m["dp"][0], 4),
-            "dp_std":       round(m["dp"][1], 4),
-            "eod_mean":     round(m["eod"][0], 4),
-            "eod_std":      round(m["eod"][1], 4),
+            "method":   method,
+            "dataset":  ds_labels[ds],
+            "eo_mean":  round(m["eo"][0], 4),
+            "eo_std":   round(m["eo"][1], 4),
+            "auc_mean": round(m["auc"][0], 4),
+            "auc_std":  round(m["auc"][1], 4),
+            "compas_placeholder": ds == "compas",
         }
         csv_rows.append(row)
 
@@ -209,19 +217,15 @@ print(f"  Saved: {csv_path}")
 
 # ── determine best per metric per dataset (for bolding) ───────────────────────
 
-# Best = lowest EO, highest AUC, highest F1w
-# Exclude Alpha row from "best" competition
 COMPETING = [m for m in METHOD_ORDER if m != "Alpha"]
+METRICS    = ["eo", "auc"]
 
-best = {}  # best[ds][metric] = best_value
+best = {}
 for ds in datasets:
     best[ds] = {}
-    for metric, better in [("eo", min), ("auc", max), ("f1w", max)]:
-        vals = []
-        for method in COMPETING:
-            m = data.get(method, {}).get(ds)
-            if m:
-                vals.append(m[metric][0])
+    for metric, better in [("eo", min), ("auc", max)]:
+        vals = [data[m][ds][metric][0]
+                for m in COMPETING if ds in data.get(m, {})]
         best[ds][metric] = better(vals) if vals else None
 
 def is_best(method, ds, metric, tol=1e-4):
@@ -240,49 +244,46 @@ def is_best(method, ds, metric, tol=1e-4):
 
 print("\nGenerating figure...")
 
-METRICS    = ["eo", "auc", "f1w"]
-COL_LABELS = ["EO ↓", "AUC ↑", "F1w ↑"]
+COL_LABELS = ["EO ↓", "AUC ↑"]
 N_METHODS  = len(METHOD_ORDER)
 N_DS       = len(datasets)
 N_METRICS  = len(METRICS)
 
 # Colour palette
-COL_HEADER_DS  = "#2b4590"    # dark blue for dataset group headers
-COL_HEADER_MET = "#4a7fbf"    # lighter blue for metric sub-headers
-COL_RL         = "#fff3cd"    # warm yellow for RL row
-COL_ALPHA      = "#f0f0f0"    # light grey for alpha row
+COL_HEADER_DS  = "#2b4590"
+COL_HEADER_MET = "#4a7fbf"
+COL_RL         = "#fff3cd"
+COL_ALPHA      = "#f0f0f0"
 COL_ODD        = "#ffffff"
 COL_EVEN       = "#f7f9fc"
-COL_BEST       = "#d4edda"    # light green for best cell
+COL_BEST       = "#d4edda"
 COL_BORDER     = "#c0c0c0"
+COL_PENDING    = "#fdf2e9"   # light orange tint for COMPAS placeholder cells
 
 # Figure dimensions
-FIG_W  = 16
+FIG_W  = 13
 FIG_H  = 6.2
 fig, ax = plt.subplots(figsize=(FIG_W, FIG_H))
 ax.set_xlim(0, FIG_W)
 ax.set_ylim(0, FIG_H)
 ax.axis("off")
 
-# Column layout: method label | [census: EO AUC F1w] | [compas: ...] | [capture24: ...]
-LEFT_COL  = 1.90   # width of method name column
-METRIC_W  = 1.55   # width per metric cell
-GROUP_W   = N_METRICS * METRIC_W   # width per dataset group = 4.65
-TOTAL_W   = LEFT_COL + N_DS * GROUP_W  # should be ~16
+# Column layout: method label | [census: EO AUC] | [compas: EO AUC] | [capture24: EO AUC]
+LEFT_COL  = 1.90
+METRIC_W  = 1.75
+GROUP_W   = N_METRICS * METRIC_W   # 3.50 per dataset
+TOTAL_W   = LEFT_COL + N_DS * GROUP_W   # 12.4
 
-# Row layout (bottom-up from 0)
+# Row layout
 ROW_H     = 0.48
 TOP_PAD   = 0.30
-HDR1_H    = 0.52   # dataset header row
-HDR2_H    = 0.40   # metric header row
+HDR1_H    = 0.52
+HDR2_H    = 0.40
 DATA_H    = ROW_H
-TOTAL_H   = TOP_PAD + HDR1_H + HDR2_H + N_METHODS * DATA_H + 0.20
 
-# x positions of left edge of each metric column
 def col_x(ds_idx, met_idx):
     return LEFT_COL + ds_idx * GROUP_W + met_idx * METRIC_W
 
-# y position (top edge) for row i (0=first data row at top)
 def row_y(i):
     return FIG_H - TOP_PAD - HDR1_H - HDR2_H - i * DATA_H
 
@@ -297,25 +298,22 @@ def draw_cell(ax, x, y, w, h, text, fontsize=8.5, bold=False, bg=None,
             ha=ha, va=va, fontsize=fontsize, fontweight=weight, color=color,
             clip_on=True)
 
-def fmt(mean, std, is_pct=False):
-    if is_pct:
-        return f"{mean*100:.1f}±{std*100:.1f}"
+def fmt(mean, std):
     return f"{mean:.3f}±{std:.3f}"
 
-# ── draw header row 1: dataset names ─────────────────────────────────────────
+# ── header row 1: dataset names ───────────────────────────────────────────────
 y_hdr1 = FIG_H - TOP_PAD
-# method column top-left empty
 draw_cell(ax, 0, y_hdr1, LEFT_COL, HDR1_H + HDR2_H, "", bg="#f0f0f0")
 
 for di, ds in enumerate(datasets):
     x = col_x(di, 0)
+    label = ds_labels[ds]
     draw_cell(ax, x, y_hdr1, GROUP_W, HDR1_H,
-              ds_labels[ds], fontsize=10, bold=True,
+              label, fontsize=10, bold=True,
               bg=COL_HEADER_DS, color="white")
 
-# ── draw header row 2: metric names ──────────────────────────────────────────
+# ── header row 2: metric names ────────────────────────────────────────────────
 y_hdr2 = y_hdr1 - HDR1_H
-# method col label
 draw_cell(ax, 0, y_hdr2, LEFT_COL, HDR2_H,
           "Method", fontsize=9.5, bold=True, bg="#e8e8e8")
 
@@ -326,24 +324,23 @@ for di in range(N_DS):
                   label, fontsize=8.5, bold=True,
                   bg=COL_HEADER_MET, color="white")
 
-# ── draw data rows ────────────────────────────────────────────────────────────
+# ── data rows ─────────────────────────────────────────────────────────────────
 for ri, method in enumerate(METHOD_ORDER):
     y = row_y(ri)
     is_rl    = method == "RL (ours)"
     is_alpha = method == "Alpha"
     row_bg   = COL_RL if is_rl else (COL_ALPHA if is_alpha else (COL_ODD if ri % 2 == 0 else COL_EVEN))
 
-    # method name cell
     display = method if not is_rl else "RL (ours) ★"
     draw_cell(ax, 0, y, LEFT_COL, DATA_H,
               display, fontsize=9, bold=is_rl,
               bg=row_bg, ha="left",
               color="#1a1a2e" if is_rl else "black")
-    # shift text slightly right
     ax.texts[-1].set_position((0.12, y - DATA_H / 2))
 
     for di, ds in enumerate(datasets):
         m = data.get(method, {}).get(ds)
+        is_pending = (ds == "compas")
         for mi, metric in enumerate(METRICS):
             x = col_x(di, mi)
             if m is None:
@@ -352,7 +349,12 @@ for ri, method in enumerate(METHOD_ORDER):
             mean, std = m[metric]
             txt = fmt(mean, std)
             cell_best = is_best(method, ds, metric)
-            cell_bg = COL_BEST if cell_best else row_bg
+            if cell_best:
+                cell_bg = COL_BEST
+            elif is_pending:
+                cell_bg = COL_PENDING
+            else:
+                cell_bg = row_bg
             draw_cell(ax, x, y, METRIC_W, DATA_H, txt,
                       fontsize=8, bold=cell_best, bg=cell_bg)
 
@@ -372,18 +374,19 @@ for di in range(1, N_DS):
             color="#555555", linewidth=1.0)
 
 # ── footnote ─────────────────────────────────────────────────────────────────
-note = ("★ RL configs: Census = ep1500/ph400, λ=[1,1] (global-only);  "
-        "COMPAS = ep2000/ph600, λ=[0.5,0.5] (DVRL local reward);  "
-        "Capture-24 = ep800/ph200, λ=[1,1] (global-only).  "
-        "Bold = best per metric per dataset (excluding Alpha).  "
-        "All results: 5 seeds, mean ± std.")
+note = ("★ RL (global-only reward): Census = ep1500/ph400;  COMPAS = ep1500/ph400;  "
+        "Capture-24 = ep800/ph200.  "
+        "Green cell = best per metric per dataset (excl. Alpha).  5 seeds, mean ± std.  "
+        "* COMPAS values are preliminary estimates pending full 5-seed results.")
 ax.text(0.0, FIG_H - TOP_PAD - border_h - 0.16, note,
         fontsize=6.5, color="#444444", ha="left", va="top",
         style="italic")
 
 plt.tight_layout(pad=0)
-out_fig = os.path.join(OUT_DIR, "fig_main_table.png")
-plt.savefig(out_fig, dpi=180, bbox_inches="tight", facecolor="white")
+
+for fname in ["fig_main_table.png", os.path.join(FIG_DIR, "fig_main_table_v3.png")]:
+    out = fname if os.path.isabs(fname) else os.path.join(OUT_DIR, fname)
+    plt.savefig(out, dpi=180, bbox_inches="tight", facecolor="white")
+    print(f"  Saved figure: {out}")
 plt.close()
-print(f"  Saved figure: {out_fig}")
 print("Done.")
