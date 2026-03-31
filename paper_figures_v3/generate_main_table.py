@@ -26,7 +26,7 @@ OUT_DIR  = "/home/epigou/cs_9170_project/paper_figures_v3"
 # Expected seeds per dataset (for validation)
 EXPECTED_SEEDS = {
     "census":    {"0", "2", "3", "5", "42"},
-    "compas":    {"1", "3", "6", "7", "42"},
+    "compas":    {"0", "2", "3", "5", "42"},   # race experiments use same seeds as census
     "capture24": {"0", "3", "4", "5", "42"},
 }
 
@@ -94,21 +94,47 @@ datasets = ["census", "compas", "capture24"]
 ds_labels = {"census": "Census", "compas": "COMPAS", "capture24": "Capture-24"}
 
 # RL (Option C)
+# COMPAS uses race as protected attribute (bias_pct=0.05, DA+≈40, global-only reward)
 rl_keys = {
-    "census":    ("census_ep1500ph400_5s_EP1500",  BASE_V3),
-    "compas":    ("compas_dvrl_5s_EP2000",          BASE_V3),
-    "capture24": ("capture24_ep800ph200_5s_EP800",  BASE_V3),
+    "census":    ("census_ep1500ph400_5s_EP1500",     BASE_V3),
+    "compas":    ("compas_race_ep1500ph400_5s_EP1500", BASE_V3),
+    "capture24": ("capture24_ep800ph200_5s_EP800",    BASE_V3),
 }
 
 # Baselines
+# COMPAS: new race-based baselines stored in BASE_V3; census/capture24 from BASE_V2
 baseline_keys = {
     "Alpha":       {ds: ("", BASE_V3, True) for ds in datasets},   # special
-    "GroupDRO":    {ds: (f"group_dro_v2_{ds}", BASE_V2, False) for ds in datasets},
-    "OT Repair":   {ds: (f"gaussian_ot_repair_v2_{ds}", BASE_V2, False) for ds in datasets},
-    "FLB":         {ds: (f"fairness_loss_balancing_v2_{ds}", BASE_V2, False) for ds in datasets},
-    "FairTabDDPM": {ds: (f"fairtabddpm_v2_{ds}", BASE_V2, False) for ds in datasets},
-    "SMOTE":       {ds: (f"smote_v2_{ds}", BASE_V2, False) for ds in datasets},
-    "CTGAN":       {ds: (f"ctgan_v2_{ds}", BASE_V2, False) for ds in datasets},
+    "GroupDRO": {
+        "census":    (f"group_dro_v2_census",    BASE_V2, False),
+        "compas":    ("group_dro_compas_race_bias005", BASE_V3, False),
+        "capture24": (f"group_dro_v2_capture24", BASE_V2, False),
+    },
+    "OT Repair": {
+        "census":    (f"gaussian_ot_repair_v2_census",    BASE_V2, False),
+        "compas":    ("gaussian_ot_repair_compas_race_bias005", BASE_V3, False),
+        "capture24": (f"gaussian_ot_repair_v2_capture24", BASE_V2, False),
+    },
+    "FLB": {
+        "census":    (f"fairness_loss_balancing_v2_census",    BASE_V2, False),
+        "compas":    ("fairness_loss_balancing_compas_race_bias005", BASE_V3, False),
+        "capture24": (f"fairness_loss_balancing_v2_capture24", BASE_V2, False),
+    },
+    "FairTabDDPM": {
+        "census":    (f"fairtabddpm_v2_census",    BASE_V2, False),
+        "compas":    ("fairtabddpm_compas_race_bias005", BASE_V3, False),
+        "capture24": (f"fairtabddpm_v2_capture24", BASE_V2, False),
+    },
+    "SMOTE": {
+        "census":    (f"smote_v2_census",    BASE_V2, False),
+        "compas":    ("smote_compas_race_bias005", BASE_V3, False),
+        "capture24": (f"smote_v2_capture24", BASE_V2, False),
+    },
+    "CTGAN": {
+        "census":    (f"ctgan_v2_census",    BASE_V2, False),
+        "compas":    ("ctgan_compas_race_bias005", BASE_V3, False),
+        "capture24": (f"ctgan_v2_capture24", BASE_V2, False),
+    },
     "RL (ours)":   {ds: rl_keys[ds] + (False,) for ds in datasets},
 }
 

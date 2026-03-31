@@ -38,10 +38,10 @@ pca_components: 10
 ```
 **Do NOT change these unless a new experiment explicitly beats v18.** Apply this config to all new datasets — only change dataset-specific fields (dataset_name, bias_pct, dp_protected_col, minority_id, win_seconds, step_seconds).
 
-**Current paper status:** v18 is the confirmed primary method. Main results (census, CAPTURE-24) done. COMPAS experiments being set up (2026-03-27). Credit dataset DROPPED.
+**Current paper status:** v18 is the confirmed primary method. Main results (census, CAPTURE-24) done. COMPAS race experiments validated (2026-03-30) — alpha-EO≈0.41 confirmed across 5 seeds, all 7 job specs ready. Credit dataset DROPPED.
 
 **Results still needed before submission:**
-- COMPAS 5-seed full run — all methods (queue for DRAC, specs ready)
+- COMPAS race 5-seed full run — all methods (queue for DRAC, specs ready as of 2026-03-30)
 - v18 census bias=0.05 — 5 seeds (queue for DRAC)
 
 ## Experiment Log
@@ -136,7 +136,7 @@ Results go to `training_runs/SPEC_{name}_{hash}__G{timestamp}/seed_{N}/` contain
 |---------|----------|----------------|-----|----------------|---------------|
 | census_income | 0.10 | 3000 | **43** | sex | female (a=0) |
 | capture24 | 0.02 | 3000 | **45** | sex | female (a=1) |
-| compas | 0.14 | — (no cap, ~2346 train) | **43** | sex | female (a=0) |
+| compas | 0.05 | — (no cap) | **~40** | race | Caucasian (a=0) |
 
 Secondary scarcity level (census only, for motivation curve):
 
@@ -150,7 +150,7 @@ Secondary scarcity level (census only, for motivation curve):
 
 - **capture24**: Wearable accelerometer sleep/activity (Oxford). Protected attr: sex. Female (a=1) is disadvantaged. Requires windowing (win_seconds=1.0, step_seconds=0.5). Path: `datasets/capture24/`. bias_pct=0.02 (real_data_size=3000 cap drives DA+≈45).
 
-- **compas**: COMPAS recidivism (ProPublica). Protected attr: sex (dp_protected_col="sex"). Female (a=0) is disadvantaged — lower recidivism positive rate (35% vs 48% male). ProPublica standard filters applied; all races included (not filtered). bias_pct=0.14 → DA+=43. EO gap at alpha: ~0.10–0.15. Path: `datasets/compas/compas-scores-two-years.csv`. Specs: `p1_compas_bias014_*.json`.
+- **compas**: COMPAS recidivism (ProPublica). Protected attr: **race** (dp_protected_col="race"). Caucasian (a=0) is disadvantaged — lower recidivism positive rate vs African-American (~47%). Bias injection is group-specific: only Caucasian positives are reduced (AA positives kept at natural rate). bias_pct=0.05 → DA+≈40 (Caucasian positives). Alpha-EO gap ≈ 0.41 (strong racial disparity). Race is included as a feature in cat_cols_all. Path: `datasets/compas/compas-scores-two-years.csv`. Specs: `compas_race_ep1500ph400_5s.json` (RL), `compas_race_bias005_*_5s.json` (baselines).
 
 - **PAMAP2**: DROPPED — disadvantaged group identification unstable across seeds (only 1 female subject).
 - **credit_card**: DROPPED — DA+ too high (~136 at bias=0.10), alpha-EO near-zero, not in the scarcity regime.
