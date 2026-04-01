@@ -3,16 +3,16 @@
 #SBATCH --account=def-mcapretz
 #SBATCH --time=01:00:00
 #SBATCH --mem=8G
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=1
 #SBATCH --output=experiment_specs/logs/meps_opv_otr_5s.out
 #SBATCH --error=experiment_specs/logs/meps_opv_otr_5s.err
 
 set -euo pipefail
 
-export OMP_NUM_THREADS=2
-export MKL_NUM_THREADS=2
-export OPENBLAS_NUM_THREADS=2
-export NUMEXPR_NUM_THREADS=2
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
 
 module purge
 module load python/3.12.4
