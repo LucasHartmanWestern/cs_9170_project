@@ -1,0 +1,14 @@
+{
+  "exp_group": "BASELINE_gaussian_ot_repair_compas_race_bias005_otrep_5s_fa60f12e__G202603302034",
+  "spec_name": "compas_race_bias005_otrep_5s",
+  "baseline": "gaussian_ot_repair",
+  "dataset_name": "compas",
+  "seed": 0,
+  "ot_config": {
+    "lam": 1.0,
+    "n_groups": 2,
+    "cov_reg": 1e-05,
+    "barycenter_iters": 100,
+    "repair_test": true
+  }
+}

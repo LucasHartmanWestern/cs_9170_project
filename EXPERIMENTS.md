@@ -1371,3 +1371,99 @@ Running locally (background):
 - CTGAN capture24: running (~90815)
 
 When complete: copy final_test_metrics.csv to paper_results_v2/ and regenerate figures.
+
+---
+
+## COMPAS Race Investigation (2026-03-31)
+
+**Spec:** `compas_race_ep1500ph400_5s` — bias_pct=0.05, dp_protected_col=race, minority_id=0 (Caucasian), 5 seeds [0,2,3,5,42].
+
+### Alpha-EO Discrepancy
+
+The COMPAS_PLACEHOLDERS in the generate scripts assumed alpha-EO ≈ 0.41. The actual 5-seed run produced **alpha-EO = 0.677 ± 0.024**. The 0.41 figure was a manual estimate written into the placeholder dicts before results arrived — it was never from a real run. With bias_pct=0.05, Caucasian TPR under alpha collapses to near-zero (~0.024), producing a much larger gap than anticipated.
+
+### Full 5-Seed Results (paper_results_v3/)
+
+**RL run:** `SPECcompas_race_ep1500ph400_5s_...BIAS0.05_GG202603310150_87dcb72a`
+
+| Metric | Alpha | RL (beta) |
+|--------|-------|-----------|
+| EO gap | 0.677 ± 0.024 | 0.600 ± 0.055 |
+| Caucasian TPR | 0.024 ± 0.008 | 0.081 ± 0.041 |
+| AA TPR | 0.701 ± 0.018 | 0.681 ± 0.058 |
+| F1-weighted | 0.641 ± 0.008 | 0.641 ± 0.013 |
+| AUC | 0.681 ± 0.006 | 0.682 ± 0.014 |
+
+Mean EO improvement: 0.077 ± 0.037. Utility preserved.
+
+### Baseline Comparison (5 seeds each, paper_results_v3/)
+
+| Method | EO ↓ | F1w | AUC |
+|--------|-------|-----|-----|
+| Alpha (ERM) | 0.677 ± 0.024 | 0.641 | 0.681 |
+| **RL (v18)** | 0.600 ± 0.055 | 0.641 | 0.682 |
+| GroupDRO | **0.197 ± 0.105** | 0.650 | 0.692 |
+| OT Repair | 0.556 ± 0.041 | 0.637 | 0.675 |
+| FLB | **0.075 ± 0.054** | 0.628 | 0.671 |
+| FairTabDDPM | 0.541 ± 0.043 | 0.647 | 0.686 |
+| CTGAN | — (timed out on DRAC) | | |
+| SMOTE | — (timed out on DRAC) | | |
+
+### Key Finding: Paper Narrative Does Not Hold for COMPAS Race
+
+GroupDRO (EO=0.197) and FLB (EO=0.075) substantially outperform RL (EO=0.600) on this dataset. The motivation claim — reweighting methods fail under severe scarcity — is not supported here, even though DA+≈40, the same scarcity level as census and capture24. RL is the weakest method for fairness on this configuration.
+
+**Possible explanations to investigate:**
+1. The race signal in COMPAS may be easy to reweight from even at low count — the protected attribute is a strong predictor and reweighting on it is sufficient.
+2. Caucasian TPR collapsing to ~0.024 under alpha suggests the PCA space may not place Caucasian positives in a recoverable region for delta-based synthesis.
+3. The global reward (`sigmoid(10 × (wgl_alpha − wgl_beta))`) may saturate too quickly given the extreme alpha-EO, providing poor gradient signal.
+
+### Incomplete Baselines
+
+CTGAN and SMOTE both started but only completed seed_0 setup before hitting the DRAC wall time. Need to resubmit with longer time limit or fewer epochs.
+
+### Suggested Next Steps
+
+1. **Before including COMPAS race in paper:** Run a diagnostic — check whether RL is actually learning (reward curve increasing) across seeds. If reward is flat, the agent is not learning at all on this dataset.
+2. **Investigate FLB success:** FLB achieves EO=0.075 with utility cost (F1w 0.628 vs alpha 0.641). If this holds, COMPAS race strengthens baselines, not RL.
+3. **Options for paper:** (a) Drop COMPAS race and explain that the race-based scarcity in COMPAS creates a different structure than sex-based scarcity; (b) Keep as a limitation/discussion point; (c) Reframe: show RL achieves best utility-fairness tradeoff (RL has highest AUC at 0.682 with EO=0.600, vs FLB which gets lower EO but worse utility).
+4. **Resubmit CTGAN/SMOTE** with longer walltime to complete the baseline picture.
+5. **Update COMPAS placeholder values** in generate_ablation_figures.py and generate_main_table.py once a final decision on COMPAS inclusion is made.
+
+
+#For future reference
+  FairJob — Detailed Assessment Against Your Project
+                                                                                                                                                                                                                         
+  Critical numbers at real_data_size=3000                                                                                                                                                                              
+                                                                                                                                                                                                                         
+  ┌────────┬─────────┬──────────────┬───────────────────────────┐                                                                                                                                                        
+  │ Group  │ Samples │  Click rate  │ Estimated positives (DA+) │
+  ├────────┼─────────┼──────────────┼───────────────────────────┤                                                                                                                                                        
+  │ Female │ 1,500   │ ~0.37% (avg) │ ≈ 6                       │
+  ├────────┼─────────┼──────────────┼───────────────────────────┤                                                                                                                                                        
+  │ Male   │ 1,500   │ ~0.34% (avg) │ ≈ 5                       │                                                                                                                                                        
+  └────────┴─────────┴──────────────┴───────────────────────────┘                                                                                                                                                        
+                                                                                                                                                                                                                         
+  DA+ ≈ 5–6 at your standard real_data_size=3000. That's 7–8× lower than your target of 43. To reach DA+ ≈ 43 you'd need real_data_size ≈ 30,000 — a 10× change to a core hyperparameter that was ablated on census.     
+                                                            
+  The fairness structure doesn't match your framework                                                                                                                                                                    
+                                                            
+  FairJob's documented unfairness is exposure/campaign selection bias: females make up 53.6% of the user population but receive only 39.2% of job ad impressions. But the per-impression click rates are nearly identical
+   (female non-senior 0.24%, male 0.17% — females actually click slightly more).
+                                                                                                                                                                                                                         
+  Your framework is built around group-specific positive-class scarcity — the disadvantaged group has far fewer positive examples to learn from. In FairJob, both groups are equally click-starved; the injustice is     
+  upstream in ad targeting, not in the label distribution your beta classifier sees. The RL agent generating synthetic minority-positive examples is solving the wrong problem for this dataset.
+                                                                                                                                                                                                                         
+  Protected attribute weakness                                                                                                                                                                                           
+   
+  The gender proxy is derived from product purchase patterns, not demographics. A reviewer will immediately ask whether "gender proxy" constitutes a protected attribute in the legal/ethical sense, and whether your    
+  results hold for actual gender.                           
+                                                                                                                                                                                                                         
+  ---                                                                                                                                                                                                                    
+  Verdict: FairJob is a poor fit
+                                                                                                                                                                                                                         
+  It would require fundamental changes (10× real_data_size, new dataset integration, re-ablation) and the fairness structure is misaligned with your core contribution. It does not replace COMPAS.
+                                                                                                                                                                                                                         
+  The COMPAS problem is a results problem, not a dataset problem. The path forward there is either (a) diagnosing why reweighting works on COMPAS race specifically and framing that as a finding, or (b) replacing      
+  COMPAS with a dataset that actually exhibits baseline failure — MEPS health survey, hospital readmission data, or a small-jurisdiction criminal justice dataset where one racial group genuinely has very few          
+  positive-outcome examples.    

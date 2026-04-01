@@ -1,0 +1,23 @@
+{
+  "baseline": "gaussian_ot_repair",
+  "dataset_name": "meps",
+  "multiclass": false,
+  "bias_pct": 0.08,
+  "dp_protected_col": "ethnicity",
+  "minority_id": 0,
+  "majority_id": 1,
+  "third_id": null,
+  "real_data_size": 3000,
+  "seeds": [42],
+  "pca_components": 10,
+  "use_pca": true,
+  "ffnn": {
+    "hidden_sizes": [32, 16],
+    "epochs": 20,
+    "learning_rate": 0.001,
+    "batch_size": 64
+  },
+  "ot_repair": {
+    "repair_level": 1.0
+  }
+}

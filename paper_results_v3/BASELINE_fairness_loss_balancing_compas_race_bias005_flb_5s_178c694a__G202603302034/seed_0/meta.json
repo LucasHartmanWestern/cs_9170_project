@@ -1,0 +1,14 @@
+{
+  "exp_group": "BASELINE_fairness_loss_balancing_compas_race_bias005_flb_5s_178c694a__G202603302034",
+  "spec_name": "compas_race_bias005_flb_5s",
+  "baseline": "fairness_loss_balancing",
+  "dataset_name": "compas",
+  "seed": 0,
+  "flb_config": {
+    "lr": 0.001,
+    "epochs": 200,
+    "batch_size": 64,
+    "eta": 0.01,
+    "n_groups": 4
+  }
+}

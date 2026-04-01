@@ -1,0 +1,14 @@
+{
+  "exp_group": "BASELINE_smote_compas_race_bias005_smote_5s_0dd608da__G202603302034",
+  "spec_name": "compas_race_bias005_smote_5s",
+  "baseline": "smote",
+  "dataset_name": "compas",
+  "seed": 0,
+  "smote_config": {
+    "n_synthetic": 2000,
+    "two_phase": true,
+    "epochs": 100,
+    "lr": 0.001,
+    "batch_size": 64
+  }
+}

@@ -1,0 +1,29 @@
+[FLB] exp_group=BASELINE_fairness_loss_balancing_compas_race_bias005_flb_5s_178c694a__G202603302034  seed=3
+[FLB] dataset=compas  feature_dim=16
+[FLB] flb_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[FLB] seed_dir=/lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_compas_race_bias005_flb_5s_178c694a__G202603302034/seed_3
+[FLB] Group sizes (a=0/y=0, a=0/y=1, a=1/y=0, a=1/y=1): [756, 39, 921, 993]
+[FLB] epoch=  20 | loss=0.6434 | val_worst=0.7659 | p=[0.234,0.267,0.232,0.267]
+[FLB] epoch=  40 | loss=0.6209 | val_worst=0.8204 | p=[0.243,0.258,0.237,0.262]
+[FLB] epoch=  60 | loss=0.5661 | val_worst=0.6783 | p=[0.249,0.251,0.240,0.259]
+[FLB] epoch=  80 | loss=0.5869 | val_worst=0.6396 | p=[0.249,0.246,0.242,0.263]
+[FLB] epoch= 100 | loss=0.5564 | val_worst=0.6646 | p=[0.248,0.242,0.248,0.262]
+[FLB] epoch= 120 | loss=0.5274 | val_worst=0.7092 | p=[0.246,0.240,0.252,0.262]
+[FLB] epoch= 140 | loss=0.5281 | val_worst=0.7183 | p=[0.241,0.240,0.253,0.266]
+[FLB] epoch= 160 | loss=0.5767 | val_worst=0.6751 | p=[0.238,0.238,0.256,0.267]
+[FLB] epoch= 180 | loss=0.5057 | val_worst=0.7262 | p=[0.237,0.233,0.263,0.267]
+[FLB] epoch= 200 | loss=0.5620 | val_worst=0.7457 | p=[0.232,0.232,0.267,0.270]
+[FLB] Training done. Best val_worst=0.6396
+[FLB] Training metrics -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_compas_race_bias005_flb_5s_178c694a__G202603302034/seed_3/metrics.csv
+[FLB] Best model saved -> /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_compas_race_bias005_flb_5s_178c694a__G202603302034/seed_3/flb_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_compas_race_bias005_flb_5s_178c694a__G202603302034/seed_3/flb_model.pt
+
+[TEST] Alpha -> F1(min)=0.5647 | F1(maj)=0.7108 | F1(weighted)=0.6420 | F1(macro)=0.6377 | Brier=0.2627
+[TEST] Beta  -> F1(min)=0.6432 | F1(maj)=0.6466 | F1(weighted)=0.6450 | F1(macro)=0.6449 | Brier=0.2212
+[TestSuite] Final test metrics appended to (seed): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_compas_race_bias005_flb_5s_178c694a__G202603302034/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_compas_race_bias005_flb_5s_178c694a__G202603302034/final_test_metrics.csv
+[FLB] Done. seed=3 | time=4.5s
+[FLB] Results in /lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_compas_race_bias005_flb_5s_178c694a__G202603302034/seed_3

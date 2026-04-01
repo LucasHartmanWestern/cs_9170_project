@@ -1,0 +1,30 @@
+{
+  "experiment_id": "SPECcompas_race_ep1500ph400_5s_EP1500_PCA10_REWfairness_minID0_majID1_TRJ2000_REAL3000_BIAS0.05_GG202603310150_87dcb72a",
+  "last_started_at": "2026-03-31_08-30-44",
+  "config": {
+    "EXP_GROUP": "SPEC_compas_race_ep1500ph400_5s_ef574f55__G202603310150",
+    "SPEC_NAME": "compas_race_ep1500ph400_5s",
+    "dataset_name": "compas",
+    "multiclass": false,
+    "CURRICULUM_LEARNING": false,
+    "EPISODES": 1500,
+    "TRAJ_LENGTH": 2000,
+    "REAL_DATA_SIZE": 3000,
+    "BIAS_PCT": 0.05,
+    "reward_mode": "fairness",
+    "lambda_schedule": [
+      1.0,
+      1.0
+    ],
+    "pca_components": 10,
+    "minority_id": 0,
+    "majority_id": 1,
+    "third_id": null,
+    "use_delta_actions": true,
+    "delta_scale": 0.1,
+    "delta_clip": 0.2,
+    "pca_clip": null,
+    "radius_clip": 3.0,
+    "gen_both_classes": true
+  }
+}

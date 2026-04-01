@@ -41,7 +41,7 @@ pca_components: 10
 **Current paper status:** v18 is the confirmed primary method. Main results (census, CAPTURE-24) done. COMPAS race experiments validated (2026-03-30) — alpha-EO≈0.41 confirmed across 5 seeds, all 7 job specs ready. Credit dataset DROPPED.
 
 **Results still needed before submission:**
-- COMPAS race 5-seed full run — all methods (queue for DRAC, specs ready as of 2026-03-30)
+- COMPAS race: results received (2026-03-31) but paper narrative does not hold — see EXPERIMENTS.md "COMPAS Race Investigation" for full findings and next steps. Decision pending on inclusion strategy.
 - v18 census bias=0.05 — 5 seeds (queue for DRAC)
 
 ## Experiment Log
@@ -90,10 +90,10 @@ Each episode: generate synthetic trajectory → train beta on real+synthetic →
 
 ### Reward Structure (current best config: v18 global-only)
 - **Global term**: `sigmoid(10 × (wgl_alpha − wgl_beta))` where wgl = worst-group BCE loss on validation. Range (0,1); above 0.5 means beta is better than alpha.
-- **Lambda schedule**: `λ * global + (1−λ) * local`. v18 uses `λ=1.0` (pure global, no local). Reward per step = global / T.
-- **Local term (DVRL)**: Disabled in v18. Tested in v17a and shown to hurt — drives agent toward decision boundary producing OOD samples that destabilize beta training in late episodes.
+- **Lambda schedule**: `λ * global + (1−λ) * local`. v18 uses `λ=1.0` (pure global, no local). Reward per step = global / T. Disabled for paper.
+- **Local term (DVRL)**: Disabled for paper.
 - **gamma=1.0**: All 2000 trajectory steps contribute equally to the policy gradient return. gamma=0.99 caused a ~50% deadzone and was abandoned.
-- **Curriculum**: Disabled. Start directly in full 10D PCA space.
+- **Curriculum**: Disabled for paper. Start directly in full 10D PCA space.
 - **gen_both_classes=true**: Agent generates synthetic samples for both minority and majority class (phase 1 = minority, phase 2 = majority recovery, 200 episodes).
 
 ### Key Modules
@@ -128,7 +128,7 @@ Results go to `training_runs/SPEC_{name}_{hash}__G{timestamp}/seed_{N}/` contain
 **Active datasets (paper):** census_income, capture24, compas. Credit card DROPPED.
 
 ### Scarcity Metric: DA+
-**DA+** = number of disadvantaged-group positive (y=1) training examples. This is the primary metric defining the scarcity regime. All three datasets are configured so DA+ ≈ 43, the level at which reweighting methods demonstrably fail. `bias_pct` is an internal implementation parameter used to achieve the target DA+; it is NOT a paper-level framing variable.
+**DA+** = number of disadvantaged-group positive (y=1) training examples. This is the primary metric defining the scarcity regime. All three datasets are configured so DA+ ≈ 43, the level at which reweighting methods demonstrably fail. `bias_pct` is an internal implementation parameter used to achieve the target DA+; it is NOT a paper-level framing variable. Refer to DA+ as a % when possible.
 
 **DA+ log — confirmed values (seed=42, mean across seeds similar):**
 
@@ -138,7 +138,7 @@ Results go to `training_runs/SPEC_{name}_{hash}__G{timestamp}/seed_{N}/` contain
 | capture24 | 0.02 | 3000 | **45** | sex | female (a=1) |
 | compas | 0.05 | — (no cap) | **~40** | race | Caucasian (a=0) |
 
-Secondary scarcity level (census only, for motivation curve):
+Secondary scarcity level (census only, for motivation curve) ignore for now:
 
 | Dataset | bias_pct | DA+ |
 |---------|----------|-----|
@@ -150,7 +150,7 @@ Secondary scarcity level (census only, for motivation curve):
 
 - **capture24**: Wearable accelerometer sleep/activity (Oxford). Protected attr: sex. Female (a=1) is disadvantaged. Requires windowing (win_seconds=1.0, step_seconds=0.5). Path: `datasets/capture24/`. bias_pct=0.02 (real_data_size=3000 cap drives DA+≈45).
 
-- **compas**: COMPAS recidivism (ProPublica). Protected attr: **race** (dp_protected_col="race"). Caucasian (a=0) is disadvantaged — lower recidivism positive rate vs African-American (~47%). Bias injection is group-specific: only Caucasian positives are reduced (AA positives kept at natural rate). bias_pct=0.05 → DA+≈40 (Caucasian positives). Alpha-EO gap ≈ 0.41 (strong racial disparity). Race is included as a feature in cat_cols_all. Path: `datasets/compas/compas-scores-two-years.csv`. Specs: `compas_race_ep1500ph400_5s.json` (RL), `compas_race_bias005_*_5s.json` (baselines).
+- **compas**: COMPAS recidivism (ProPublica). Protected attr: **race** (dp_protected_col="race"). Caucasian (a=0) is disadvantaged — lower recidivism positive rate vs African-American (~47%). Bias injection is group-specific: only Caucasian positives are reduced (AA positives kept at natural rate). bias_pct=0.05 → DA+≈40 (Caucasian positives). Alpha-EO gap ≈ 0.677 ± 0.024 (actual 5-seed result; prior 0.41 estimate was a placeholder — see EXPERIMENTS.md). Race is included as a feature in cat_cols_all. Path: `datasets/compas/compas-scores-two-years.csv`. Specs: `compas_race_ep1500ph400_5s.json` (RL), `compas_race_bias005_*_5s.json` (baselines).
 
 - **PAMAP2**: DROPPED — disadvantaged group identification unstable across seeds (only 1 female subject).
 - **credit_card**: DROPPED — DA+ too high (~136 at bias=0.10), alpha-EO near-zero, not in the scarcity regime.
@@ -168,6 +168,6 @@ When making decisions about experiments, code changes, or analysis, prioritise i
 1. **Does this strengthen or weaken a specific paper claim?** If a result is ambiguous, flag it explicitly rather than presenting it optimistically.
 2. **Is it reproducible?** Always report seed count, mean ± std, and range. 3 seeds is provisional; 5+ seeds is required for the final results table.
 3. **Is the ablation clean?** Change one thing at a time between compared configs. If multiple things changed between versions, note the confounds.
-4. **Reviewer questions to anticipate:** Why RL over simpler generative methods? Why DVRL local reward vs no local reward? Why PCA space? Does the agent actually learn (vs random search)? Have answers or experiments ready for each.
+4. **Reviewer questions to anticipate:** Why RL over simpler generative methods? Why PCA space? Does the agent actually learn (vs random search)? Have answers or experiments ready for each.
 
 **On the DA+ scarcity framing:** Reviewers may ask whether DA+≈43 is realistic. It is — hospital datasets for rare conditions, small-jurisdiction criminal justice records, and internal HR datasets routinely produce comparable minority-positive counts. The key point is that DA+≈43 is the regime where reweighting methods empirically fail (shown in our census baseline degradation curve); the specific mechanism creating that scarcity (historical underrecording, small group size, rare outcome) does not affect the algorithmic behavior we study. Framing: "we study the regime where DA+ is severely limited; our bias injection *simulates* this condition, following standard practice in fairness ML."

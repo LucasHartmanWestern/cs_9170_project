@@ -1,0 +1,24 @@
+{
+  "baseline": "group_dro",
+  "dataset_name": "meps",
+  "multiclass": false,
+  "bias_pct": 0.10,
+  "dp_protected_col": "race",
+  "minority_id": 0,
+  "majority_id": 1,
+  "third_id": null,
+  "real_data_size": 3000,
+  "seeds": [42],
+  "pca_components": 10,
+  "use_pca": true,
+  "ffnn": {
+    "hidden_sizes": [32, 16],
+    "epochs": 20,
+    "learning_rate": 0.001,
+    "batch_size": 64
+  },
+  "group_dro": {
+    "eta": 0.01,
+    "epochs": 20
+  }
+}

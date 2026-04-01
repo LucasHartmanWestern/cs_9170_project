@@ -1,0 +1,20 @@
+{
+  "input_size": 10,
+  "hidden_sizes": [
+    32,
+    16
+  ],
+  "output_size": 2,
+  "learning_rate": 0.001,
+  "batch_size": 64,
+  "epochs": 20,
+  "type": "classification",
+  "classes": [
+    0,
+    1
+  ],
+  "device": "cuda:0",
+  "seed": 42,
+  "n_pca_components": 10,
+  "saved_at": "2026-03-31_08-30-45"
+}

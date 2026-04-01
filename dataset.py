@@ -35,6 +35,10 @@ class Dataset:
         "compas": {
             "data_path": "datasets/compas",
             "protected_attributes": ["race", "sex"]
+        },
+        "meps": {
+            "data_path": "datasets/meps",
+            "protected_attributes": ["race", "sex"]
         }
     }
     def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
@@ -1175,6 +1179,313 @@ class Dataset:
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
 
+    def split_meps(
+        self,
+        train_size=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=2,
+        drop_protected: bool = False,
+        protected_cols=None,
+        return_test_df: bool = False,
+        return_raw: bool = False,
+        bias_val: bool = True,
+        dp_protected_col: str = "race",
+    ):
+        """
+        MEPS Full Year Consolidated 2022 (HC-243).
+
+        Target: received any dental visit in 2022 (DVTOT22 >= 1, y=1).
+        Protected attr: race (0=Black non-Hispanic/disadvantaged, 1=White non-Hispanic).
+        Bias: group-specific -- only Black Americans' positives are reduced, mirroring
+              split_compas. White Americans' dental-visit rate is preserved at its
+              natural level so the classifier can learn the positive class.
+
+        Natural positive-class rates (pre-bias): ~30% Black, ~49% White.
+        At real_data_size=3000 with bias injection, DA+≈43 is achievable for Black group.
+
+        Expected file: datasets/meps/h243.csv  (pre-converted from SAS transport)
+        Fallback:      datasets/meps/h243.ssp  (SAS transport, read via pandas.read_sas)
+        Download from: https://meps.ahrq.gov/data_stats/download_data_files.jsp (HC-243)
+        """
+        assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
+
+        if protected_cols is None:
+            protected_cols = ["ethnicity"] if dp_protected_col == "ethnicity" else ["race"]
+
+        data_dir = Path(self.data_path)
+
+        # ---- 1) Load ----
+        csv_path = data_dir / "h243.csv"
+        sas_path = data_dir / "h243.ssp"
+        if csv_path.exists():
+            df = pd.read_csv(csv_path, low_memory=False)
+        elif sas_path.exists():
+            df = pd.read_sas(str(sas_path), encoding="iso-8859-1")
+            df.to_csv(csv_path, index=False)
+        else:
+            raise FileNotFoundError(
+                f"MEPS HC-243 not found. Expected:\n  {csv_path}\n  {sas_path}\n"
+                "Download HC-243 from https://meps.ahrq.gov/data_stats/download_data_files.jsp"
+            )
+
+        df.columns = [c.upper() for c in df.columns]
+
+        # Stata categoricals arrive as "2 NON-HISPANIC WHITE ONLY" etc.
+        # Extract the leading integer code for all relevant columns.
+        def _meps_code(series):
+            return pd.to_numeric(series.astype(str).str.split().str[0], errors="coerce")
+
+        # RACETHX: 1=Hispanic, 2=White non-Hisp, 3=Black non-Hisp, 4=Asian, 5=Other non-Hisp
+        df["RACETHX"] = _meps_code(df["RACETHX"])
+
+        if dp_protected_col == "ethnicity":
+            # ---- 2) Keep all race groups (Hispanic vs everyone else) ----
+            df = df[df["RACETHX"].isin([1, 2, 3, 4, 5])].copy().reset_index(drop=True)
+
+            # ---- 3) Target: any outpatient facility visit ----
+            # OPTOTV22: total outpatient visits 2022. Negative codes = inapplicable/missing → 0.
+            df["OPTOTV22"] = _meps_code(df["OPTOTV22"]).fillna(0).clip(lower=0)
+            y_raw = (df["OPTOTV22"] >= 1).astype(int).to_numpy()
+
+            vals, cnts = np.unique(y_raw, return_counts=True)
+            print("[meps/ethnicity] Label distribution (pre-bias):", dict(zip(vals.tolist(), cnts.tolist())))
+            for group_code, group_name in [(1, "Hispanic"), (2, "White non-Hisp"), (3, "Black non-Hisp"), (4, "Asian non-Hisp"), (5, "Other non-Hisp")]:
+                mask = df["RACETHX"] == group_code
+                n = int(mask.sum())
+                if n == 0:
+                    continue
+                n1 = int((y_raw[mask.to_numpy()] == 1).sum())
+                print(f"  [{group_name}] n={n}, outpatient+= {n1} ({100.*n1/n:.1f}%)")
+
+            A_df_raw = df[["RACETHX"]].rename(columns={"RACETHX": "ethnicity"}).copy()
+        else:
+            # ---- 2) Filter to Black non-Hispanic (RACETHX=3) and White non-Hispanic (RACETHX=2) ----
+            df = df[df["RACETHX"].isin([2, 3])].copy().reset_index(drop=True)
+
+            # ---- 3) Target: any dental visit ----
+            # DVTOT22: total dental visits 2022. Negative codes treated as 0.
+            df["DVTOT22"] = _meps_code(df["DVTOT22"]).fillna(0).clip(lower=0)
+            y_raw = (df["DVTOT22"] >= 1).astype(int).to_numpy()
+
+            vals, cnts = np.unique(y_raw, return_counts=True)
+            print("[meps/race] Label distribution (pre-bias):", dict(zip(vals.tolist(), cnts.tolist())))
+            for group_code, group_name in [(3, "Black non-Hisp"), (2, "White non-Hisp")]:
+                mask = df["RACETHX"] == group_code
+                n = mask.sum(); n1 = int((y_raw[mask.to_numpy()] == 1).sum())
+                print(f"  [{group_name}] n={n}, dental+= {n1} ({100.*n1/n if n else 0:.1f}%)")
+
+            A_df_raw = df[["RACETHX"]].rename(columns={"RACETHX": "race"}).copy()
+
+        # ---- 4) Feature columns ----
+        num_cols_all = ["AGE22X", "TTLP22X"]
+        cat_cols_all = ["SEX", "RACETHX", "POVCAT22", "INSCOV22", "REGION22", "MARRY22X"]
+
+        # Convert Stata-label strings to integer codes; replace negatives (special codes) with NaN
+        for col in cat_cols_all:
+            if col in df.columns:
+                df[col] = _meps_code(df[col])
+                df.loc[df[col] < 0, col] = np.nan
+        for col in num_cols_all:
+            if col in df.columns:
+                df[col] = _meps_code(df[col])
+
+        feature_cols = [c for c in num_cols_all + cat_cols_all if c in df.columns]
+        X_df_raw = df[feature_cols].copy()
+
+        # Categoricals as strings so OneHotEncoder treats them as nominal
+        for col in cat_cols_all:
+            if col in X_df_raw.columns:
+                X_df_raw[col] = X_df_raw[col].astype("str")
+
+        # ---- 5) Optional: drop protected ----
+        if drop_protected:
+            drop_c = [c for c in protected_cols + ["RACETHX"] if c in X_df_raw.columns]
+            if drop_c:
+                X_df_raw = X_df_raw.drop(columns=drop_c)
+
+        cat_cols = [c for c in X_df_raw.columns if X_df_raw[c].dtype == object]
+        num_cols = [c for c in X_df_raw.columns if np.issubdtype(X_df_raw[c].dtype, np.number)]
+
+        # ---- 6) Split ----
+        X_train_df, X_temp_df, y_train, y_temp, A_train_df, A_temp_df = train_test_split(
+            X_df_raw, y_raw, A_df_raw,
+            test_size=(val_frac + test_frac),
+            random_state=self.seed,
+            stratify=y_raw,
+        )
+        rel_test = test_frac / (val_frac + test_frac)
+        X_val_df, X_test_df, y_val, y_test, A_val_df, A_test_df = train_test_split(
+            X_temp_df, y_temp, A_temp_df,
+            test_size=rel_test,
+            random_state=self.seed,
+            stratify=y_temp,
+        )
+
+        # ---- Protected attribute mapping ----
+        if dp_protected_col == "ethnicity":
+            # 0 = Hispanic (disadvantaged, RACETHX=1)
+            # 1 = non-Hispanic (advantaged, RACETHX in {2,3,4,5})
+            def _map_protected(a_df):
+                return (a_df["ethnicity"] != 1).astype(np.int64).to_numpy()
+            _a_col = "ethnicity"
+            _disadv_code = 1  # Hispanic
+        else:
+            # 0 = Black non-Hispanic (disadvantaged, RACETHX=3)
+            # 1 = White non-Hispanic (advantaged, RACETHX=2)
+            def _map_protected(a_df):
+                return (a_df["race"] != 3).astype(np.int64).to_numpy()
+            _a_col = "race"
+            _disadv_code = 3  # Black non-Hisp
+
+        # ---- 7) Bias injection (group-specific: reduce only disadvantaged-group positives) ----
+        def apply_bias(df_split, y_split, a_split_df, target_minority_pct):
+            dfb = df_split.copy()
+            dfb["__y__"] = y_split
+            dfb["__a__"] = a_split_df[_a_col].to_numpy()
+
+            is_disadv    = dfb["__a__"] == _disadv_code
+            df_disadv    = dfb[is_disadv]
+            df_adv       = dfb[~is_disadv]
+            df_disadv_neg = df_disadv[df_disadv["__y__"] == 0]
+            df_disadv_pos = df_disadv[df_disadv["__y__"] == 1]
+
+            if len(df_disadv_neg) == 0 or len(df_disadv_pos) == 0:
+                out = dfb
+            else:
+                keep_min = int(np.floor(
+                    (target_minority_pct * len(df_disadv_neg)) / (1 - target_minority_pct)
+                ))
+                keep_min = min(len(df_disadv_pos), max(1, keep_min))
+                df_disadv_pos_b = df_disadv_pos.sample(n=keep_min, random_state=self.seed, replace=False)
+                out = pd.concat(
+                    [df_adv, df_disadv_neg, df_disadv_pos_b], axis=0
+                ).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
+
+            y_out = out["__y__"].to_numpy(dtype=int)
+            a_out = _map_protected(out[["__a__"]].rename(columns={"__a__": _a_col}))
+            X_out = out.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        if bias_pct is not None:
+            X_train_biased_df, y_train_biased, a_train = apply_bias(
+                X_train_df, y_train, A_train_df, float(bias_pct))
+            if bias_val:
+                X_val_biased_df, y_val_biased, a_val = apply_bias(
+                    X_val_df, y_val, A_val_df, float(bias_pct))
+            else:
+                X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+                y_val_biased = y_val.copy()
+                a_val = _map_protected(A_val_df)
+        else:
+            X_train_biased_df = X_train_df.copy().reset_index(drop=True)
+            y_train_biased = y_train.copy()
+            a_train = _map_protected(A_train_df)
+            X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+            y_val_biased = y_val.copy()
+            a_val = _map_protected(A_val_df)
+
+        X_test_biased_df = X_test_df.copy().reset_index(drop=True)
+        y_test_biased = y_test.copy()
+        a_test = _map_protected(A_test_df)
+
+        # ---- Optional train subsample ----
+        if train_size is not None and train_size < len(X_train_biased_df):
+            X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
+                X_train_biased_df, y_train_biased, a_train,
+                train_size=train_size,
+                random_state=self.seed,
+                stratify=y_train_biased,
+            )
+
+        # DA+ diagnostic
+        da_plus = int(np.sum((y_train_biased == 1) & (a_train == 0)))
+        n_disadv = int(np.sum(a_train == 0))
+        if dp_protected_col == "ethnicity":
+            print(f"[meps/TRAIN] DA+ (Hispanic, outpatient=1): {da_plus} of {n_disadv} Hispanic train examples")
+        else:
+            print(f"[meps/TRAIN] DA+ (Black, dental=1): {da_plus} of {n_disadv} Black train examples")
+
+        # ---- 8) Fit encoder + scaler on train only ----
+        try:
+            encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        except TypeError:
+            encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
+        scaler = StandardScaler()
+
+        Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if cat_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols].fillna(0)) if num_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_all = np.hstack([Xtr_num, Xtr_cat])
+
+        Xva_cat = encoder.transform(X_val_biased_df[cat_cols]) if cat_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_num = scaler.transform(X_val_biased_df[num_cols].fillna(0)) if num_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_all = np.hstack([Xva_num, Xva_cat])
+
+        Xte_cat = encoder.transform(X_test_biased_df[cat_cols]) if cat_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_num = scaler.transform(X_test_biased_df[num_cols].fillna(0)) if num_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_all = np.hstack([Xte_num, Xte_cat])
+
+        # ---- 9) PCA ----
+        X_train_theta_np, X_val_theta_np, X_test_theta_np, pca = self._to_theta(
+            Xtr_all, Xva_all, Xte_all, pca_components=pca_components
+        )
+
+        # ---- 10) Tensors ----
+        X_train_theta = torch.tensor(X_train_theta_np, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_val_theta_np,   dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_test_theta_np,  dtype=torch.float32, device=self.device)
+
+        y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_val_biased,   dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_test_biased,  dtype=torch.long, device=self.device)
+
+        self.a_train = torch.tensor(a_train, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_val,   dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        outcome_label = "outpatient+" if dp_protected_col == "ethnicity" else "dental+"
+        def log_dist(name, y_split):
+            n = len(y_split); n1 = int(np.sum(y_split == 1))
+            print(f"[meps/{name}] size={n}, {outcome_label} {n1} ({100.*n1/n if n else 0:.2f}%)")
+        log_dist("TRAIN", y_train_biased)
+        log_dist("VAL",   y_val_biased)
+        log_dist("TEST",  y_test_biased)
+
+        label_col = "OPTOTV22_binary" if dp_protected_col == "ethnicity" else "DVTOT22_binary"
+        try:
+            self._gan_view_cache = {
+                "supported": True,
+                "X_train_unbiased_df": X_train_df.copy(),
+                "y_train_unbiased": y_train.astype(int).copy(),
+                "encoder": encoder,
+                "scaler": scaler,
+                "pca": pca,
+                "use_pca": self.use_pca,
+                "pca_components": int(pca_components),
+                "cat_cols": list(cat_cols),
+                "num_cols": list(num_cols),
+                "drop_protected": bool(drop_protected),
+                "protected_cols": list(protected_cols),
+                "label_col": label_col,
+                "dp_protected_col": dp_protected_col,
+            }
+        except Exception:
+            pass
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_biased_df.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_biased_df.copy(), y_test_biased.copy())
+
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+
     def split_ptb_xl(
         self,
         train_size=None,
@@ -1705,6 +2016,9 @@ class Dataset:
         elif self.dataset_name == "compas":
             kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
             return self.split_compas(**kw)
+        elif self.dataset_name == "meps":
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_meps(**kw)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 
