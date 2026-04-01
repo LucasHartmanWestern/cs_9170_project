@@ -2,7 +2,7 @@
 #SBATCH --job-name=meps_opv_otr
 #SBATCH --account=def-mcapretz
 #SBATCH --time=01:00:00
-#SBATCH --mem=8G
+#SBATCH --mem=3G
 #SBATCH --cpus-per-task=1
 #SBATCH --output=experiment_specs/logs/meps_opv_otr_5s.out
 #SBATCH --error=experiment_specs/logs/meps_opv_otr_5s.err
