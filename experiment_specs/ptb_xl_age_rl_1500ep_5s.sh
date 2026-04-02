@@ -2,7 +2,7 @@
 #SBATCH --job-name=ptbxl_rl15
 #SBATCH --account=def-mcapretz
 #SBATCH --time=20:00:00
-#SBATCH --mem=3G
+#SBATCH --mem=6G
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/logs/ptb_xl_age_rl_1500ep_5s.out
