@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=ptbxl_rl8
-#SBATCH --account=def-mcapretz
+#SBATCH --account=rrg-kgroling
 #SBATCH --time=14:00:00
 #SBATCH --mem=6G
 #SBATCH --cpus-per-task=1
