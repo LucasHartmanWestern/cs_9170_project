@@ -2,7 +2,7 @@
 #SBATCH --job-name=meps_opv_rl15
 #SBATCH --account=def-mcapretz
 #SBATCH --time=14:00:00
-#SBATCH --mem=3G
+#SBATCH --mem=6G
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/logs/meps_opv_rl_1500ep_5s.out

@@ -26,7 +26,7 @@ class Dataset:
         },
         "ptb_xl": {
             "data_path": "datasets/ptb-xl",
-            "protected_attributes": ["sex"]
+            "protected_attributes": ["age", "sex"]
         },
         "capture24": {
             "data_path": "datasets/capture24",
@@ -1496,14 +1496,22 @@ class Dataset:
         return_test_df: bool = False,
         return_raw: bool = False,
         bias_val: bool = True,
-        dp_protected_col: str = "sex",
+        dp_protected_col: str = "age",
         mi_threshold: float = 50.0,
         feature_cache: bool = True,
+        age_young_max: int = 50,
+        age_old_min: int = 60,
     ):
         """
         PTB-XL ECG dataset: MI (y=1) vs NORM (y=0) binary classification.
-        Protected attribute: sex (0=male, 1=female in PTB-XL; female is the
-        disadvantaged group due to historically lower MI diagnosis rates).
+
+        Protected attribute (dp_protected_col):
+          "age"  (default) — young (<age_young_max) vs old (>=age_old_min);
+                  records in [age_young_max, age_old_min) are DROPPED.
+                  Young (a=0) is disadvantaged: natural MI rate ~8% vs ~47% old.
+                  Cosine similarity of MI discriminant vectors = 0.627 (strong group divergence).
+          "sex"  — 0=male (advantaged), 1=female (disadvantaged). Natural MI
+                  rates are similar; requires heavy bias injection.
 
         Feature extraction: 8 per-lead statistics (mean, std, min, max, rms,
         p25, p75, iqr) across all 12 leads → 96 features total.
@@ -1515,6 +1523,8 @@ class Dataset:
         import wfdb
 
         assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
+        assert dp_protected_col in ("age", "sex"), \
+            f"ptb_xl dp_protected_col must be 'age' or 'sex', got '{dp_protected_col}'"
 
         data_dir = Path(self.data_path)
         db_path = data_dir / "ptbxl_database.csv"
@@ -1548,13 +1558,27 @@ class Dataset:
         db["y"] = db["scp_codes"].apply(_classify)
         db = db[db["y"] >= 0].reset_index(drop=True)
 
-        # PTB-XL sex coding: 0=male, 1=female
-        # We keep this as-is; female (1) is the historically disadvantaged group.
-        db["a"] = db["sex"].astype(int)
+        # ---- Protected attribute assignment ----
+        if dp_protected_col == "age":
+            # Drop records with invalid ages or in the middle age band [age_young_max, age_old_min)
+            db = db[db["age"] < 120].reset_index(drop=True)  # remove invalid ages
+            young_mask = db["age"] < age_young_max
+            old_mask   = db["age"] >= age_old_min
+            db = db[young_mask | old_mask].reset_index(drop=True)
+            db["a"] = 0  # young = disadvantaged
+            db.loc[db["age"] >= age_old_min, "a"] = 1  # old = advantaged
+            print(f"[ptb_xl] Age groups: young(<{age_young_max})={int(young_mask.sum())} "
+                  f"old(>={age_old_min})={int(old_mask.sum())} (dropped middle-age band)")
+        else:
+            # sex: 0=male (advantaged), 1=female (disadvantaged)
+            db["a"] = db["sex"].astype(int)
 
         print(f"[ptb_xl] After MI/NORM filter: {len(db)} records "
               f"(MI={int((db['y']==1).sum())}, NORM={int((db['y']==0).sum())})")
-        print(f"[ptb_xl] Sex: male={int((db['a']==0).sum())}, female={int((db['a']==1).sum())}")
+        grp0_label = f"young(<{age_young_max})" if dp_protected_col == "age" else "male"
+        grp1_label = f"old(>={age_old_min})"   if dp_protected_col == "age" else "female"
+        print(f"[ptb_xl] Group0={grp0_label}: {int((db['a']==0).sum())}, "
+              f"Group1={grp1_label}: {int((db['a']==1).sum())}")
 
         # ---- 2) Extract ECG features ----
         LEAD_NAMES = ["I","II","III","aVR","aVL","aVF","V1","V2","V3","V4","V5","V6"]
@@ -1648,20 +1672,30 @@ class Dataset:
         A_val   = A_df[va_mask].reset_index(drop=True)
         A_test  = A_df[te_mask].reset_index(drop=True)
 
-        # ---- 4) Bias injection (downsample y=1 globally) ----
+        # ---- 4) Bias injection (group-specific: reduce only disadvantaged-group MI) ----
+        # For age-based:  disadvantaged = young (a=0); old (a=1) kept at natural rate.
+        # For sex-based:  disadvantaged = female (a=1); male (a=0) kept at natural rate.
+        # target_pct = target positive rate *within* the disadvantaged subgroup.
+        disadv_code = 0 if dp_protected_col == "age" else 1
+
         def apply_bias(df_split, y_split, a_split, target_pct):
             df = df_split.copy()
             df["__y__"] = y_split
             df["__a__"] = a_split.to_numpy() if hasattr(a_split, "to_numpy") else a_split
-            maj  = df[df["__y__"] == 0]
-            mino = df[df["__y__"] == 1]
-            if len(maj) == 0 or len(mino) == 0:
+
+            is_disadv = df["__a__"] == disadv_code
+            df_adv    = df[~is_disadv]
+            df_dis    = df[is_disadv]
+            df_d_neg  = df_dis[df_dis["__y__"] == 0]
+            df_d_pos  = df_dis[df_dis["__y__"] == 1]
+
+            if len(df_d_neg) == 0 or len(df_d_pos) == 0:
                 out = df
             else:
-                keep = int(np.floor((target_pct * len(maj)) / (1 - target_pct)))
-                keep = min(len(mino), max(1, keep))
-                mino_b = mino.sample(n=keep, random_state=self.seed, replace=False)
-                out = (pd.concat([maj, mino_b])
+                keep = int(np.floor((target_pct * len(df_d_neg)) / (1 - target_pct)))
+                keep = min(len(df_d_pos), max(1, keep))
+                df_d_pos_b = df_d_pos.sample(n=keep, random_state=self.seed, replace=False)
+                out = (pd.concat([df_adv, df_d_neg, df_d_pos_b])
                          .sample(frac=1.0, random_state=self.seed)
                          .reset_index(drop=True))
             y_out = out["__y__"].to_numpy(dtype=int)
@@ -1725,11 +1759,11 @@ class Dataset:
         def _log(name, ysplit, asplit):
             n = len(ysplit)
             n1 = int(np.sum(ysplit == 1))
-            n_female = int(np.sum(asplit == 1))
-            n_female_pos = int(np.sum((ysplit == 1) & (asplit == 1)))
-            n_male_pos   = int(np.sum((ysplit == 1) & (asplit == 0)))
+            n_g0 = int(np.sum(asplit == 0))
+            n_g0_pos = int(np.sum((ysplit == 1) & (asplit == 0)))
+            n_g1_pos = int(np.sum((ysplit == 1) & (asplit == 1)))
             print(f"[{name}] size={n}, MI={n1} ({100.*n1/n:.1f}%), "
-                  f"female={n_female}, female_MI={n_female_pos}, male_MI={n_male_pos}")
+                  f"{grp0_label}={n_g0}, {grp0_label}_MI={n_g0_pos}, {grp1_label}_MI={n_g1_pos}")
 
         _log("TRAIN", y_train_b, a_train)
         _log("VAL",   y_val_b,   a_val)

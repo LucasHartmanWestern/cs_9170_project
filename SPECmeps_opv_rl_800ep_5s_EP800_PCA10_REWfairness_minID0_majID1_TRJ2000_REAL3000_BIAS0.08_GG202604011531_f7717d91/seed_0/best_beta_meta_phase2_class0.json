@@ -1,0 +1,8 @@
+{
+  "episode": 46,
+  "metric": "global.global_obj",
+  "metric_value": 0.977612751792524,
+  "phase_label": "phase2_class0",
+  "updated_at": "2026-04-01_16-19-56",
+  "checkpoint": "best_beta_state_dict_phase2_class0.pt"
+}
