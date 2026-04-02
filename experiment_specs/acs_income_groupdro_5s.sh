@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=ptbxl_otr
+#SBATCH --job-name=acs_gdro
 #SBATCH --account=def-mcapretz
 #SBATCH --time=01:00:00
 #SBATCH --mem=3G
 #SBATCH --cpus-per-task=1
-#SBATCH --output=experiment_specs/logs/ptb_xl_age_otr_5s.out
-#SBATCH --error=experiment_specs/logs/ptb_xl_age_otr_5s.err
+#SBATCH --output=experiment_specs/logs/acs_income_groupdro_5s.out
+#SBATCH --error=experiment_specs/logs/acs_income_groupdro_5s.err
 
 set -euo pipefail
 
@@ -19,4 +19,4 @@ module load python/3.12.4
 source ~/envs/rl/bin/activate
 mkdir -p experiment_specs/logs
 
-python -u run_baseline.py --spec experiment_specs/ptb_xl_age_otr_5s.json --device cpu
+python -u run_baseline.py --spec experiment_specs/acs_income_groupdro_5s.json --device cpu

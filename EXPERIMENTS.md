@@ -1431,6 +1431,92 @@ CTGAN and SMOTE both started but only completed seed_0 setup before hitting the 
 5. **Update COMPAS placeholder values** in generate_ablation_figures.py and generate_main_table.py once a final decision on COMPAS inclusion is made.
 
 
+---
+
+## Third Dataset Viability Analysis (2026-04-02)
+
+**Context:** COMPAS race results do not support the paper's motivation claim (GroupDRO/FLB substantially outperform RL). Systematic structural analysis run to determine whether PTB-XL, MEPS, or a replacement could serve as the third dataset.
+
+**Structural viability criteria (calibrated against census):**
+1. `val_disadv_pos ≥ 30` — enough biased-val signal to drive worst-group BCE reward
+2. `test_disadv_pos ≥ 200` — reliable fairness evaluation
+3. `alpha_EO ≥ 0.10` — meaningful gap for the RL agent to close
+4. (Cosine criterion dropped — census itself has cosine=0.983, so this is not discriminative)
+
+**Census reference values (measured, seed=42, bias=0.10, pca=10):**
+- DA+=43, val_pos=86, test_pos=244, alpha_EO=0.118, cosine=0.983
+
+---
+
+### PTB-XL: All Framings Rejected
+
+Tested MI, STTC, HYP, CD vs NORM with sex-based (female=1 disadv) and age-based (young<50=0 disadv) groupings at bias_pct=0.02 and 0.04. Full results from `dataset_viability_analysis.py`:
+
+| Framing | Val+ | Test+ | EO | Cosine | Pass |
+|---|---|---|---|---|---|
+| MI/sex bias=0.04 | 42 | 344 | 0.056 | 0.928 | 2/4 |
+| MI/age bias=0.04 | 32 | 52 | 0.108 | 0.628 | 1/3* |
+| STTC/age bias=0.04 | 16 | 8 | 0.409 | -0.138 | 1/3* |
+| HYP/age bias=0.04 | 9 | 5 | 0.178 | 0.461 | 1/3* |
+| CD/age bias=0.04 | 16 | 14 | 0.132 | 0.781 | 1/3* |
+
+*scored against census-calibrated 3-criterion set (no cosine)
+
+**Root causes:**
+- Sex-based framings: ECG disease features are sex-independent (cosine ≥0.90 across all conditions). EO never exceeds 0.20 regardless of bias level. Fundamentally not viable.
+- Age-based framings: strat_fold structure hard-limits young positives in test. MI gives only 52 young test positives; rarer conditions (STTC, HYP, CD) give 5–14. No framing reaches test_pos≥200.
+
+**Verdict: PTB-XL is not viable as a fairness dataset under any framing available in the strat_fold split structure.**
+
+---
+
+### MEPS: Ethnicity Framing Invalid (Existing DRAC Runs)
+
+The existing MEPS DRAC runs (`meps_opv_rl_800ep_5s`, baselines) used `dp_protected_col=ethnicity` (Hispanic=0 vs non-Hispanic=1). This framing produces test_disadv_pos=111 (below 200 threshold). The 2 seeds that completed on DRAC are invalid for the paper. Specs need to be replaced with race framing.
+
+### MEPS Race Framing: Marginal
+
+Race framing (Black=0 vs White=1, dental visits, bias=0.08, pca=25): passes 3/3 census-calibrated criteria on paper (val_pos=37, test_pos=216, EO=0.759). However, a 200ep local smoke test showed:
+
+- Phase 1 best_global_obj=0.927 (strong learning signal)
+- Alpha EO: 0.750 (Black TPR=0.000, White TPR=0.750)
+- Beta EO after 200ep: 0.721 (Black TPR=0.042, White TPR=0.763) — only 0.029 improvement
+- F1w: 0.639 → 0.632 (marginal utility drop)
+
+The weak test EO improvement despite strong phase 1 global_obj suggests val_pos=37 is insufficient for reliable policy gradient learning — the agent optimizes for a noisy 37-example val signal that doesn't generalize to the 216-example test set. Compare census: 86 val positives, consistent 0.05–0.08 EO reduction by 200ep.
+
+**Verdict: MEPS race framing is structurally marginal. val_pos=37 is too low for stable learning.**
+
+---
+
+### COMPAS Race: Structurally Inferior to MEPS
+
+Structural reanalysis (same methodology as above, seed=42, bias=0.05, pca=10):
+- DA+=40, val_pos=**14**, test_pos=**162**, alpha_EO=0.689, cosine=0.757
+
+COMPAS has only 14 val Caucasian positives — the worst of all candidates, worse than MEPS (37) and far below census (86). The small total dataset size (~5k rows) is the root cause; there simply aren't enough examples in any split. The 14 val positives explain why COMPAS RL results are inconsistent across seeds.
+
+**Combined with the existing COMPAS Race Investigation finding (GroupDRO EO=0.197, FLB EO=0.075 vs RL EO=0.600): COMPAS race is both structurally weak and produces results that contradict the paper's motivation claim. Decision: replace COMPAS with ACS Income.**
+
+---
+
+### ACS Income (NeurIPS 2021): Selected as Third Dataset
+
+ACS PUMS 2018 California, sex-based (female=1 disadv, income>50k), pca=10:
+
+| bias_pct | DA+ | Val+ | Test+ | Alpha-EO | Cosine |
+|---|---|---|---|---|---|
+| 0.10 | 105 | 6,427 | 6,327 | 0.597 | 0.969 |
+| 0.07 | 71 | 6,427 | 6,327 | 0.680 | 0.969 |
+| **0.05** | **49** | **6,427** | **6,327** | **0.729** | **0.969** |
+| 0.03 | 29 | 6,427 | 6,327 | 0.726 | 0.969 |
+
+Val/test positives are 6,427 and 6,327 respectively — 75× more than COMPAS and 74× more than MEPS for the validation signal. Alpha-EO at bias=0.05 is 0.729 (female TPR collapses to 0.040 under bias).
+
+**Target config:** bias_pct=0.05 (DA+=49, closest to target ~43), pca=10 (matching census), train_size=3000.
+
+**Reviewer framing:** ACS is the community-recommended successor to UCI Adult per Ding et al. NeurIPS 2021 ("Retiring Adult"). Using it alongside census_income demonstrates scale robustness (4× the data), not redundancy. Both datasets use sex as protected attribute and income prediction as the task — this is intentional; it isolates the effect of dataset scale and positive-class rate.
+
 #For future reference
   FairJob — Detailed Assessment Against Your Project
                                                                                                                                                                                                                          

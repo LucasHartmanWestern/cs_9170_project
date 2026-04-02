@@ -39,6 +39,10 @@ class Dataset:
         "meps": {
             "data_path": "datasets/meps",
             "protected_attributes": ["race", "sex"]
+        },
+        "acs_income": {
+            "data_path": "datasets/acs_income",
+            "protected_attributes": ["sex", "race"]
         }
     }
     def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
@@ -1486,6 +1490,139 @@ class Dataset:
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
 
+    def split_acs_income(
+        self,
+        train_size=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        bias_val: bool = False,
+        dp_protected_col: str = "sex",
+        acs_state: str = "CA",
+        acs_year: str = "2018",
+    ):
+        """
+        ACS Income (Ding et al. NeurIPS 2021 / folktables).
+
+        Protected attribute: sex. Female (SEX=2, a=0) is disadvantaged;
+        male (SEX=1, a=1) is advantaged. Matches census_income convention
+        (minority_id=0 = disadvantaged female).
+
+        Bias injection is group-specific: only female positives are reduced
+        in the training split (and optionally val). Male positives are kept
+        at their natural rate.
+
+        Data is downloaded on first call to datasets/acs_income/ via folktables.
+        """
+        from folktables import ACSDataSource, ACSIncome
+
+        data_dir = Path(self.data_path)
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        data_source = ACSDataSource(
+            survey_year=acs_year, horizon="1-Year", survey="person",
+            root_dir=str(data_dir),
+        )
+        acs_data = data_source.get_data(states=[acs_state], download=True)
+        features, label, _ = ACSIncome.df_to_pandas(acs_data)
+
+        # Fix label — folktables returns tuples (True,)/(False,)
+        y_raw = np.array([int(bool(v[0])) if isinstance(v, tuple) else int(bool(v))
+                          for v in label.values], dtype=int)
+
+        # All ACSIncome features are numeric; no categorical encoding needed
+        X_raw = features.values.astype(float)
+        col_names = list(features.columns)
+
+        # Protected attribute: SEX column (1=male, 2=female)
+        sex_vals = features["SEX"].values
+        a_raw = (sex_vals == 1).astype(np.int64)  # 1=male (adv), 0=female (disadv)
+
+        print(f"[acs_income] Total: {len(y_raw)}, pos_rate={y_raw.mean():.3f}")
+        print(f"[acs_income] Female (a=0): n={int((a_raw==0).sum())}, "
+              f"pos_rate={y_raw[a_raw==0].mean():.3f}, "
+              f"pos_total={int(np.sum((a_raw==0)&(y_raw==1)))}")
+        print(f"[acs_income] Male   (a=1): n={int((a_raw==1).sum())}, "
+              f"pos_rate={y_raw[a_raw==1].mean():.3f}, "
+              f"pos_total={int(np.sum((a_raw==1)&(y_raw==1)))}")
+
+        # Stratified split
+        idx_all = np.arange(len(y_raw))
+        idx_tr, idx_temp = train_test_split(
+            idx_all, test_size=(val_frac + test_frac),
+            random_state=self.seed, stratify=y_raw)
+        rel_test = test_frac / (val_frac + test_frac)
+        idx_va, idx_te = train_test_split(
+            idx_temp, test_size=rel_test,
+            random_state=self.seed, stratify=y_raw[idx_temp])
+
+        X_tr_raw, y_tr, a_tr = X_raw[idx_tr], y_raw[idx_tr], a_raw[idx_tr]
+        X_va_raw, y_va, a_va = X_raw[idx_va], y_raw[idx_va], a_raw[idx_va]
+        X_te_raw, y_te, a_te = X_raw[idx_te], y_raw[idx_te], a_raw[idx_te]
+
+        # Group-specific bias: reduce female (a=0) positives in train
+        def apply_group_bias(X, y, a, bp, seed):
+            idx_adv  = np.where(a == 1)[0]           # male — keep all
+            idx_dneg = np.where((a==0) & (y==0))[0]  # female neg — keep all
+            idx_dpos = np.where((a==0) & (y==1))[0]  # female pos — reduce
+            keep = max(1, int(np.floor(bp * len(idx_dneg) / (1 - bp))))
+            keep = min(len(idx_dpos), keep)
+            rng2 = np.random.RandomState(seed)
+            kept = rng2.choice(idx_dpos, size=keep, replace=False)
+            sel  = np.concatenate([idx_adv, idx_dneg, kept])
+            perm = np.random.RandomState(seed).permutation(len(sel))
+            return X[sel[perm]], y[sel[perm]], a[sel[perm]]
+
+        if bias_pct is not None:
+            X_tr_raw, y_tr, a_tr = apply_group_bias(X_tr_raw, y_tr, a_tr, bias_pct, self.seed)
+            if bias_val:
+                X_va_raw, y_va, a_va = apply_group_bias(X_va_raw, y_va, a_va, bias_pct, self.seed)
+
+        da_plus = int(np.sum((y_tr==1) & (a_tr==0)))
+        n_disadv_tr = int((a_tr==0).sum())
+        print(f"[acs_income/TRAIN] DA+ (female, income>50k): {da_plus} of {n_disadv_tr} female train examples")
+
+        # Cap train_size after bias (stratified), matching census pipeline
+        if train_size is not None and train_size < len(y_tr):
+            X_tr_raw, _, y_tr, _, a_tr, _ = train_test_split(
+                X_tr_raw, y_tr, a_tr,
+                train_size=train_size, random_state=self.seed, stratify=y_tr)
+
+        def _log(name, y_split):
+            n = len(y_split); n1 = int(np.sum(y_split==1))
+            print(f"[acs_income/{name}] size={n}, income>50k: {n1} ({100.*n1/n:.2f}%)")
+
+        _log("TRAIN", y_tr)
+        _log("VAL",   y_va)
+        _log("TEST",  y_te)
+
+        # StandardScaler (no OHE — all features are numeric)
+        scaler = StandardScaler().fit(X_tr_raw)
+        X_tr_sc = scaler.transform(X_tr_raw)
+        X_va_sc = scaler.transform(X_va_raw)
+        X_te_sc = scaler.transform(X_te_raw)
+
+        X_tr_theta, X_va_theta, X_te_theta, pca_obj = self._to_theta(
+            X_tr_sc, X_va_sc, X_te_sc, pca_components=pca_components)
+
+        X_train_theta = torch.tensor(X_tr_theta, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_va_theta, dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_te_theta, dtype=torch.float32, device=self.device)
+        y_train_theta = torch.tensor(y_tr, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_va, dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_te, dtype=torch.long, device=self.device)
+
+        self.a_train = torch.tensor(a_tr, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_va, dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_te, dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        self._gan_view_cache = {"supported": False}
+
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+
     def split_ptb_xl(
         self,
         train_size=None,
@@ -2053,6 +2190,10 @@ class Dataset:
         elif self.dataset_name == "meps":
             kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
             return self.split_meps(**kw)
+        elif self.dataset_name == "acs_income":
+            _acs_drop = ("drop_protected", "protected_cols", "win_seconds", "step_seconds")
+            kw = {k: v for k, v in kwargs.items() if k not in _acs_drop}
+            return self.split_acs_income(**kw)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 

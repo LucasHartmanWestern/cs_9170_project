@@ -21,6 +21,7 @@
   "pca_clip": null,
   "radius_clip": 3.0,
   "gen_both_classes": true,
+  "bias_val": false,
   "seeds": [0, 2, 3, 5, 42],
   "reward_shaping": {
     "global_sigmoid_k": 10.0,
