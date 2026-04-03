@@ -37,7 +37,7 @@ def build_exp_group(spec_path: str, spec: dict) -> str:
     ts = datetime.now().strftime("%Y%m%d%H%M")
     return f"SPEC_{_spec_id(spec_path, spec)}__G{ts}"
 
-def run_spec_all_seeds(spec_path: str, device: str):
+def run_spec_all_seeds(spec_path: str, device: str, output_dir: str = "training_runs"):
     from training import Training
 
     spec = _load_spec(spec_path)
@@ -146,8 +146,12 @@ def run_spec_all_seeds(spec_path: str, device: str):
             beta_warmstart_from_alpha=bool(spec.get("beta_warmstart_from_alpha", False)),
             dp_protected_col=spec.get("dp_protected_col", None),
             eo_guard_threshold=eo_guard_threshold,
+            w_ot=float(lw.get("w_ot", 0.0)),
+            use_cmaes=bool(spec.get("use_cmaes", False)),
+            cmaes=spec.get("cmaes", None),
         )
 
+        trainer.save_dir = output_dir
         result = trainer()
 
         if result == "eo_guard_skip":
@@ -168,13 +172,14 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--spec", required=True, help="Path to a JSON experiment spec file")
     p.add_argument("--device", default="cuda:0", help="cuda:0 or cpu (auto-falls back to cpu if no CUDA)")
+    p.add_argument("--output_dir", default="training_runs", help="Directory to save results")
     args = p.parse_args()
 
     device = args.device
     if "cuda" in device and not torch.cuda.is_available():
         device = "cpu"
 
-    run_spec_all_seeds(args.spec, device)
+    run_spec_all_seeds(args.spec, device, output_dir=args.output_dir)
 
 if __name__ == "__main__":
     main()

@@ -376,3 +376,43 @@ def fairness_classification_metrics(
         "eod_max_diff": eod_max,
         "eod_avg_diff": eod_avg,
     }
+
+
+# ---------------- OT-inspired local reward ----------------
+
+def compute_ot_target(
+    x_disadv_pos: torch.Tensor,   # (N_d, D) real disadvantaged minority samples in PCA space
+    x_adv_pos: torch.Tensor,      # (N_a, D) real advantaged minority samples in PCA space
+) -> tuple:
+    """
+    Fit a diagonal Gaussian to the advantaged minority distribution (the OT transport
+    target). Returns (ot_mean, ot_log_var, ref_log_prob) where ref_log_prob is the
+    mean log-likelihood of real disadvantaged samples under the target — used as a
+    normalisation anchor so those samples score ~0.5 in ot_local_reward.
+    """
+    ot_mean    = x_adv_pos.mean(dim=0)                              # (D,)
+    ot_log_var = torch.log(x_adv_pos.var(dim=0).clamp(min=1e-6))   # (D,)
+
+    # Reference: expected log-prob of real disadvantaged minority under the target
+    diff_ref      = x_disadv_pos - ot_mean.unsqueeze(0)            # (N_d, D)
+    log_p_ref     = -0.5 * (ot_log_var.sum()
+                            + (diff_ref ** 2 / ot_log_var.exp()).sum(dim=1))  # (N_d,)
+    ref_log_prob  = float(log_p_ref.mean().item())
+
+    return ot_mean, ot_log_var, ref_log_prob
+
+
+def ot_local_reward(
+    x_syn: torch.Tensor,        # (T, D) synthetic samples
+    ot_mean: torch.Tensor,      # (D,)
+    ot_log_var: torch.Tensor,   # (D,)
+    ref_log_prob: float,        # normalisation anchor from compute_ot_target
+) -> torch.Tensor:
+    """
+    Per-sample reward in (0, 1). Samples matching the OT target distribution score
+    above 0.5; samples matching the real disadvantaged distribution score ~0.5.
+    """
+    diff    = x_syn - ot_mean.unsqueeze(0)                                     # (T, D)
+    log_p   = -0.5 * (ot_log_var.sum()
+                      + (diff ** 2 / ot_log_var.exp()).sum(dim=1))              # (T,)
+    return torch.sigmoid(log_p - ref_log_prob)                                  # (T,)

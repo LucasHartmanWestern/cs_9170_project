@@ -7,20 +7,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Target venue:** Neurocomputing (Elsevier journal)
 
-**Core contribution:** An RL-based framework for generating synthetic training data that improves classifier fairness under *positive-class outcome scarcity* — a regime where standard reweighting methods (GroupDRO, OT Repair) degrade because there are too few minority-group positive examples to reweight from. This is an underexplored area; existing fairness literature focuses on reweighting or in-processing, not generative augmentation under severe label scarcity.
+**Core contribution:** A generative augmentation framework for improving classifier fairness under *positive-class outcome scarcity* — a regime where standard reweighting methods (GroupDRO, OT Repair) degrade because there are too few minority-group positive examples to reweight from. The framework uses an optimization loop (currently REINFORCE; evolutionary search under investigation) to generate synthetic minority-positive training samples in PCA space, guided by a worst-group-loss reward signal.
 
 **Three claims that must be supported by results:**
 
 1. **Motivation claim** — Reweighting baselines (GroupDRO, OT Repair) fail under severe positive-class scarcity (DA+ ≤ 43 training examples). We do not. Well-supported by v18 results on census.
 
-2. **Competitive performance claim** — Our method achieves comparable or better fairness-utility tradeoff vs all baselines including CTGAN. v18 at census (EO=0.063±0.059, F1w=0.811, AUC=0.877) is the best result. Beats GroupDRO and CTGAN on both axes; near-OT-Repair EO with much better utility.
+2. **Competitive performance claim** — Our method achieves comparable or better fairness-utility tradeoff vs all baselines including CTGAN. v18 at census (EO=0.063±0.059, F1w=0.811, AUC=0.877) is the current best. Beats GroupDRO and CTGAN on both axes; near-OT-Repair EO with much better utility.
 
-3. **Ablation / design validation claim** — v17a (DVRL local reward) vs v18 (global-only) is the key ablation. Result is a clean negative: global-only is better. Paper narrative: global-only is the proposed design; DVRL is tested and shown not to improve, validating the simpler design.
+3. **Ablation / design validation claim** — Under active development. v17a (DVRL local reward) vs v18 (global-only) was the prior ablation. New ablation axis: sigmoid reward (v18) vs normalized reward (v19).
 
-**Current best config — v18 (global-only):**
+**Current best config — v18 (global-only, sigmoid reward):**
 ```
 reward_mode: fairness
-lambda_schedule: [1.0, 1.0]          ← pure global reward, no local
+global_sigmoid_k: 10.0               ← being tested against k=0 (normalized) in v19
+lambda_schedule: [1.0, 1.0]
 use_dvrl_local: false
 curriculum_learning: false
 gen_both_classes: true
@@ -36,13 +37,16 @@ ffnn: hidden=[32,16], lr=0.001, batch=64, epochs=20
 reinforce: hidden=[64,64], lr=0.0003, entropy_start=0.02, entropy_end=0.005
 pca_components: 10
 ```
-**Do NOT change these unless a new experiment explicitly beats v18.** Apply this config to all new datasets — only change dataset-specific fields (dataset_name, bias_pct, dp_protected_col, minority_id, win_seconds, step_seconds).
+**Do NOT change these unless a new experiment explicitly beats v18.**
 
-**Current paper status:** v18 is the confirmed primary method. Main results (census, CAPTURE-24) done. COMPAS race experiments validated (2026-03-30) — alpha-EO≈0.41 confirmed across 5 seeds, all 7 job specs ready. Credit dataset DROPPED.
+**Current paper status:** Active framework improvement phase. Dataset selection complete (census_income, capture24 confirmed; ACS Income dropped — not in scarcity regime at bias_pct=0.04). COMPAS race dropped — reweighting baselines outperform RL, narrative does not hold.
 
-**Results still needed before submission:**
-- COMPAS race: results received (2026-03-31) but paper narrative does not hold — see EXPERIMENTS.md "COMPAS Race Investigation" for full findings and next steps. Decision pending on inclusion strategy.
-- v18 census bias=0.05 — 5 seeds (queue for DRAC)
+**Active experiments (paper_results_v4):**
+- v19: Normalized reward (`global_sigmoid_k=0`, reward=(wgl_alpha−wgl_beta)/wgl_alpha). 2-seed census diagnostic. Running locally.
+
+**Framework improvement leads under investigation:**
+1. **Reward structure** — Replace sigmoid(10×Δwgl) with normalized relative improvement. Removes saturation, gives continuous gradient to REINFORCE. Testing as v19.
+2. **Evolutionary search** — The current REINFORCE loop is structurally a trajectory-level bandit (all 2000 steps get identical reward). True per-step credit assignment is not possible without per-step beta retraining. Evolutionary search (CMA-ES or NES) is theoretically better suited and under consideration as a replacement optimizer. Decision pending v19 results.
 
 ## Experiment Log
 

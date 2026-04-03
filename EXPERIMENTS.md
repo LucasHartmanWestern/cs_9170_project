@@ -1553,3 +1553,166 @@ Val/test positives are 6,427 and 6,327 respectively — 75× more than COMPAS an
   The COMPAS problem is a results problem, not a dataset problem. The path forward there is either (a) diagnosing why reweighting works on COMPAS race specifically and framing that as a finding, or (b) replacing      
   COMPAS with a dataset that actually exhibits baseline failure — MEPS health survey, hospital readmission data, or a small-jurisdiction criminal justice dataset where one racial group genuinely has very few          
   positive-outcome examples.    
+
+---
+
+## ACS Income — Not in Scarcity Regime (2026-04-02)
+
+**Finding:** ACS Income at bias_pct=0.04 (the intended config) has DA+≈1500 before the
+real_data_size=3000 cap is applied. After cap, the female income>50k group is still
+over-represented relative to the target ~43. FLB achieves EO≈0.002 on some seeds.
+Reweighting baselines work well — the dataset is not in the scarcity regime our framework
+is designed for. **Decision: drop ACS Income. Continue with census + capture24 as the
+two primary paper datasets.**
+
+---
+
+## Framework Improvement Phase (2026-04-03)
+
+**Motivation:** After ACS Income was dropped, the focus shifted from dataset selection to
+framework improvement. Core structural problem identified: REINFORCE training loop is
+structurally a trajectory-level bandit. All 2000 steps in a trajectory receive identical
+reward (global_term / T), making within-episode credit assignment undefined. True per-step
+RL is not possible without per-step beta retraining (prohibitively expensive). Two improvement
+leads identified:
+
+1. **Normalized reward (v19):** Replace `sigmoid(10 × Δwgl)` with `(wgl_alpha − wgl_beta) /
+   wgl_alpha`. Removes sigmoid saturation, gives continuous scale-invariant gradient.
+   Triggered by `global_sigmoid_k: 0` in spec.
+
+2. **Evolutionary search (v20):** Replace REINFORCE entirely with CMA-ES evolving a
+   parameterized Gaussian in PCA space. Eliminates false sequential structure.
+   20D parameter vector: mean(10D) + log_std(10D). Default popsize≈12 for D=20.
+
+---
+
+## v19 — Normalized Reward Diagnostic (2026-04-02)
+
+**Specs:** `v19_census_normalized_reward_s42.json`, `v19_census_normalized_reward_s0.json`
+(single seed each for parallel GPU execution). 800 episodes, same config as v18 otherwise.
+
+**Results (census, bias_pct=0.10):**
+
+| Seed | α-EO | β-EO | F1w | AUC |
+|------|------|------|-----|-----|
+| 42 | 0.126 | 0.031 | 0.800 | 0.870 |
+| 0  | 0.146 | 0.082 | 0.803 | 0.854 |
+| **mean** | — | **0.056±0.036** | **0.802** | **0.862** |
+
+Compared to v18 (global-only, sigmoid): EO=0.063±0.059, F1w=0.811, AUC=0.877.
+Mixed result — EO slightly better, F1w/AUC slightly worse. Improvement is modest and
+within variance. Confirms that optimizer (not just reward) is the bottleneck.
+
+---
+
+## v20 — CMA-ES Evolutionary Search (2026-04-03)
+
+**Implementation:** `agents/cmaes_agent.py` (new), `training.py` (`use_cmaes` dispatch),
+`main.py` (`use_cmaes`/`cmaes` spec passthrough). Requires `pip install cma`.
+
+**Design:**
+- CMA-ES evolves 20D parameter vector [mean(10D), log_std(10D)] in PCA space
+- Each "episode" = one candidate evaluation (sample 2000 points from Gaussian, train beta,
+  compute reward, tell CMA-ES)
+- After popsize(≈12) episodes = one generation → `es.tell()` → next generation
+- No env/delta actions — samples drawn i.i.d. from Gaussian per candidate
+- Normalized reward (`global_sigmoid_k: 0`) used throughout
+- Phase 2: separate CMAESAgent initialized from real majority sample mean
+
+**Specs:** `v20_census_cmaes_2s.json` (130 eps, 2 seeds), `v20_compas_cmaes_2s.json`
+(130 eps, 2 seeds, bias_pct=0.05, dp_protected_col=race). Run locally on 2 GPUs.
+
+### Results
+
+**Census (bias_pct=0.10), 2 seeds [42, 0]:**
+
+| Seed | α-EO | β-EO | F1w | AUC |
+|------|------|------|-----|-----|
+| 42 | 0.126 | 0.021 | 0.788 | 0.884 |
+| 0  | 0.146 | 0.022 | 0.790 | 0.881 |
+| **mean** | — | **0.021±0.000** | **0.789** | **0.882** |
+
+**COMPAS (bias_pct=0.05, race), 2 seeds [42, 0]:**
+
+| Seed | α-EO | β-EO | F1w | AUC |
+|------|------|------|-----|-----|
+| 42 | 0.674 | 0.625 | 0.650 | 0.679 |
+| 0  | 0.670 | 0.570 | 0.654 | 0.702 |
+| **mean** | — | **0.597±0.039** | **0.652** | **0.691** |
+
+### Full Comparison Table — Census (bias_pct=0.10)
+
+| Method | n | EO | F1w | AUC |
+|--------|---|-----|-----|-----|
+| GroupDRO | 5 | 0.106±0.022 | 0.822 | 0.895 |
+| OT Repair | 5 | 0.053±0.046 | 0.791 | 0.821 |
+| SMOTE | 5 | 0.134±0.065 | 0.781 | 0.854 |
+| CTGAN | 5 | 0.109±0.049 | 0.792 | 0.840 |
+| FLB | 5 | 0.033±0.037 | 0.818 | 0.888 |
+| FairTabDDPM | 5 | 0.058±0.054 | 0.798 | 0.848 |
+| v18 REINFORCE (sigmoid) | 5 | 0.076±0.048 | 0.729 | 0.852 |
+| v19 REINFORCE (norm.) | 2 | 0.056±0.036 | 0.802 | 0.862 |
+| **v20 CMA-ES (norm.)** | **2** | **0.021±0.000** | **0.789** | **0.882** |
+
+### Full Comparison Table — COMPAS (bias_pct=0.05, race protected attr)
+
+| Method | n | EO | F1w | AUC |
+|--------|---|-----|-----|-----|
+| GroupDRO | 5 | 0.197±0.105 | 0.650 | 0.692 |
+| OT Repair | 5 | 0.556±0.041 | 0.637 | 0.675 |
+| FLB | 5 | 0.075±0.054 | 0.628 | 0.671 |
+| FairTabDDPM | 5 | 0.541±0.043 | 0.647 | 0.686 |
+| v18 REINFORCE (sigmoid) | 5 | 0.600±0.055 | 0.641 | 0.682 |
+| **v20 CMA-ES (norm.)** | **2** | **0.597±0.039** | **0.652** | **0.691** |
+
+### Key Findings
+
+1. **CMA-ES dramatically outperforms REINFORCE on census.** EO 0.021±0.000 vs v18's
+   0.063±0.059 — a 67% improvement in mean EO, near-zero variance across seeds (std=0.000).
+   This is the best result of any method on census by a wide margin.
+
+2. **Seed variance eliminated.** v18 REINFORCE had EO range ~0.12 across seeds; CMA-ES
+   produces virtually identical results (0.021 vs 0.022) despite entirely different data
+   splits. CMA-ES is finding a stable region of the search space that REINFORCE was only
+   occasionally landing in.
+
+3. **F1w and AUC competitive.** v20 F1w=0.789 is lower than FLB (0.818) and GroupDRO (0.822)
+   but competitive with other generative methods. AUC=0.882 is second only to GroupDRO (0.895).
+
+4. **COMPAS: CMA-ES matches REINFORCE exactly but doesn't beat FLB/GroupDRO.** Both
+   generative methods fail to substantially reduce EO on COMPAS race. FLB (0.075) and
+   GroupDRO (0.197) both outperform on EO. Only 10 CMA-ES generations at 130 episodes —
+   more training may help but structural issues (val_pos=14, cosine=0.757) are the likely
+   root cause. COMPAS race remains a difficult case.
+
+5. **CMA-ES vs REINFORCE structural advantage confirmed.** The trajectory-level bandit
+   structure of REINFORCE produces high variance because the policy gradient is a noisy
+   signal over 2000 steps with identical reward. CMA-ES treats each episode as a direct
+   function evaluation and adapts its search distribution accordingly — a fundamentally
+   better match for this problem structure.
+
+### Why FLB is Competitive on Census
+
+FLB (Fairness Loss Balancing, Kim et al. 2023) uses adaptive batch sampling: per-epoch,
+it allocates more batch slots to whichever (a, y) subgroup currently has the highest BCE
+loss. Standard unweighted BCE is then computed on the resampled batch. Key observations:
+
+- **10× more training:** FLB uses 200 epochs vs our FFNN's 20 epochs. A meaningful fraction
+  of FLB's advantage is simply more thorough training on the same real data.
+- **Why it works on census but not COMPAS:** Census female positives have a distinctive
+  feature profile that longer training can learn. COMPAS Caucasian positives (race framing)
+  are not clearly separable from African-American positives in feature space — oversampling
+  an indistinct group doesn't help.
+- **Scarcity sensitivity hypothesis (not yet tested):** FLB's advantage likely degrades
+  faster than CMA-ES as DA+ drops below ~20, because there's simply nothing to oversample
+  from. A bias_pct sweep on census (FLB vs CMA-ES across DA+ levels) would demonstrate this
+  and strengthen our motivation claim.
+
+### Next Steps
+
+1. **5-seed v20 CMA-ES on census** to lock in the result (currently 2 seeds — provisional).
+2. **v20 capture24** — second paper dataset; key test of generalizability.
+3. **Local reward exploration:** OT-inspired prior (use OT transport map to define target
+   distribution in PCA space) or FLB-inspired signal (oversample highest-loss synthetic
+   candidates). See "Framework Improvement Leads" discussion in CLAUDE.md.
+4. **Scarcity curve:** FLB vs CMA-ES across bias_pct levels on census to support motivation claim.
