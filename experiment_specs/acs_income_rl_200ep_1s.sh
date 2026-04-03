@@ -2,7 +2,7 @@
 #SBATCH --job-name=acs_rl200
 #SBATCH --account=def-mcapretz
 #SBATCH --time=02:00:00
-#SBATCH --mem=6G
+#SBATCH --mem=12G
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/logs/acs_income_rl_200ep_1s.out
