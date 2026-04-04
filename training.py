@@ -1027,7 +1027,11 @@ class Training:
 
             global_obj = diagnostics.get("global", {}).get("global_obj", 0.0)
             candidate_idx = episode % agent.popsize
-            agent.tell(candidate_idx, global_obj)
+            # Use the full episode return (global + local) so that OT / other local
+            # rewards actually influence CMA-ES search. When lambda=1 or w_ot=0 this
+            # reduces to global_obj (no behaviour change for pure-global runs).
+            cmaes_obj = float(rewards.sum().item())
+            agent.tell(candidate_idx, cmaes_obj)
             agent.advance()
 
             # End of generation — update CMA-ES only when full generation is complete
