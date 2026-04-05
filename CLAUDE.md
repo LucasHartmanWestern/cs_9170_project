@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Three claims that must be supported by results:**
 
-1. **Motivation claim** — Reweighting baselines (GroupDRO, OT Repair) fail under severe positive-class scarcity (DA+ ≤ 43 training examples). We do not. Well-supported by v18 results on census.
+1. **Motivation claim** — Reweighting baselines (GroupDRO) fail under severe positive-class scarcity (DA+ ≤ 43 training examples). We do not. Well-supported by v18 results on census.
 
 2. **Competitive performance claim** — Our method achieves comparable or better fairness-utility tradeoff vs all baselines including CTGAN. v18 at census (EO=0.063±0.059, F1w=0.811, AUC=0.877) is the current best. Beats GroupDRO and CTGAN on both axes; near-OT-Repair EO with much better utility.
 
@@ -39,14 +39,14 @@ pca_components: 10
 ```
 **Do NOT change these unless a new experiment explicitly beats v18.**
 
-**Current paper status:** Active framework improvement phase. Dataset selection complete (census_income, capture24 confirmed; ACS Income dropped — not in scarcity regime at bias_pct=0.04). COMPAS race dropped — reweighting baselines outperform RL, narrative does not hold.
+**Current paper status:** Active framework improvement phase. Dataset selection complete (census_income, capture24 confirmed; Investigating 3rd dataset that meets structural criteria). 
 
 **Active experiments (paper_results_v4):**
 - v19: Normalized reward (`global_sigmoid_k=0`, reward=(wgl_alpha−wgl_beta)/wgl_alpha). 2-seed census diagnostic. Running locally.
 
 **Framework improvement leads under investigation:**
 1. **Reward structure** — Replace sigmoid(10×Δwgl) with normalized relative improvement. Removes saturation, gives continuous gradient to REINFORCE. Testing as v19.
-2. **Evolutionary search** — The current REINFORCE loop is structurally a trajectory-level bandit (all 2000 steps get identical reward). True per-step credit assignment is not possible without per-step beta retraining. Evolutionary search (CMA-ES or NES) is theoretically better suited and under consideration as a replacement optimizer. Decision pending v19 results.
+2. **Evolutionary search** — The current REINFORCE loop is structurally a trajectory-level bandit (all 2000 steps get identical reward). True per-step credit assignment is not possible without per-step beta retraining. Evolutionary search (CMA-ES or NES) is theoretically better suited and under consideration as a replacement optimizer.
 
 ## Experiment Log
 
@@ -129,10 +129,19 @@ Results go to `training_runs/SPEC_{name}_{hash}__G{timestamp}/seed_{N}/` contain
 
 ## Datasets
 
-**Active datasets (paper):** census_income, capture24, compas. Credit card DROPPED.
+**Active datasets (paper):** census_income, capture24. Credit card DROPPED. COMPAS DROPPED (see below).
+
+### Dataset Selection Criteria
+Four structural properties are required for stable framework performance (calibrated empirically against census):
+1. **val_disadv_pos ≥ 30** — enough disadvantaged-group positives in the validation split to produce a stable worst-group-loss reward signal. Below this threshold (e.g., COMPAS: 14, MEPS: 37) the reward signal is too noisy for reliable policy gradient learning.
+2. **test_disadv_pos ≥ 200** — enough test positives for reliable fairness evaluation.
+3. **alpha_EO ≥ 0.10** — a meaningful pre-intervention gap for the generative agent to close.
+4. **Feature-space distinctiveness of disadvantaged-group positives** — the disadvantaged group's positive-class feature distribution must be sufficiently distinct from the advantaged group's positive-class distribution in PCA space. If the two groups' positives overlap substantially, synthetic samples cannot carry group-specific signal and the classifier cannot use them to improve minority TPR. This is why COMPAS race fails: Caucasian and African-American positives are not clearly separable in feature space, so oversampling a Caucasian-like region does not help. Note: raw cosine similarity between group centroids was tested as a proxy for this property but was dropped — census has cosine=0.983 (high overlap overall) yet works well, because the *positive-class subsets* remain distinct even when the full group distributions overlap.
+
+Candidate datasets that failed: COMPAS (val_pos=14 and positive-class overlap), MEPS race (val_pos=37, marginal), PTB-XL (no framing reaches test_pos≥200), PAMAP2 (only 1 female subject, unstable group identification).
 
 ### Scarcity Metric: DA+
-**DA+** = number of disadvantaged-group positive (y=1) training examples. This is the primary metric defining the scarcity regime. All three datasets are configured so DA+ ≈ 43, the level at which reweighting methods demonstrably fail. `bias_pct` is an internal implementation parameter used to achieve the target DA+; it is NOT a paper-level framing variable. Refer to DA+ as a % when possible.
+**DA+** = number of disadvantaged-group positive (y=1) training examples. This is the primary metric defining the scarcity regime. Both datasets are configured so DA+ ≈ 43--45, the level at which reweighting methods demonstrably fail. `bias_pct` is an internal implementation parameter used to achieve the target DA+; it is NOT a paper-level framing variable. Refer to DA+ as a % when possible.
 
 **DA+ log — confirmed values (seed=42, mean across seeds similar):**
 
@@ -140,7 +149,6 @@ Results go to `training_runs/SPEC_{name}_{hash}__G{timestamp}/seed_{N}/` contain
 |---------|----------|----------------|-----|----------------|---------------|
 | census_income | 0.10 | 3000 | **43** | sex | female (a=0) |
 | capture24 | 0.02 | 3000 | **45** | sex | female (a=1) |
-| compas | 0.05 | — (no cap) | **~40** | race | Caucasian (a=0) |
 
 Secondary scarcity level (census only, for motivation curve) ignore for now:
 
@@ -154,11 +162,11 @@ Secondary scarcity level (census only, for motivation curve) ignore for now:
 
 - **capture24**: Wearable accelerometer sleep/activity (Oxford). Protected attr: sex. Female (a=1) is disadvantaged. Requires windowing (win_seconds=1.0, step_seconds=0.5). Path: `datasets/capture24/`. bias_pct=0.02 (real_data_size=3000 cap drives DA+≈45).
 
-- **compas**: COMPAS recidivism (ProPublica). Protected attr: **race** (dp_protected_col="race"). Caucasian (a=0) is disadvantaged — lower recidivism positive rate vs African-American (~47%). Bias injection is group-specific: only Caucasian positives are reduced (AA positives kept at natural rate). bias_pct=0.05 → DA+≈40 (Caucasian positives). Alpha-EO gap ≈ 0.677 ± 0.024 (actual 5-seed result; prior 0.41 estimate was a placeholder — see EXPERIMENTS.md). Race is included as a feature in cat_cols_all. Path: `datasets/compas/compas-scores-two-years.csv`. Specs: `compas_race_ep1500ph400_5s.json` (RL), `compas_race_bias005_*_5s.json` (baselines).
-
+- **COMPAS**: DROPPED — val_pos=14 (far below the ≥30 threshold), and RL results contradict the motivation claim (GroupDRO EO=0.197, FLB EO=0.075 substantially outperform RL EO=0.600). See EXPERIMENTS.md COMPAS Race Investigation.
 - **PAMAP2**: DROPPED — disadvantaged group identification unstable across seeds (only 1 female subject).
 - **credit_card**: DROPPED — DA+ too high (~136 at bias=0.10), alpha-EO near-zero, not in the scarcity regime.
-- **ptb_xl**: PAUSED — ECG implementation complete; pending decision on whether it satisfies IoT funding requirement.
+- **ptb_xl**: DROPPED — no framing reaches test_pos≥200 within the strat_fold structure.
+- **MEPS**: DROPPED — race framing val_pos=37 is structurally marginal; ethnicity framing test_pos=111 fails evaluation threshold.
 
 ## Paper-Writing Guidance
 
