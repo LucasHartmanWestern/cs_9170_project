@@ -33,6 +33,7 @@ EXPECTED_SEEDS = {
 DS_LABELS  = {"census": "Census", "compas": "COMPAS*", "capture24": "Capture-24"}
 DATASETS_3 = ["census", "compas", "capture24"]
 DATASETS_2 = ["census", "capture24"]
+DATASETS_1 = ["census"]
 
 DS_COLORS = {
     "census":    "#2b4590",
@@ -116,6 +117,16 @@ def get_auc(df): return stats(df, "beta_roc_auc")
 def get_alpha_eo(df): return stats(df, "alpha_eod_max_diff")
 
 
+def transform_eo(means, stds):
+    """Convert EO gap to fairness score: x' = 1 - x/max(X). Higher is better."""
+    means = np.array([float(m) for m in means])
+    stds  = np.array([float(s) for s in stds])
+    max_x = np.nanmax(means)
+    if max_x == 0:
+        return means.tolist(), stds.tolist()
+    return (1.0 - means / max_x).tolist(), (stds / max_x).tolist()
+
+
 def save_fig(name):
     paths = [os.path.join(OUT_DIR, name), os.path.join(FIG_DIR, name)]
     for p in paths:
@@ -124,7 +135,7 @@ def save_fig(name):
 
 
 def make_bar_ax(ax, labels, means, stds, colors, hatches=None,
-                ylabel="EO gap ↓", title="", fontsize_labels=11,
+                ylabel="Fairness score", title="", fontsize_labels=11,
                 fontsize_ticks=10, fontsize_title=12):
     x = np.arange(len(labels))
     bars = ax.bar(x, means, yerr=stds, capsize=4,
@@ -189,15 +200,27 @@ EP_KEYS = {
         ("capture24_ep2000ph600", "ep2000\nph600"),
     ],
 }
+# 2-bar census-only variant: ep1500 and ep2000 only, majority recovery labels removed
+EP_KEYS_2BAR = {
+    "census": [
+        ("census_ep1500ph400", "ep 1500"),
+        ("census_ep2000ph600", "ep 2000"),
+    ],
+}
 EP_PH_KEYS = ["ep800ph0", "ep800ph200", "ep1500ph400", "ep2000ph600"]
-EP_CHOSEN  = {"census": 2, "capture24": 1}
+EP_CHOSEN      = {"census": 2, "capture24": 1}
+EP_CHOSEN_2BAR = {"census": 0}
 
 
-def _make_ep_eo_fig(datasets, ncols, figsize, fname, show_compas_placeholder):
+def _make_ep_eo_fig(datasets, ncols, figsize, fname, show_compas_placeholder,
+                    ep_keys_override=None, ep_chosen_override=None):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Episode budget ablation (EO gap)", fontsize=14, fontweight="bold")
+    fig.suptitle("Episode budget ablation", fontsize=14, fontweight="bold")
+
+    ep_keys_use   = ep_keys_override   if ep_keys_override   is not None else EP_KEYS
+    ep_chosen_use = ep_chosen_override if ep_chosen_override is not None else EP_CHOSEN
 
     for ci, ds in enumerate(datasets):
         ax = axes[ci]
@@ -208,11 +231,11 @@ def _make_ep_eo_fig(datasets, ncols, figsize, fname, show_compas_placeholder):
 
         seeds  = EXPECTED_SEEDS[ds]
         col    = DS_COLORS[ds]
-        chosen = EP_CHOSEN.get(ds, 2)
+        chosen = ep_chosen_use.get(ds, 0)
 
         means, stds, labels = [], [], []
 
-        for ki, (key, lbl) in enumerate(EP_KEYS.get(ds, [])):
+        for ki, (key, lbl) in enumerate(ep_keys_use.get(ds, [])):
             if ds == "compas":
                 ph_key = EP_PH_KEYS[ki]
                 m, s = COMPAS_EP_PH[ph_key]["eo"]
@@ -226,14 +249,14 @@ def _make_ep_eo_fig(datasets, ncols, figsize, fname, show_compas_placeholder):
             means.append(m); stds.append(s); labels.append(lbl)
 
         if ds == "compas":
-            # Use placeholder EP_KEYS for COMPAS
             labels = ["ep800\nph0", "ep800\nph200", "ep1500\nph400", "ep2000\nph600"]
+
+        means, stds = transform_eo(means, stds)
 
         base_rgb = matplotlib.colors.to_rgb(col)
         colors = [base_rgb + (CHOSEN_ALPHA if i == chosen else OTHER_ALPHA,)
                   for i in range(len(labels))]
-        bars = make_bar_ax(ax, labels, means, stds, colors,
-                           ylabel="EO gap ↓", title=DS_LABELS[ds])
+        bars = make_bar_ax(ax, labels, means, stds, colors, title=DS_LABELS[ds])
         bars[chosen].set_edgecolor("#111111")
         bars[chosen].set_linewidth(1.8)
         label_bars(ax, bars, means)
@@ -254,6 +277,13 @@ _make_ep_eo_fig(DATASETS_3, 3, (13, 5),
 _make_ep_eo_fig(DATASETS_2, 2, (9, 5),
                 "fig_episode_ablation_eo_nodataset.png",
                 show_compas_placeholder=False)
+
+# 1-dataset (census only, ep1500 and ep2000 only)
+_make_ep_eo_fig(DATASETS_1, 1, (5, 5),
+                "fig_episode_ablation_census.png",
+                show_compas_placeholder=False,
+                ep_keys_override=EP_KEYS_2BAR,
+                ep_chosen_override=EP_CHOSEN_2BAR)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -283,7 +313,7 @@ def _make_delta_fig(datasets, ncols, figsize, fname):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Delta scale ablation (EO gap)", fontsize=14, fontweight="bold")
+    fig.suptitle("Delta scale ablation", fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
         seeds = EXPECTED_SEEDS[ds]
@@ -304,15 +334,16 @@ def _make_delta_fig(datasets, ncols, figsize, fname):
                     print(f"  MISSING: delta {lbl} {ds}")
             means.append(m); stds.append(s)
 
+        means, stds = transform_eo(means, stds)
+
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA if i == DELTA_CHOSEN else OTHER_ALPHA,)
                     for i in range(len(DELTA_LABELS))]
-        bars = make_bar_ax(ax, DELTA_LABELS, means, stds, colors,
-                           ylabel="EO gap ↓", title=DS_LABELS[ds])
+        bars = make_bar_ax(ax, DELTA_LABELS, means, stds, colors, title=DS_LABELS[ds])
         bars[DELTA_CHOSEN].set_edgecolor("#111111")
         bars[DELTA_CHOSEN].set_linewidth(1.8)
         label_bars(ax, bars, means)
-        ax.set_xlabel("δ scale", fontsize=11)
+        ax.set_xlabel("Delta scale", fontsize=11)
 
     if "compas" in datasets:
         pending_note(fig)
@@ -323,6 +354,7 @@ def _make_delta_fig(datasets, ncols, figsize, fname):
 
 _make_delta_fig(DATASETS_3, 3, (13, 5),   "fig_delta_ablation_v3_large.png")
 _make_delta_fig(DATASETS_2, 2, (9,  5),   "fig_delta_ablation_nodataset.png")
+_make_delta_fig(DATASETS_1, 1, (5,  5),   "fig_delta_ablation_census.png")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -340,7 +372,7 @@ def _make_dvrl_fig(datasets, ncols, figsize, fname):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Global-only vs. local reward augmentation (EO gap)",
+    fig.suptitle("Global-only vs. local reward augmentation",
                  fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
@@ -365,17 +397,14 @@ def _make_dvrl_fig(datasets, ncols, figsize, fname):
         means   = [g_eo[0], d_eo[0]]
         stds    = [g_eo[1], d_eo[1]]
 
+        means, stds = transform_eo(means, stds)
+
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA,), base_rgb + (OTHER_ALPHA,)]
-        bars = make_bar_ax(ax, labels, means, stds, colors,
-                           ylabel="EO gap ↓", title=DS_LABELS[ds])
+        bars = make_bar_ax(ax, labels, means, stds, colors, title=DS_LABELS[ds])
         bars[0].set_edgecolor("#111111")
         bars[0].set_linewidth(1.8)
         label_bars(ax, bars, means)
-
-        ax.axhline(a_eo[0], color="#777777", linestyle="--", linewidth=1.0,
-                   label=f"α-EO={a_eo[0]:.3f}")
-        ax.legend(fontsize=9, loc="upper right")
 
     if "compas" in datasets:
         pending_note(fig)
@@ -386,6 +415,7 @@ def _make_dvrl_fig(datasets, ncols, figsize, fname):
 
 _make_dvrl_fig(DATASETS_3, 3, (13, 5), "fig_dvrl_ablation_v3_large.png")
 _make_dvrl_fig(DATASETS_2, 2, (9,  5), "fig_dvrl_ablation_nodataset.png")
+_make_dvrl_fig(DATASETS_1, 1, (5,  5), "fig_dvrl_ablation_census.png")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -415,7 +445,7 @@ def _make_pca_fig(datasets, ncols, figsize, fname):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("PCA dimensionality ablation (EO gap)", fontsize=14, fontweight="bold")
+    fig.suptitle("PCA dimensionality ablation", fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
         seeds  = EXPECTED_SEEDS[ds]
@@ -439,11 +469,12 @@ def _make_pca_fig(datasets, ncols, figsize, fname):
                     print(f"  MISSING: pca {key} {ds}")
                 means.append(m); stds.append(s); labels.append(lbl)
 
+        means, stds = transform_eo(means, stds)
+
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA if i == chosen else OTHER_ALPHA,)
                     for i in range(len(labels))]
-        bars = make_bar_ax(ax, labels, means, stds, colors,
-                           ylabel="EO gap ↓", title=DS_LABELS[ds])
+        bars = make_bar_ax(ax, labels, means, stds, colors, title=DS_LABELS[ds])
         bars[chosen].set_edgecolor("#111111")
         bars[chosen].set_linewidth(1.8)
         label_bars(ax, bars, means)
@@ -457,6 +488,7 @@ def _make_pca_fig(datasets, ncols, figsize, fname):
 
 _make_pca_fig(DATASETS_3, 3, (13, 5), "fig_pca_ablation_v3_large.png")
 _make_pca_fig(DATASETS_2, 2, (9,  5), "fig_pca_ablation_nodataset.png")
+_make_pca_fig(DATASETS_1, 1, (5,  5), "fig_pca_ablation_census.png")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -484,7 +516,7 @@ def _make_ffnn_fig(datasets, ncols, figsize, fname):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Beta classifier training epochs ablation (EO gap)",
+    fig.suptitle("Beta classifier training epochs ablation",
                  fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
@@ -508,15 +540,16 @@ def _make_ffnn_fig(datasets, ncols, figsize, fname):
                     print(f"  MISSING: ffnn {key} {ds}")
                 means.append(m); stds.append(s); labels.append(lbl)
 
+        means, stds = transform_eo(means, stds)
+
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA if i == FFNN_CHOSEN else OTHER_ALPHA,)
                     for i in range(len(labels))]
-        bars = make_bar_ax(ax, labels, means, stds, colors,
-                           ylabel="EO gap ↓", title=DS_LABELS[ds])
+        bars = make_bar_ax(ax, labels, means, stds, colors, title=DS_LABELS[ds])
         bars[FFNN_CHOSEN].set_edgecolor("#111111")
         bars[FFNN_CHOSEN].set_linewidth(1.8)
         label_bars(ax, bars, means)
-        ax.set_xlabel("β epochs", fontsize=11)
+        ax.set_xlabel("Beta epochs", fontsize=11)
 
     if "compas" in datasets:
         pending_note(fig)
@@ -527,6 +560,7 @@ def _make_ffnn_fig(datasets, ncols, figsize, fname):
 
 _make_ffnn_fig(DATASETS_3, 3, (13, 5), "fig_ffnn_ablation_v3_large.png")
 _make_ffnn_fig(DATASETS_2, 2, (9,  5), "fig_ffnn_ablation_nodataset.png")
+_make_ffnn_fig(DATASETS_1, 1, (5,  5), "fig_ffnn_ablation_census.png")
 
 
 print("\nAll enhanced ablation figures done.")
