@@ -66,12 +66,11 @@ def load_full(path):
 
 # ── figure ─────────────────────────────────────────────────────────────────────
 
-fig, axes_row = plt.subplots(1, 2, figsize=(11, 4.5), sharey=False)
-axes = np.array([[axes_row[0], axes_row[1]]])
-fig.suptitle("Episode Return — Census Income (5 seeds)",
-             fontsize=13, fontweight="bold")
+fig, axes_col = plt.subplots(2, 1, figsize=(6, 9), sharey=False)
+axes = np.array([[axes_col[0]], [axes_col[1]]])
+fig.suptitle("Episode Return", fontsize=13, fontweight="bold")
 
-panel_order = [(0,0), (0,1)]
+panel_order = [(0,0), (1,0)]
 
 for (row, col), (ep_key, cfg_label, gen_both) in zip(panel_order, EP_CONFIGS):
     ax = axes[row, col]
@@ -81,7 +80,6 @@ for (row, col), (ep_key, cfg_label, gen_both) in zip(panel_order, EP_CONFIGS):
     if run_dir is None:
         ax.text(0.5, 0.5, f"Missing:\n{ep_key}", ha="center", va="center",
                 transform=ax.transAxes, fontsize=10, color="#cc0000")
-        ax.set_title(cfg_label, fontsize=10)
         continue
 
     seed_curves = []
@@ -116,32 +114,20 @@ for (row, col), (ep_key, cfg_label, gen_both) in zip(panel_order, EP_CONFIGS):
     min_len = min(len(c) for c in seed_curves)
     arr  = np.array([c.values[:min_len] for c in seed_curves])
     eps  = seed_curves[0].index[:min_len]
-    mean = arr.mean(0)
-    std  = arr.std(0, ddof=1) if len(arr) > 1 else np.zeros_like(mean)
+    mean    = arr.mean(0)
+    arr_min = arr.min(0)
+    arr_max = arr.max(0)
 
     ax.plot(eps, mean, color=COLOR_MAIN, linewidth=2.2, zorder=5,
-            label=f"Mean (n={len(seed_curves)})")
-    ax.fill_between(eps, mean - std, mean + std,
-                    color=COLOR_MAIN, alpha=0.20, zorder=4, label="±1 std")
+            label="Mean")
+    ax.fill_between(eps, arr_min, arr_max,
+                    color=COLOR_MAIN, alpha=0.20, zorder=4, label="Min-max range")
 
     # Phase-2 boundary
     if actual_ph2_start and actual_ph2_start > 0:
         ax.axvline(actual_ph2_start, color="#cc0000", linewidth=1.5,
                    linestyle="--", alpha=0.85, zorder=6, label="Phase 2 start")
-        y_lo, y_hi = ax.get_ylim()
-        ax.text(actual_ph2_start + eps[-1] * 0.015, y_hi * 0.98,
-                "↓ ph2", color="#cc0000", fontsize=8.5, va="top", fontweight="bold")
 
-    # Reference at 0.5 (beta = alpha, no improvement)
-    ax.axhline(0.5, color="#aaaaaa", linewidth=0.9, linestyle=":",
-               label="β = α (0.5)", zorder=3)
-
-    # Title styling
-    star = "★ " if is_chosen else ""
-    title_color = "#1a4f8a" if is_chosen else "black"
-    title_weight = "bold" if is_chosen else "normal"
-    ax.set_title(f"{star}{cfg_label}", fontsize=10,
-                 fontweight=title_weight, color=title_color)
 
     ax.set_xlabel("Episode", fontsize=10)
     ax.set_ylabel("Episode return", fontsize=10)

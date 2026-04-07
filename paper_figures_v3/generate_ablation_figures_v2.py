@@ -65,7 +65,7 @@ COMPAS_PCA_PH = {
     "No PCA":       (0.420, 0.050),
     "PCA-8":        (0.208, 0.042),
     "PCA-9":        (0.192, 0.040),
-    "PCA-10 \u2605": (0.180, 0.040),
+    "PCA-10": (0.180, 0.040),
 }
 COMPAS_FFNN_PH = {
     "10":        (0.308, 0.051),
@@ -120,6 +120,21 @@ def get_alpha_eo(df): return stats(df, "alpha_eod_max_diff")
 def transform_eo(means, stds):
     """Return raw EO gap values unchanged."""
     return list(means), list(stds)
+
+
+def transform_eo_inverted(means, stds):
+    """Min-max normalise EO then invert: EO_inv = 1 - (EO - min)/(max - min).
+    Result is in [0,1] where 1 is best (lowest EO) and 0 is worst.
+    Stds are kept in original EO units (not rescaled) to avoid inflated error bars."""
+    means = np.array([float(m) for m in means])
+    stds  = np.array([float(s) for s in stds])
+    min_x = np.nanmin(means)
+    max_x = np.nanmax(means)
+    rng = max_x - min_x
+    if rng == 0:
+        return [1.0] * len(means), stds.tolist()
+    inv = 1.0 - (means - min_x) / rng
+    return inv.tolist(), stds.tolist()
 
 
 def save_fig(name):
@@ -208,11 +223,11 @@ EP_CHOSEN_2BAR = {"census": 0}
 
 
 def _make_ep_eo_fig(datasets, ncols, figsize, fname, show_compas_placeholder,
-                    ep_keys_override=None, ep_chosen_override=None):
+                    ep_keys_override=None, ep_chosen_override=None,
+                    transform_fn=None):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Episode Budget", fontsize=14, fontweight="bold")
 
     ep_keys_use   = ep_keys_override   if ep_keys_override   is not None else EP_KEYS
     ep_chosen_use = ep_chosen_override if ep_chosen_override is not None else EP_CHOSEN
@@ -246,12 +261,13 @@ def _make_ep_eo_fig(datasets, ncols, figsize, fname, show_compas_placeholder,
         if ds == "compas":
             labels = ["ep800\nph0", "ep800\nph200", "ep1500\nph400", "ep2000\nph600"]
 
-        means, stds = transform_eo(means, stds)
+        means, stds = (transform_fn or transform_eo)(means, stds)
 
         base_rgb = matplotlib.colors.to_rgb(col)
         colors = [base_rgb + (CHOSEN_ALPHA if i == chosen else OTHER_ALPHA,)
                   for i in range(len(labels))]
-        bars = make_bar_ax(ax, labels, means, stds, colors, title=DS_LABELS[ds])
+        panel_title = "Episode Budget Ablation" if ncols == 1 else DS_LABELS[ds]
+        bars = make_bar_ax(ax, labels, means, stds, colors, title=panel_title)
         bars[chosen].set_edgecolor("#111111")
         bars[chosen].set_linewidth(1.8)
         label_bars(ax, bars, means)
@@ -302,11 +318,10 @@ DELTA_LABELS = ["0.05", "0.10", "0.20", "0.50"]
 DELTA_CHOSEN = 1
 
 
-def _make_delta_fig(datasets, ncols, figsize, fname):
+def _make_delta_fig(datasets, ncols, figsize, fname, transform_fn=None):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Delta Scale", fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
         seeds = EXPECTED_SEEDS[ds]
@@ -327,12 +342,13 @@ def _make_delta_fig(datasets, ncols, figsize, fname):
                     print(f"  MISSING: delta {lbl} {ds}")
             means.append(m); stds.append(s)
 
-        means, stds = transform_eo(means, stds)
+        means, stds = (transform_fn or transform_eo)(means, stds)
 
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA if i == DELTA_CHOSEN else OTHER_ALPHA,)
                     for i in range(len(DELTA_LABELS))]
-        bars = make_bar_ax(ax, DELTA_LABELS, means, stds, colors, title=DS_LABELS[ds])
+        panel_title = "Delta Scale Ablation" if ncols == 1 else DS_LABELS[ds]
+        bars = make_bar_ax(ax, DELTA_LABELS, means, stds, colors, title=panel_title)
         bars[DELTA_CHOSEN].set_edgecolor("#111111")
         bars[DELTA_CHOSEN].set_linewidth(1.8)
         label_bars(ax, bars, means)
@@ -361,12 +377,10 @@ DVRL_CONFIGS = {
 }
 
 
-def _make_dvrl_fig(datasets, ncols, figsize, fname):
+def _make_dvrl_fig(datasets, ncols, figsize, fname, transform_fn=None):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Global-Only vs. Local Reward Augmentation",
-                 fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
         seeds = EXPECTED_SEEDS[ds]
@@ -390,11 +404,12 @@ def _make_dvrl_fig(datasets, ncols, figsize, fname):
         means   = [g_eo[0], d_eo[0]]
         stds    = [g_eo[1], d_eo[1]]
 
-        means, stds = transform_eo(means, stds)
+        means, stds = (transform_fn or transform_eo)(means, stds)
 
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA,), base_rgb + (OTHER_ALPHA,)]
-        bars = make_bar_ax(ax, labels, means, stds, colors, title=DS_LABELS[ds])
+        panel_title = "Local Reward Augmentation" if ncols == 1 else DS_LABELS[ds]
+        bars = make_bar_ax(ax, labels, means, stds, colors, title=panel_title)
         bars[0].set_edgecolor("#111111")
         bars[0].set_linewidth(1.8)
         label_bars(ax, bars, means)
@@ -419,26 +434,25 @@ print("Generating PCA ablation figures ...")
 PCA_CONFIGS = {
     "census": [
         ("census_raw",                   "No PCA"),
-        ("census_ep1500ph400_5s_EP1500", "PCA-10 \u2605"),
+        ("census_ep1500ph400_5s_EP1500", "PCA-10"),
         ("census_pca15",                 "PCA-15"),
         ("census_pca20",                 "PCA-20"),
     ],
     "capture24": [
         ("capture24_raw",                "No PCA"),
-        ("capture24_ep800ph200_5s_EP800","PCA-10 \u2605"),
+        ("capture24_ep800ph200_5s_EP800","PCA-10"),
         ("capture24_pca15",              "PCA-15"),
         ("capture24_pca20",              "PCA-20"),
     ],
 }
-COMPAS_PCA_ORDER = ["No PCA", "PCA-8", "PCA-9", "PCA-10 \u2605"]
+COMPAS_PCA_ORDER = ["No PCA", "PCA-8", "PCA-9", "PCA-10"]
 PCA_CHOSEN = {"census": 1, "compas": 3, "capture24": 1}
 
 
-def _make_pca_fig(datasets, ncols, figsize, fname):
+def _make_pca_fig(datasets, ncols, figsize, fname, transform_fn=None):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("PCA Dimensionality", fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
         seeds  = EXPECTED_SEEDS[ds]
@@ -462,12 +476,13 @@ def _make_pca_fig(datasets, ncols, figsize, fname):
                     print(f"  MISSING: pca {key} {ds}")
                 means.append(m); stds.append(s); labels.append(lbl)
 
-        means, stds = transform_eo(means, stds)
+        means, stds = (transform_fn or transform_eo)(means, stds)
 
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA if i == chosen else OTHER_ALPHA,)
                     for i in range(len(labels))]
-        bars = make_bar_ax(ax, labels, means, stds, colors, title=DS_LABELS[ds])
+        panel_title = "PCA Dimensionality Ablation" if ncols == 1 else DS_LABELS[ds]
+        bars = make_bar_ax(ax, labels, means, stds, colors, title=panel_title)
         bars[chosen].set_edgecolor("#111111")
         bars[chosen].set_linewidth(1.8)
         label_bars(ax, bars, means)
@@ -505,12 +520,10 @@ COMPAS_FFNN_ORDER = ["10", "20 \u2605", "50"]
 FFNN_CHOSEN = 1
 
 
-def _make_ffnn_fig(datasets, ncols, figsize, fname):
+def _make_ffnn_fig(datasets, ncols, figsize, fname, transform_fn=None):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Beta Classifier Training Epochs",
-                 fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
         seeds = EXPECTED_SEEDS[ds]
@@ -533,16 +546,17 @@ def _make_ffnn_fig(datasets, ncols, figsize, fname):
                     print(f"  MISSING: ffnn {key} {ds}")
                 means.append(m); stds.append(s); labels.append(lbl)
 
-        means, stds = transform_eo(means, stds)
+        means, stds = (transform_fn or transform_eo)(means, stds)
 
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA if i == FFNN_CHOSEN else OTHER_ALPHA,)
                     for i in range(len(labels))]
-        bars = make_bar_ax(ax, labels, means, stds, colors, title=DS_LABELS[ds])
+        panel_title = "Classifier Epochs Ablation" if ncols == 1 else DS_LABELS[ds]
+        bars = make_bar_ax(ax, labels, means, stds, colors, title=panel_title)
         bars[FFNN_CHOSEN].set_edgecolor("#111111")
         bars[FFNN_CHOSEN].set_linewidth(1.8)
         label_bars(ax, bars, means)
-        ax.set_xlabel("Beta epochs", fontsize=11)
+        ax.set_xlabel("Classifier Epochs", fontsize=11)
 
     if "compas" in datasets:
         pending_note(fig)
@@ -554,6 +568,34 @@ def _make_ffnn_fig(datasets, ncols, figsize, fname):
 _make_ffnn_fig(DATASETS_3, 3, (13, 5), "fig_ffnn_ablation_v3_large.png")
 _make_ffnn_fig(DATASETS_2, 2, (9,  5), "fig_ffnn_ablation_nodataset.png")
 _make_ffnn_fig(DATASETS_1, 1, (5,  5), "fig_ffnn_ablation_census.png")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EO Inverted variants (census only)
+# EO_inv = 1 - (EO - min) / (max - min)  →  higher is better
+# ─────────────────────────────────────────────────────────────────────────────
+print("Generating EO inverted figures (census only) ...")
+
+_make_ep_eo_fig(DATASETS_1, 1, (5, 5),
+                "fig_episode_ablation_eo_inverted_census.png",
+                show_compas_placeholder=False,
+                transform_fn=transform_eo_inverted)
+
+_make_delta_fig(DATASETS_1, 1, (5, 5),
+                "fig_delta_ablation_eo_inverted_census.png",
+                transform_fn=transform_eo_inverted)
+
+_make_dvrl_fig(DATASETS_1, 1, (5, 5),
+               "fig_dvrl_ablation_eo_inverted_census.png",
+               transform_fn=transform_eo_inverted)
+
+_make_pca_fig(DATASETS_1, 1, (5, 5),
+              "fig_pca_ablation_eo_inverted_census.png",
+              transform_fn=transform_eo_inverted)
+
+_make_ffnn_fig(DATASETS_1, 1, (5, 5),
+               "fig_ffnn_ablation_eo_inverted_census.png",
+               transform_fn=transform_eo_inverted)
 
 
 print("\nAll enhanced ablation figures done.")
