@@ -118,10 +118,8 @@ def get_alpha_eo(df): return stats(df, "alpha_eod_max_diff")
 
 
 def transform_eo(means, stds):
-    """Negate EO gap so higher bars indicate better fairness."""
-    means = np.array([float(m) for m in means])
-    stds  = np.array([float(s) for s in stds])
-    return (-means).tolist(), stds.tolist()
+    """Return raw EO gap values unchanged."""
+    return list(means), list(stds)
 
 
 def save_fig(name):
@@ -132,7 +130,7 @@ def save_fig(name):
 
 
 def make_bar_ax(ax, labels, means, stds, colors, hatches=None,
-                ylabel="\u2212EO Gap", title="", fontsize_labels=11,
+                ylabel="EO Gap", title="", fontsize_labels=11,
                 fontsize_ticks=10, fontsize_title=12):
     x = np.arange(len(labels))
     bars = ax.bar(x, means, yerr=stds, capsize=4,
