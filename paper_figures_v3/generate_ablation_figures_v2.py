@@ -273,12 +273,10 @@ _make_ep_eo_fig(DATASETS_2, 2, (9, 5),
                 "fig_episode_ablation_eo_nodataset.png",
                 show_compas_placeholder=False)
 
-# 1-dataset (census only, ep1500 and ep2000 only)
+# 1-dataset (census only, all 4 episode configs)
 _make_ep_eo_fig(DATASETS_1, 1, (5, 5),
                 "fig_episode_ablation_census.png",
-                show_compas_placeholder=False,
-                ep_keys_override=EP_KEYS_2BAR,
-                ep_chosen_override=EP_CHOSEN_2BAR)
+                show_compas_placeholder=False)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
