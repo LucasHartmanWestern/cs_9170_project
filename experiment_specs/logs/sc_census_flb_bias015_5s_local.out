@@ -1,0 +1,175 @@
+[run_baseline] baseline=fairness_loss_balancing
+[run_baseline] spec=experiment_specs/sc_census_flb_bias015_5s.json
+[run_baseline] device=cuda:0
+[run_baseline] exp_group=BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125
+[run_baseline] seeds=[42, 0, 1, 2, 3]
+
+[run_baseline] ---- seed=42 ----
+[TRAIN] size=3000, minority=450 (15.00%)
+[VAL] size=5816, minority=872 (14.99%)
+[TEST] size=6513, minority=1569 (24.09%)
+[FLB] exp_group=BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125  seed=42
+[FLB] dataset=census_income  feature_dim=104
+[FLB] flb_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[FLB] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_42
+[FLB] Group sizes (a=0/y=0, a=0/y=1, a=1/y=0, a=1/y=1): [990, 77, 1560, 373]
+[FLB] epoch=  20 | loss=0.5828 | val_worst=0.6279 | p=[0.253,0.248,0.253,0.246]
+[FLB] epoch=  40 | loss=0.4868 | val_worst=0.5605 | p=[0.251,0.249,0.255,0.245]
+[FLB] epoch=  60 | loss=0.4540 | val_worst=0.5086 | p=[0.248,0.250,0.257,0.245]
+[FLB] epoch=  80 | loss=0.3988 | val_worst=0.4886 | p=[0.243,0.251,0.259,0.247]
+[FLB] epoch= 100 | loss=0.4314 | val_worst=0.4936 | p=[0.239,0.248,0.264,0.250]
+[FLB] epoch= 120 | loss=0.2449 | val_worst=0.4677 | p=[0.235,0.245,0.266,0.253]
+[FLB] epoch= 140 | loss=0.3538 | val_worst=0.4662 | p=[0.232,0.240,0.269,0.259]
+[FLB] epoch= 160 | loss=0.2909 | val_worst=0.4834 | p=[0.227,0.237,0.272,0.264]
+[FLB] epoch= 180 | loss=0.2435 | val_worst=0.5758 | p=[0.224,0.232,0.277,0.267]
+[FLB] epoch= 200 | loss=0.4298 | val_worst=0.4676 | p=[0.218,0.227,0.280,0.274]
+[FLB] Training done. Best val_worst=0.4511
+[FLB] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_42/metrics.csv
+[FLB] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_42/flb_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_42/flb_model.pt
+
+[TEST] Alpha -> F1(min)=0.5798 | F1(maj)=0.8820 | F1(weighted)=0.8092 | F1(macro)=0.7309 | Brier=0.1466
+[TEST] Beta  -> F1(min)=0.6586 | F1(maj)=0.8632 | F1(weighted)=0.8139 | F1(macro)=0.7609 | Brier=0.1317
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/final_test_metrics.csv
+[FLB] Done. seed=42 | time=10.8s
+[FLB] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_42
+
+[run_baseline] ---- seed=0 ----
+[TRAIN] size=3000, minority=450 (15.00%)
+[VAL] size=5816, minority=872 (14.99%)
+[TEST] size=6513, minority=1569 (24.09%)
+[FLB] exp_group=BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125  seed=0
+[FLB] dataset=census_income  feature_dim=105
+[FLB] flb_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[FLB] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_0
+[FLB] Group sizes (a=0/y=0, a=0/y=1, a=1/y=0, a=1/y=1): [996, 61, 1554, 389]
+[FLB] epoch=  20 | loss=0.6590 | val_worst=0.7459 | p=[0.248,0.253,0.251,0.247]
+[FLB] epoch=  40 | loss=0.5860 | val_worst=0.6255 | p=[0.248,0.251,0.256,0.245]
+[FLB] epoch=  60 | loss=0.5032 | val_worst=0.5464 | p=[0.247,0.248,0.258,0.246]
+[FLB] epoch=  80 | loss=0.4311 | val_worst=0.5777 | p=[0.246,0.246,0.258,0.250]
+[FLB] epoch= 100 | loss=0.3365 | val_worst=0.4843 | p=[0.243,0.242,0.259,0.256]
+[FLB] epoch= 120 | loss=0.3165 | val_worst=0.4552 | p=[0.241,0.238,0.260,0.261]
+[FLB] epoch= 140 | loss=0.3588 | val_worst=0.4932 | p=[0.239,0.233,0.264,0.264]
+[FLB] epoch= 160 | loss=0.2947 | val_worst=0.5109 | p=[0.234,0.230,0.266,0.270]
+[FLB] epoch= 180 | loss=0.2606 | val_worst=0.5154 | p=[0.233,0.224,0.270,0.273]
+[FLB] epoch= 200 | loss=0.2427 | val_worst=0.4689 | p=[0.228,0.220,0.274,0.278]
+[FLB] Training done. Best val_worst=0.4451
+[FLB] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_0/metrics.csv
+[FLB] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_0/flb_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_0/flb_model.pt
+
+[TEST] Alpha -> F1(min)=0.5827 | F1(maj)=0.8933 | F1(weighted)=0.8185 | F1(macro)=0.7380 | Brier=0.1414
+[TEST] Beta  -> F1(min)=0.6635 | F1(maj)=0.8646 | F1(weighted)=0.8161 | F1(macro)=0.7640 | Brier=0.1307
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_0/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/final_test_metrics.csv
+[FLB] Done. seed=0 | time=9.3s
+[FLB] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_0
+
+[run_baseline] ---- seed=1 ----
+[TRAIN] size=3000, minority=450 (15.00%)
+[VAL] size=5816, minority=872 (14.99%)
+[TEST] size=6513, minority=1569 (24.09%)
+[FLB] exp_group=BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125  seed=1
+[FLB] dataset=census_income  feature_dim=101
+[FLB] flb_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[FLB] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_1
+[FLB] Group sizes (a=0/y=0, a=0/y=1, a=1/y=0, a=1/y=1): [967, 50, 1583, 400]
+[FLB] epoch=  20 | loss=0.6359 | val_worst=0.6462 | p=[0.244,0.259,0.245,0.253]
+[FLB] epoch=  40 | loss=0.4992 | val_worst=0.6197 | p=[0.244,0.257,0.247,0.252]
+[FLB] epoch=  60 | loss=0.5025 | val_worst=0.5503 | p=[0.244,0.253,0.252,0.251]
+[FLB] epoch=  80 | loss=0.4921 | val_worst=0.5178 | p=[0.244,0.248,0.255,0.253]
+[FLB] epoch= 100 | loss=0.3594 | val_worst=0.4946 | p=[0.243,0.243,0.258,0.256]
+[FLB] epoch= 120 | loss=0.4879 | val_worst=0.4850 | p=[0.238,0.241,0.263,0.257]
+[FLB] epoch= 140 | loss=0.3028 | val_worst=0.4885 | p=[0.234,0.237,0.267,0.262]
+[FLB] epoch= 160 | loss=0.3208 | val_worst=0.4561 | p=[0.230,0.232,0.272,0.267]
+[FLB] epoch= 180 | loss=0.4551 | val_worst=0.4624 | p=[0.225,0.226,0.275,0.273]
+[FLB] epoch= 200 | loss=0.3028 | val_worst=0.4660 | p=[0.222,0.219,0.278,0.281]
+[FLB] Training done. Best val_worst=0.4391
+[FLB] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_1/metrics.csv
+[FLB] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_1/flb_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_1/flb_model.pt
+
+[TEST] Alpha -> F1(min)=0.5545 | F1(maj)=0.8868 | F1(weighted)=0.8067 | F1(macro)=0.7207 | Brier=0.1494
+[TEST] Beta  -> F1(min)=0.6609 | F1(maj)=0.8647 | F1(weighted)=0.8156 | F1(macro)=0.7628 | Brier=0.1302
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/final_test_metrics.csv
+[FLB] Done. seed=1 | time=9.1s
+[FLB] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_1
+
+[run_baseline] ---- seed=2 ----
+[TRAIN] size=3000, minority=450 (15.00%)
+[VAL] size=5816, minority=872 (14.99%)
+[TEST] size=6513, minority=1569 (24.09%)
+[FLB] exp_group=BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125  seed=2
+[FLB] dataset=census_income  feature_dim=102
+[FLB] flb_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[FLB] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_2
+[FLB] Group sizes (a=0/y=0, a=0/y=1, a=1/y=0, a=1/y=1): [1004, 83, 1546, 367]
+[FLB] epoch=  20 | loss=0.5659 | val_worst=0.5485 | p=[0.250,0.249,0.248,0.253]
+[FLB] epoch=  40 | loss=0.3713 | val_worst=0.5398 | p=[0.248,0.249,0.249,0.255]
+[FLB] epoch=  60 | loss=0.3893 | val_worst=0.4986 | p=[0.248,0.246,0.254,0.252]
+[FLB] epoch=  80 | loss=0.3739 | val_worst=0.5113 | p=[0.241,0.246,0.258,0.256]
+[FLB] epoch= 100 | loss=0.4531 | val_worst=0.4495 | p=[0.238,0.243,0.261,0.258]
+[FLB] epoch= 120 | loss=0.4330 | val_worst=0.5198 | p=[0.235,0.240,0.265,0.260]
+[FLB] epoch= 140 | loss=0.5124 | val_worst=0.4512 | p=[0.233,0.237,0.265,0.265]
+[FLB] epoch= 160 | loss=0.2950 | val_worst=0.5206 | p=[0.232,0.232,0.269,0.267]
+[FLB] epoch= 180 | loss=0.3838 | val_worst=0.4959 | p=[0.230,0.227,0.269,0.274]
+[FLB] epoch= 200 | loss=0.3817 | val_worst=0.5550 | p=[0.228,0.223,0.273,0.276]
+[FLB] Training done. Best val_worst=0.4383
+[FLB] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_2/metrics.csv
+[FLB] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_2/flb_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_2/flb_model.pt
+
+[TEST] Alpha -> F1(min)=0.5799 | F1(maj)=0.8926 | F1(weighted)=0.8173 | F1(macro)=0.7363 | Brier=0.1401
+[TEST] Beta  -> F1(min)=0.6725 | F1(maj)=0.8613 | F1(weighted)=0.8158 | F1(macro)=0.7669 | Brier=0.1321
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_2/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/final_test_metrics.csv
+[FLB] Done. seed=2 | time=9.1s
+[FLB] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_2
+
+[run_baseline] ---- seed=3 ----
+[TRAIN] size=3000, minority=450 (15.00%)
+[VAL] size=5816, minority=872 (14.99%)
+[TEST] size=6513, minority=1569 (24.09%)
+[FLB] exp_group=BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125  seed=3
+[FLB] dataset=census_income  feature_dim=101
+[FLB] flb_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[FLB] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_3
+[FLB] Group sizes (a=0/y=0, a=0/y=1, a=1/y=0, a=1/y=1): [1012, 58, 1538, 392]
+[FLB] epoch=  20 | loss=0.6137 | val_worst=0.6819 | p=[0.251,0.247,0.254,0.249]
+[FLB] epoch=  40 | loss=0.5108 | val_worst=0.6193 | p=[0.250,0.245,0.257,0.248]
+[FLB] epoch=  60 | loss=0.5054 | val_worst=0.5352 | p=[0.246,0.244,0.263,0.247]
+[FLB] epoch=  80 | loss=0.3638 | val_worst=0.5114 | p=[0.243,0.242,0.266,0.249]
+[FLB] epoch= 100 | loss=0.3785 | val_worst=0.5064 | p=[0.240,0.239,0.267,0.253]
+[FLB] epoch= 120 | loss=0.4200 | val_worst=0.4696 | p=[0.238,0.236,0.271,0.256]
+[FLB] epoch= 140 | loss=0.2880 | val_worst=0.4855 | p=[0.235,0.231,0.274,0.260]
+[FLB] epoch= 160 | loss=0.4207 | val_worst=0.5569 | p=[0.232,0.224,0.278,0.266]
+[FLB] epoch= 180 | loss=0.2524 | val_worst=0.5122 | p=[0.228,0.219,0.281,0.273]
+[FLB] epoch= 200 | loss=0.2050 | val_worst=0.5906 | p=[0.223,0.212,0.285,0.280]
+[FLB] Training done. Best val_worst=0.4696
+[FLB] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_3/metrics.csv
+[FLB] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_3/flb_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_3/flb_model.pt
+
+[TEST] Alpha -> F1(min)=0.5884 | F1(maj)=0.8855 | F1(weighted)=0.8139 | F1(macro)=0.7369 | Brier=0.1486
+[TEST] Beta  -> F1(min)=0.6439 | F1(maj)=0.8564 | F1(weighted)=0.8052 | F1(macro)=0.7501 | Brier=0.1383
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/final_test_metrics.csv
+[FLB] Done. seed=3 | time=9.1s
+[FLB] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_sc_census_flb_bias015_5s_74dc0d69__G202604041125/seed_3

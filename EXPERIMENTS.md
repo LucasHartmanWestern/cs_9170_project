@@ -1716,3 +1716,90 @@ loss. Standard unweighted BCE is then computed on the resampled batch. Key obser
    distribution in PCA space) or FLB-inspired signal (oversample highest-loss synthetic
    candidates). See "Framework Improvement Leads" discussion in CLAUDE.md.
 4. **Scarcity curve:** FLB vs CMA-ES across bias_pct levels on census to support motivation claim.
+
+---
+
+## Paper Framing Pivot — Scarcity Curve (2026-04-03)
+
+### New Core Framing
+
+**Previous framing:** "Our RL generative framework achieves SOTA fairness-utility tradeoff vs all baselines."
+
+**Problem with that framing:** On capture24, CMA-ES shows inconsistent results across seeds (degradation at low alpha-EO). On COMPAS, even our best method (FLB) is simply the best reweighter. The "beat all baselines" claim is too broad to defend across three datasets.
+
+**New framing:** "Reweighting methods (GroupDRO, OT Repair) fail under severe positive-class scarcity (DA+ ≤ ~40). Generative augmentation — specifically, optimizing the synthetic distribution via CMA-ES — maintains fairness improvement where reweighting degrades. We demonstrate this via a scarcity curve on census_income across four DA+ levels."
+
+**Key supporting claims:**
+
+1. *Motivation:* GroupDRO and OT Repair EO degrades as DA+ decreases below ~43; their best-case improvement disappears at DA+=17. CMA-ES holds or improves.
+2. *Ablation:* CMA-ES outperforms Gaussian Augment (same distribution, no optimization) — the optimization loop matters, not just sampling from the right distribution.
+3. *Generalizability:* capture24 is included to satisfy funding requirements; reported with the caveat that the method's advantage is clearest when alpha-EO is substantial (>0.1).
+
+**The "why not simpler?" answer** is now answered by the Gaussian Augment ablation: naive i.i.d. sampling from the real minority distribution is not sufficient — CMA-ES optimization is what drives the improvement.
+
+### Experiment Status (as of 2026-04-03)
+
+#### Running on DRAC cluster
+| Spec | Description | Status |
+|------|-------------|--------|
+| v25a_capture24_cmaes_sigma05_5s | capture24, CMA-ES, sigma0=0.5 | Running (~45 min remaining) |
+| v25b_capture24_cmaes_k10_5s | capture24, CMA-ES, sigmoid k=10 | Running (~45 min remaining) |
+| v23_census_rl_ot_nocurr_5s | census, REINFORCE+OT, no curriculum | Pending (Priority queue) |
+
+#### Completed (results in paper_results_v4 / training_runs)
+| Spec | Description | Key result |
+|------|-------------|------------|
+| v18 (5 seeds) | census REINFORCE sigmoid | EO=0.076±0.048, F1w=0.729 |
+| v19 (2 seeds) | census REINFORCE normalized | EO=0.056±0.036, F1w=0.802 |
+| v20 census (2 seeds) | census CMA-ES normalized | EO=0.021±0.000, F1w=0.789 |
+| v20 COMPAS (2 seeds) | COMPAS CMA-ES normalized | EO=0.597±0.039, F1w=0.652 |
+| v20 capture24 (5 seeds) | capture24 CMA-ES normalized | Inconsistent; seeds 3&4 degrade |
+| Baselines census (5 seeds) | GroupDRO, OT Repair, FLB, CTGAN, SMOTE, FairTabDDPM | See comparison table above |
+| Baselines COMPAS (5 seeds) | GroupDRO, OT Repair, FLB, FairTabDDPM | See comparison table above |
+
+#### Pending — Scarcity Curve (census_income, 5 seeds each)
+| Spec | DA+ (approx) | bias_pct | Status |
+|------|-------------|----------|--------|
+| sc_census_cmaes_bias005_5s | ~17 | 0.05 | Not yet submitted |
+| sc_census_cmaes_bias015_5s | ~65 | 0.15 | Not yet submitted |
+| sc_census_cmaes_bias020_5s | ~90 | 0.20 | Not yet submitted |
+| sc_census_gdro_bias005_5s | ~17 | 0.05 | Running locally |
+| sc_census_gdro_bias015_5s | ~65 | 0.15 | Running locally |
+| sc_census_gdro_bias020_5s | ~90 | 0.20 | Running locally |
+| sc_census_otrep_bias005_5s | ~17 | 0.05 | Running locally |
+| sc_census_otrep_bias015_5s | ~65 | 0.15 | Running locally |
+| sc_census_otrep_bias020_5s | ~90 | 0.20 | Running locally |
+| sc_census_flb_bias015_5s | ~65 | 0.15 | Not yet submitted |
+| sc_census_flb_bias020_5s | ~90 | 0.20 | Not yet submitted |
+| sc_census_gauss_augment_bias010_5s | ~43 | 0.10 | Not yet submitted |
+
+Note: bias_pct=0.10 (DA+≈43) baselines are already complete from v16 runs.
+CMA-ES at bias_pct=0.10 (DA+≈43) is complete from v20 (2 seeds; submit 5-seed version on DRAC).
+
+#### Pending — New Model Variants
+| Spec | Description | Status |
+|------|-------------|--------|
+| v24_census_cmaes_ot_5s | census CMA-ES + OT local reward (code fix applied) | Not yet submitted |
+| v25a_capture24_cmaes_sigma05_5s | capture24 CMA-ES sigma0=0.5 | On DRAC |
+| v25b_capture24_cmaes_k10_5s | capture24 CMA-ES sigmoid k=10 | On DRAC |
+
+### Code Fix — CMA-ES OT Integration (2026-04-03)
+
+**Bug:** In `training.py`, `agent.tell(candidate_idx, global_obj)` was passing only the global fairness signal to CMA-ES. The OT local reward was being computed but discarded — CMA-ES never saw it.
+
+**Fix:** Changed to `agent.tell(candidate_idx, float(rewards.sum().item()))` so the full episode return (global + local) flows to CMA-ES. When lambda=1.0 or w_ot=0, rewards.sum() == global_obj — pure-global configs are unaffected.
+
+**Impact:** v21 OT+CMA-ES results are invalid (OT was inactive). v24 re-runs with fix applied.
+
+### New Baseline — Gaussian Augment
+
+**File:** `benchmarks/gaussian_augment.py`
+
+**Purpose:** "No-search" ablation against CMA-ES. Fits a diagonal Gaussian N(μ, diag(σ²)) to real disadvantaged minority samples in PCA space, draws 2000 i.i.d. samples (matching CMA-ES traj_length). No optimization loop — answers whether CMA-ES improves over naive Gaussian sampling from the real minority distribution (i.e., CMA-ES episode 0).
+
+**Phase 1:** Augment minority positives (group=minority_id, y=1).  
+**Phase 2:** Augment majority negatives (group=majority_id, y=0) — mirrors gen_both_classes=True.
+
+Both phases use the same FFNN as CMA-ES beta (20 epochs, [32,16] hidden, lr=0.001).
+
+**Expected result:** Gaussian Augment should outperform doing nothing (alpha) but fall short of CMA-ES — if it matches CMA-ES, the optimization loop adds no value and the paper's core claim is undermined.

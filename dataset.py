@@ -43,6 +43,10 @@ class Dataset:
         "acs_income": {
             "data_path": "datasets/acs_income",
             "protected_attributes": ["sex", "race"]
+        },
+        "fairjob": {
+            "data_path": "datasets/fairjob",
+            "protected_attributes": ["protected_attribute"]
         }
     }
     def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
@@ -2161,6 +2165,308 @@ class Dataset:
         return (X_train_theta, X_val_theta, X_test_theta,
                 y_train_theta, y_val_theta, y_test_theta)
 
+    def split_fairjob(
+        self,
+        train_size=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        drop_protected: bool = False,
+        protected_cols=None,
+        return_test_df: bool = False,
+        return_raw: bool = False,
+        bias_val: bool = True,
+        dp_protected_col: str = "protected_attribute",
+        filter_display_random: bool = True,
+        pool_pos_fraction: float = None,
+    ):
+        """
+        FairJob dataset (Vladimirova et al., NeurIPS 2024 / Criteo).
+        Source: HuggingFace criteo/FairJob — downloaded to datasets/fairjob/
+        on first call and cached as fairjob.parquet.
+
+        Task: binary click prediction on job listings.
+        Label: 'click' (0=no click, 1=click). Natural click rate ~0.7%.
+        Protected attr: 'protected_attribute' (0=female disadv, 1=male adv).
+          Gender proxy inferred from user's fashion-product history.
+
+        pool_pos_fraction: if set (e.g. 0.05), undersample negatives in train
+          and val AFTER the split so that positive examples make up this
+          fraction of those splits. The test set is left at natural (~0.7%)
+          distribution so AUC/F1 evaluation remains meaningful. This avoids
+          needing a very large real_data_size to accumulate enough positives.
+          With pool_pos_fraction=0.05 and real_data_size=3000 the train pool
+          has ~5% positives, giving ~150 positives to bias_pct down from.
+
+        Filter: displayrandom=1 (paper recommendation to remove positional
+        bias from rank-based display). Controlled by filter_display_random.
+
+        Categorical features (cat0–cat12) are one-hot encoded; numerical
+        features (num16–num50, senior, rank) are StandardScaler-normalised.
+        protected_attribute is included as a numerical feature by default and
+        dropped if drop_protected=True.
+
+        Bias injection is group-specific: only female (a=0) positives are
+        downsampled, keeping male positives at their natural rate.
+
+        Pipeline: filter → split → neg-undersample train+val (optional) →
+        group-specific bias → OHE + scaler (train only) → PCA → tensors.
+        """
+        assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
+
+        if protected_cols is None:
+            protected_cols = ["protected_attribute"]
+
+        data_dir = Path(self.data_path)
+        data_dir.mkdir(parents=True, exist_ok=True)
+        parquet_path = data_dir / "fairjob.parquet"
+
+        # ---- 1) Load (local cache or HuggingFace download) ----
+        if parquet_path.exists():
+            df = pd.read_parquet(parquet_path)
+            print(f"[fairjob] Loaded from cache: {len(df)} rows")
+        else:
+            print("[fairjob] Downloading from HuggingFace (criteo/FairJob)…")
+            try:
+                from datasets import load_dataset as hf_load
+            except ImportError:
+                raise ImportError(
+                    "HuggingFace 'datasets' library required. "
+                    "Install with: pip install datasets"
+                )
+            hf_ds = hf_load("criteo/FairJob", split="train")
+            df = hf_ds.to_pandas()
+            df.to_parquet(parquet_path, index=False)
+            print(f"[fairjob] Cached to {parquet_path}: {len(df)} rows")
+
+        # ---- 2) Optional: restrict to randomised display ----
+        if filter_display_random and "displayrandom" in df.columns:
+            df = df[df["displayrandom"] == 1].reset_index(drop=True)
+            print(f"[fairjob] After displayrandom=1 filter: {len(df)} rows")
+
+        # ---- 3) Label and feature schema ----
+        label_col = "click"
+        y_raw = df[label_col].astype(int).to_numpy()
+        vals, cnts = np.unique(y_raw, return_counts=True)
+        print(f"[fairjob] Label dist: {dict(zip(vals.tolist(), cnts.tolist()))}, "
+              f"click_rate={y_raw.mean():.4f}")
+
+        cat_cols_all = [f"cat{i}" for i in range(13)]            # cat0–cat12
+        num_cols_all = (
+            [f"num{i}" for i in range(16, 51)]                   # num16–num50
+            + ["senior", "rank", "protected_attribute"]           # extra numerics
+        )
+        # Keep only columns present in the dataframe
+        cat_cols_all = [c for c in cat_cols_all if c in df.columns]
+        num_cols_all = [c for c in num_cols_all if c in df.columns]
+
+        feature_cols = num_cols_all + cat_cols_all
+        X_df_raw = df[feature_cols].copy()
+        A_df_raw = df[[dp_protected_col]].copy()
+
+        # Fill missing values (defensive; FairJob is typically clean)
+        for c in cat_cols_all:
+            if c in X_df_raw.columns:
+                X_df_raw[c] = X_df_raw[c].fillna("__missing__").astype(str)
+        for c in num_cols_all:
+            if c in X_df_raw.columns:
+                X_df_raw[c] = X_df_raw[c].fillna(0.0)
+
+        # ---- 4) Optional: drop protected attribute from features ----
+        if drop_protected:
+            drop_c = [c for c in protected_cols if c in X_df_raw.columns]
+            if drop_c:
+                X_df_raw = X_df_raw.drop(columns=drop_c)
+
+        cat_cols = [c for c in cat_cols_all if c in X_df_raw.columns]
+        num_cols = [c for c in num_cols_all if c in X_df_raw.columns]
+
+        # ---- 5) Split ----
+        X_train_df, X_temp_df, y_train, y_temp, A_train_df, A_temp_df = train_test_split(
+            X_df_raw, y_raw, A_df_raw,
+            test_size=(val_frac + test_frac),
+            random_state=self.seed,
+            stratify=y_raw,
+        )
+        rel_test = test_frac / (val_frac + test_frac)
+        X_val_df, X_test_df, y_val, y_test, A_val_df, A_test_df = train_test_split(
+            X_temp_df, y_temp, A_temp_df,
+            test_size=rel_test,
+            random_state=self.seed,
+            stratify=y_temp,
+        )
+
+        # ---- 5b) Optional: enrich train+val by undersampling negatives ----
+        # Test split is intentionally left at natural distribution.
+        if pool_pos_fraction is not None:
+            assert 0 < pool_pos_fraction < 1
+            def _neg_undersample(X_df, y_arr, A_df):
+                pos_idx = np.where(y_arr == 1)[0]
+                neg_idx = np.where(y_arr == 0)[0]
+                n_pos = len(pos_idx)
+                if n_pos == 0:
+                    return X_df, y_arr, A_df
+                n_neg_keep = int(np.floor(n_pos * (1.0 - pool_pos_fraction) / pool_pos_fraction))
+                n_neg_keep = min(len(neg_idx), max(1, n_neg_keep))
+                rng = np.random.default_rng(self.seed)
+                kept_neg = rng.choice(neg_idx, size=n_neg_keep, replace=False)
+                keep = np.sort(np.concatenate([pos_idx, kept_neg]))
+                return (X_df.iloc[keep].reset_index(drop=True),
+                        y_arr[keep],
+                        A_df.iloc[keep].reset_index(drop=True))
+
+            X_train_df, y_train, A_train_df = _neg_undersample(X_train_df, y_train, A_train_df)
+            print(f"[fairjob] Train after neg-undersample: {len(y_train)} rows, "
+                  f"pos_rate={y_train.mean():.4f}")
+            X_val_df, y_val, A_val_df = _neg_undersample(X_val_df, y_val, A_val_df)
+            print(f"[fairjob] Val after neg-undersample: {len(y_val)} rows, "
+                  f"pos_rate={y_val.mean():.4f}")
+
+        # Protected attribute: already binary (0=female/disadv, 1=male/adv)
+        def _map_protected(a_series):
+            return a_series.astype(np.int64).to_numpy()
+
+        # ---- 6) Group-specific bias: reduce female (a=0) positives only ----
+        def apply_bias(df_split, y_split, a_split_df, target_pct):
+            """
+            target_pct = target positive rate *within* the female (a=0) subgroup.
+            Male positives are left at their natural rate.
+            """
+            dfb = df_split.copy()
+            dfb["__y__"] = y_split
+            dfb["__a__"] = a_split_df[dp_protected_col].to_numpy()
+
+            df_male   = dfb[dfb["__a__"] != 0]
+            df_female = dfb[dfb["__a__"] == 0]
+
+            f_neg = df_female[df_female["__y__"] == 0]
+            f_pos = df_female[df_female["__y__"] == 1]
+
+            if len(f_pos) == 0 or len(f_neg) == 0:
+                df_female_out = df_female
+            else:
+                keep = int(np.floor((target_pct * len(f_neg)) / (1.0 - target_pct)))
+                keep = min(len(f_pos), max(1, keep))
+                f_pos_b = f_pos.sample(n=keep, random_state=self.seed, replace=False)
+                df_female_out = pd.concat([f_neg, f_pos_b], axis=0)
+
+            out = (pd.concat([df_male, df_female_out], axis=0)
+                   .sample(frac=1.0, random_state=self.seed)
+                   .reset_index(drop=True))
+
+            y_out = out["__y__"].to_numpy(dtype=int)
+            a_out = _map_protected(out["__a__"])
+            X_out = out.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        if bias_pct is not None:
+            X_train_biased_df, y_train_biased, a_train = apply_bias(
+                X_train_df, y_train, A_train_df, float(bias_pct))
+            if bias_val:
+                X_val_biased_df, y_val_biased, a_val = apply_bias(
+                    X_val_df, y_val, A_val_df, float(bias_pct))
+            else:
+                X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+                y_val_biased = y_val.copy()
+                a_val = _map_protected(A_val_df[dp_protected_col])
+        else:
+            X_train_biased_df = X_train_df.copy().reset_index(drop=True)
+            y_train_biased = y_train.copy()
+            a_train = _map_protected(A_train_df[dp_protected_col])
+            X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+            y_val_biased = y_val.copy()
+            a_val = _map_protected(A_val_df[dp_protected_col])
+
+        X_test_biased_df = X_test_df.copy().reset_index(drop=True)
+        y_test_biased = y_test.copy()
+        a_test = _map_protected(A_test_df[dp_protected_col])
+
+        # ---- Optional train subsample ----
+        if train_size is not None and train_size < len(X_train_biased_df):
+            X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
+                X_train_biased_df, y_train_biased, a_train,
+                train_size=train_size,
+                random_state=self.seed,
+                stratify=y_train_biased,
+            )
+
+        # ---- 7) Fit OHE + scaler on train only ----
+        try:
+            encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        except TypeError:
+            encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
+        scaler = StandardScaler()
+
+        Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if cat_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])  if num_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_all = np.hstack([Xtr_num, Xtr_cat])
+
+        Xva_cat = encoder.transform(X_val_biased_df[cat_cols]) if cat_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_num = scaler.transform(X_val_biased_df[num_cols])  if num_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_all = np.hstack([Xva_num, Xva_cat])
+
+        Xte_cat = encoder.transform(X_test_biased_df[cat_cols]) if cat_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_num = scaler.transform(X_test_biased_df[num_cols])  if num_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_all = np.hstack([Xte_num, Xte_cat])
+
+        # ---- 8) PCA ----
+        X_train_theta_np, X_val_theta_np, X_test_theta_np, pca = self._to_theta(
+            Xtr_all, Xva_all, Xte_all, pca_components=pca_components
+        )
+
+        # ---- 9) Tensors ----
+        X_train_theta = torch.tensor(X_train_theta_np, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_val_theta_np,   dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_test_theta_np,  dtype=torch.float32, device=self.device)
+
+        y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_val_biased,   dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_test_biased,  dtype=torch.long, device=self.device)
+
+        self.a_train = torch.tensor(a_train, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_val,   dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        def _log(name, y_s, a_s):
+            n = len(y_s)
+            f_pos = int(((y_s == 1) & (a_s == 0)).sum())
+            m_pos = int(((y_s == 1) & (a_s == 1)).sum())
+            print(f"[fairjob/{name}] n={n}, DA+(female)={f_pos}, AA+(male)={m_pos}")
+        _log("TRAIN", y_train_biased, a_train)
+        _log("VAL",   y_val_biased,   a_val)
+        _log("TEST",  y_test_biased,  a_test)
+
+        self._gan_view_cache = {
+            "supported": True,
+            "X_train_unbiased_df": X_train_df.copy(),
+            "y_train_unbiased": y_train.astype(int).copy(),
+            "encoder": encoder,
+            "scaler": scaler,
+            "pca": pca,
+            "use_pca": self.use_pca,
+            "pca_components": int(pca_components),
+            "cat_cols": list(cat_cols),
+            "num_cols": list(num_cols),
+            "drop_protected": bool(drop_protected),
+            "protected_cols": list(protected_cols),
+            "label_col": label_col,
+            "dp_protected_col": dp_protected_col,
+        }
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_biased_df.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_biased_df.copy(), y_test_biased.copy())
+
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+
     def get_data_splits(self, **kwargs):
         _tabular_drop = ("win_seconds", "step_seconds")
         if self.dataset_name == "census_income":
@@ -2194,6 +2500,9 @@ class Dataset:
             _acs_drop = ("drop_protected", "protected_cols", "win_seconds", "step_seconds")
             kw = {k: v for k, v in kwargs.items() if k not in _acs_drop}
             return self.split_acs_income(**kw)
+        elif self.dataset_name == "fairjob":
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_fairjob(**kw)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 

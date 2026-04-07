@@ -1,0 +1,1274 @@
+[validate_spec] experiment_specs/sc_census_cmaes_bias005_5s.json: OK
+[main] spec=sc_census_cmaes_bias005_5s.json device=cuda:1
+[main] exp_group=SPEC_sc_census_cmaes_bias005_5s_ac6276fa__G202604041118
+[main] seeds=[42, 0, 1, 2, 3]
+[main] ---- running seed=42 ----
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+[Tracker] Experiment: SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed
+[Tracker] Seed folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42
+[Tracker] Run: 2026-04-04_11-18-24_seed42_81563_d5454bad
+[Tracker] Metrics CSV: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/metrics.csv
+[Tracker] Mirroring console to: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/console.log
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+Beta will train with: 60.00% real data, 40.00% synthetic data: 
+[disadv] group=1 per_g={0: 0.3057076036930084, 1: 0.5798879861831665} worst_4g=2.7780 soft_eo_alpha=0.1257
+Anchors: 133 (disadv=1) sigma_anchor=0.8500
+[Tracker] Alpha model state_dict saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/alpha_state_dict.pt
+[Tracker] Alpha model config saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/ffnn_meta.json
+[CMAESAgent] reset phase='phase1_class1' | D=10 param_dim=20 popsize=12 sigma0=1.000
+
+============================================================
+[CMA-ES Phase] phase1_class1 | target_class=1 | episodes=130 | popsize=12
+============================================================
+[Tracker] CSV header written with 47 columns.
+[Tracker] Ep    1 | AvgR -0.0001 | Global -0.1819 | Local 0.1192 | F1_macro 0.6040 | WorstLoss 3.2874
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: -0.181855) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    2 | AvgR 0.0000 | Global 0.0885 | Local 0.1192 | F1_macro 0.6283 | WorstLoss 2.5288
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.088505) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    3 | AvgR -0.0000 | Global -0.0875 | Local 0.1192 | F1_macro 0.6450 | WorstLoss 3.0294
+[Tracker] Ep    4 | AvgR -0.0001 | Global -0.1351 | Local 0.1192 | F1_macro 0.6252 | WorstLoss 3.1771
+[Tracker] Ep    5 | AvgR -0.0000 | Global -0.0207 | Local 0.1192 | F1_macro 0.6379 | WorstLoss 2.8371
+[Tracker] Saved snapshot: ep0005_phase1_class1
+[Tracker] Ep    6 | AvgR 0.0000 | Global 0.0760 | Local 0.1192 | F1_macro 0.6175 | WorstLoss 2.5642
+[Tracker] Ep    7 | AvgR 0.0000 | Global 0.0746 | Local 0.1192 | F1_macro 0.6484 | WorstLoss 2.5700
+[Tracker] Ep    8 | AvgR 0.0001 | Global 0.1991 | Local 0.1192 | F1_macro 0.6113 | WorstLoss 2.2098
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.199148) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    9 | AvgR 0.0000 | Global 0.0579 | Local 0.1192 | F1_macro 0.6369 | WorstLoss 2.6154
+[Tracker] Ep   10 | AvgR -0.0001 | Global -0.1038 | Local 0.1192 | F1_macro 0.6122 | WorstLoss 3.0714
+[Tracker] Saved snapshot: ep0010_phase1_class1
+[Tracker] Ep   11 | AvgR -0.0000 | Global -0.0131 | Local 0.1192 | F1_macro 0.6077 | WorstLoss 2.8145
+[Tracker] Ep   12 | AvgR 0.0000 | Global 0.0055 | Local 0.1192 | F1_macro 0.6094 | WorstLoss 2.7626
+[Tracker] Ep   13 | AvgR 0.0001 | Global 0.1635 | Local 0.1192 | F1_macro 0.6132 | WorstLoss 2.3196
+[Tracker] Ep   14 | AvgR 0.0000 | Global 0.0893 | Local 0.1192 | F1_macro 0.6210 | WorstLoss 2.5266
+[Tracker] Ep   15 | AvgR -0.0000 | Global -0.0890 | Local 0.1192 | F1_macro 0.6069 | WorstLoss 3.0268
+[Tracker] Saved snapshot: ep0015_phase1_class1
+[Tracker] Ep   16 | AvgR 0.0001 | Global 0.1450 | Local 0.1192 | F1_macro 0.6571 | WorstLoss 2.3718
+[Tracker] Ep   17 | AvgR 0.0002 | Global 0.3755 | Local 0.1192 | F1_macro 0.6644 | WorstLoss 1.7197
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.375485) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   18 | AvgR 0.0000 | Global 0.0486 | Local 0.1192 | F1_macro 0.6268 | WorstLoss 2.6399
+[Tracker] Ep   19 | AvgR -0.0000 | Global -0.0149 | Local 0.1192 | F1_macro 0.6097 | WorstLoss 2.8202
+[Tracker] Ep   20 | AvgR 0.0001 | Global 0.1223 | Local 0.1192 | F1_macro 0.6394 | WorstLoss 2.4351
+[Tracker] Saved snapshot: ep0020_phase1_class1
+[Tracker] Ep   21 | AvgR 0.0001 | Global 0.2502 | Local 0.1192 | F1_macro 0.6126 | WorstLoss 2.0429
+[Tracker] Ep   22 | AvgR 0.0000 | Global 0.0021 | Local 0.1192 | F1_macro 0.6286 | WorstLoss 2.7720
+[Tracker] Ep   23 | AvgR -0.0001 | Global -0.1131 | Local 0.1192 | F1_macro 0.6166 | WorstLoss 3.1027
+[Tracker] Ep   24 | AvgR 0.0000 | Global 0.0128 | Local 0.1192 | F1_macro 0.6032 | WorstLoss 2.7422
+[Tracker] Ep   25 | AvgR 0.0001 | Global 0.2115 | Local 0.1192 | F1_macro 0.6248 | WorstLoss 2.1879
+[Tracker] Saved snapshot: ep0025_phase1_class1
+[Tracker] Ep   26 | AvgR 0.0001 | Global 0.2635 | Local 0.1192 | F1_macro 0.6357 | WorstLoss 2.0460
+[Tracker] Ep   27 | AvgR 0.0001 | Global 0.2047 | Local 0.1192 | F1_macro 0.6195 | WorstLoss 2.2095
+[Tracker] Ep   28 | AvgR 0.0002 | Global 0.3060 | Local 0.1192 | F1_macro 0.6141 | WorstLoss 1.9234
+[Tracker] Ep   29 | AvgR -0.0001 | Global -0.1444 | Local 0.1192 | F1_macro 0.6148 | WorstLoss 3.2040
+[Tracker] Ep   30 | AvgR 0.0001 | Global 0.1934 | Local 0.1192 | F1_macro 0.6289 | WorstLoss 2.2322
+[Tracker] Saved snapshot: ep0030_phase1_class1
+[Tracker] Ep   31 | AvgR 0.0001 | Global 0.1242 | Local 0.1192 | F1_macro 0.6264 | WorstLoss 2.4263
+[Tracker] Ep   32 | AvgR -0.0000 | Global -0.0779 | Local 0.1192 | F1_macro 0.6100 | WorstLoss 3.0017
+[Tracker] Ep   33 | AvgR 0.0001 | Global 0.2673 | Local 0.1192 | F1_macro 0.6135 | WorstLoss 2.0232
+[Tracker] Ep   34 | AvgR 0.0000 | Global 0.0330 | Local 0.1192 | F1_macro 0.6069 | WorstLoss 2.6833
+[Tracker] Ep   35 | AvgR 0.0001 | Global 0.2279 | Local 0.1192 | F1_macro 0.6322 | WorstLoss 2.1352
+[Tracker] Saved snapshot: ep0035_phase1_class1
+[Tracker] Ep   36 | AvgR 0.0000 | Global 0.0564 | Local 0.1192 | F1_macro 0.6189 | WorstLoss 2.6193
+[Tracker] Ep   37 | AvgR 0.0001 | Global 0.2306 | Local 0.1192 | F1_macro 0.6199 | WorstLoss 2.1375
+[Tracker] Ep   38 | AvgR 0.0001 | Global 0.2083 | Local 0.1192 | F1_macro 0.6248 | WorstLoss 2.1990
+[Tracker] Ep   39 | AvgR 0.0001 | Global 0.1665 | Local 0.1192 | F1_macro 0.6230 | WorstLoss 2.3152
+[Tracker] Ep   40 | AvgR 0.0001 | Global 0.2162 | Local 0.1192 | F1_macro 0.6051 | WorstLoss 2.1590
+[Tracker] Saved snapshot: ep0040_phase1_class1
+[Tracker] Ep   41 | AvgR 0.0001 | Global 0.1062 | Local 0.1192 | F1_macro 0.6217 | WorstLoss 2.4813
+[Tracker] Ep   42 | AvgR 0.0002 | Global 0.3307 | Local 0.1192 | F1_macro 0.6291 | WorstLoss 1.8594
+[Tracker] Ep   43 | AvgR 0.0001 | Global 0.2218 | Local 0.1192 | F1_macro 0.6171 | WorstLoss 2.1581
+[Tracker] Ep   44 | AvgR 0.0001 | Global 0.2290 | Local 0.1192 | F1_macro 0.6132 | WorstLoss 2.1418
+[Tracker] Ep   45 | AvgR -0.0000 | Global -0.0862 | Local 0.1192 | F1_macro 0.6196 | WorstLoss 3.0246
+[Tracker] Saved snapshot: ep0045_phase1_class1
+[Tracker] Ep   46 | AvgR 0.0001 | Global 0.2570 | Local 0.1192 | F1_macro 0.6133 | WorstLoss 2.0557
+[Tracker] Ep   47 | AvgR 0.0002 | Global 0.3097 | Local 0.1192 | F1_macro 0.6265 | WorstLoss 1.9144
+[Tracker] Ep   48 | AvgR 0.0001 | Global 0.2788 | Local 0.1192 | F1_macro 0.6408 | WorstLoss 2.0036
+[Tracker] Ep   49 | AvgR 0.0001 | Global 0.1178 | Local 0.1192 | F1_macro 0.6518 | WorstLoss 2.4509
+[Tracker] Ep   50 | AvgR 0.0001 | Global 0.2592 | Local 0.1192 | F1_macro 0.6332 | WorstLoss 2.0578
+[Tracker] Saved snapshot: ep0050_phase1_class1
+[Tracker] Ep   51 | AvgR 0.0001 | Global 0.2093 | Local 0.1192 | F1_macro 0.6352 | WorstLoss 2.1966
+[Tracker] Ep   52 | AvgR 0.0000 | Global 0.0941 | Local 0.1192 | F1_macro 0.6137 | WorstLoss 2.5163
+[Tracker] Ep   53 | AvgR 0.0002 | Global 0.3379 | Local 0.1192 | F1_macro 0.6411 | WorstLoss 1.8287
+[Tracker] Ep   54 | AvgR 0.0001 | Global 0.1060 | Local 0.1192 | F1_macro 0.6121 | WorstLoss 2.4807
+[Tracker] Ep   55 | AvgR 0.0001 | Global 0.2316 | Local 0.1192 | F1_macro 0.6411 | WorstLoss 2.1347
+[Tracker] Saved snapshot: ep0055_phase1_class1
+[Tracker] Ep   56 | AvgR 0.0001 | Global 0.2927 | Local 0.1192 | F1_macro 0.6155 | WorstLoss 1.9533
+[Tracker] Ep   57 | AvgR 0.0001 | Global 0.2144 | Local 0.1192 | F1_macro 0.6046 | WorstLoss 2.1823
+[Tracker] Ep   58 | AvgR 0.0000 | Global 0.0341 | Local 0.1192 | F1_macro 0.5922 | WorstLoss 2.6823
+[Tracker] Ep   59 | AvgR 0.0000 | Global 0.0006 | Local 0.1192 | F1_macro 0.5992 | WorstLoss 2.7764
+[Tracker] Ep   60 | AvgR 0.0001 | Global 0.2129 | Local 0.1192 | F1_macro 0.6098 | WorstLoss 2.1787
+[Tracker] Saved snapshot: ep0060_phase1_class1
+[Tracker] Ep   61 | AvgR 0.0001 | Global 0.2478 | Local 0.1192 | F1_macro 0.6326 | WorstLoss 2.0850
+[Tracker] Ep   62 | AvgR 0.0001 | Global 0.2740 | Local 0.1192 | F1_macro 0.6153 | WorstLoss 2.0079
+[Tracker] Ep   63 | AvgR 0.0001 | Global 0.2706 | Local 0.1192 | F1_macro 0.6455 | WorstLoss 2.0183
+[Tracker] Ep   64 | AvgR 0.0001 | Global 0.1178 | Local 0.1192 | F1_macro 0.6073 | WorstLoss 2.4453
+[Tracker] Ep   65 | AvgR 0.0001 | Global 0.2283 | Local 0.1192 | F1_macro 0.6034 | WorstLoss 2.1432
+[Tracker] Saved snapshot: ep0065_phase1_class1
+[Tracker] Ep   66 | AvgR 0.0002 | Global 0.3124 | Local 0.1192 | F1_macro 0.6330 | WorstLoss 1.9026
+[Tracker] Ep   67 | AvgR 0.0001 | Global 0.2427 | Local 0.1192 | F1_macro 0.6332 | WorstLoss 2.0979
+[Tracker] Ep   68 | AvgR 0.0001 | Global 0.1721 | Local 0.1192 | F1_macro 0.6159 | WorstLoss 2.2992
+[Tracker] Ep   69 | AvgR 0.0001 | Global 0.1782 | Local 0.1192 | F1_macro 0.6164 | WorstLoss 2.2827
+[Tracker] Ep   70 | AvgR 0.0001 | Global 0.2270 | Local 0.1192 | F1_macro 0.6229 | WorstLoss 2.1454
+[Tracker] Saved snapshot: ep0070_phase1_class1
+[Tracker] Ep   71 | AvgR 0.0002 | Global 0.3059 | Local 0.1192 | F1_macro 0.6373 | WorstLoss 1.9202
+[Tracker] Ep   72 | AvgR 0.0001 | Global 0.2470 | Local 0.1192 | F1_macro 0.6209 | WorstLoss 2.0905
+[Tracker] Ep   73 | AvgR 0.0001 | Global 0.2582 | Local 0.1192 | F1_macro 0.6193 | WorstLoss 2.0585
+[Tracker] Ep   74 | AvgR 0.0001 | Global 0.1576 | Local 0.1192 | F1_macro 0.6082 | WorstLoss 2.3369
+[Tracker] Ep   75 | AvgR 0.0001 | Global 0.2010 | Local 0.1192 | F1_macro 0.6135 | WorstLoss 2.2152
+[Tracker] Saved snapshot: ep0075_phase1_class1
+[Tracker] Ep   76 | AvgR 0.0001 | Global 0.1252 | Local 0.1192 | F1_macro 0.6367 | WorstLoss 2.4254
+[Tracker] Ep   77 | AvgR 0.0001 | Global 0.1507 | Local 0.1192 | F1_macro 0.5993 | WorstLoss 2.3517
+[Tracker] Ep   78 | AvgR 0.0001 | Global 0.2651 | Local 0.1192 | F1_macro 0.6431 | WorstLoss 2.0415
+[Tracker] Ep   79 | AvgR 0.0001 | Global 0.2208 | Local 0.1192 | F1_macro 0.6056 | WorstLoss 2.1622
+[Tracker] Ep   80 | AvgR 0.0001 | Global 0.1968 | Local 0.1192 | F1_macro 0.6107 | WorstLoss 2.2257
+[Tracker] Saved snapshot: ep0080_phase1_class1
+[Tracker] Ep   81 | AvgR 0.0000 | Global 0.0234 | Local 0.1192 | F1_macro 0.6177 | WorstLoss 2.7116
+[Tracker] Ep   82 | AvgR 0.0001 | Global 0.2611 | Local 0.1192 | F1_macro 0.6320 | WorstLoss 2.0430
+[Tracker] Ep   83 | AvgR 0.0001 | Global 0.2899 | Local 0.1192 | F1_macro 0.6285 | WorstLoss 1.9628
+[Tracker] Ep   84 | AvgR 0.0001 | Global 0.1056 | Local 0.1192 | F1_macro 0.6091 | WorstLoss 2.4814
+[Tracker] Ep   85 | AvgR 0.0001 | Global 0.2683 | Local 0.1192 | F1_macro 0.6232 | WorstLoss 2.0327
+[Tracker] Saved snapshot: ep0085_phase1_class1
+[Tracker] Ep   86 | AvgR 0.0001 | Global 0.2861 | Local 0.1192 | F1_macro 0.6192 | WorstLoss 1.9833
+[Tracker] Ep   87 | AvgR 0.0001 | Global 0.2948 | Local 0.1192 | F1_macro 0.6098 | WorstLoss 1.9589
+[Tracker] Ep   88 | AvgR 0.0001 | Global 0.2077 | Local 0.1192 | F1_macro 0.6232 | WorstLoss 2.2009
+[Tracker] Ep   89 | AvgR 0.0002 | Global 0.3012 | Local 0.1192 | F1_macro 0.6288 | WorstLoss 1.9390
+[Tracker] Ep   90 | AvgR 0.0001 | Global 0.1986 | Local 0.1192 | F1_macro 0.6315 | WorstLoss 2.2209
+[Tracker] Saved snapshot: ep0090_phase1_class1
+[Tracker] Ep   91 | AvgR 0.0001 | Global 0.2640 | Local 0.1192 | F1_macro 0.6343 | WorstLoss 2.0447
+[Tracker] Ep   92 | AvgR 0.0002 | Global 0.3197 | Local 0.1192 | F1_macro 0.6282 | WorstLoss 1.8839
+[Tracker] Ep   93 | AvgR 0.0001 | Global 0.2944 | Local 0.1192 | F1_macro 0.6286 | WorstLoss 1.9572
+[Tracker] Ep   94 | AvgR 0.0001 | Global 0.2743 | Local 0.1192 | F1_macro 0.6200 | WorstLoss 2.0118
+[Tracker] Ep   95 | AvgR 0.0002 | Global 0.3190 | Local 0.1192 | F1_macro 0.6346 | WorstLoss 1.8917
+[Tracker] Saved snapshot: ep0095_phase1_class1
+[Tracker] Ep   96 | AvgR 0.0000 | Global 0.0953 | Local 0.1192 | F1_macro 0.6032 | WorstLoss 2.5121
+[Tracker] Ep   97 | AvgR 0.0000 | Global 0.0830 | Local 0.1192 | F1_macro 0.5917 | WorstLoss 2.5444
+[Tracker] Ep   98 | AvgR 0.0001 | Global 0.2595 | Local 0.1192 | F1_macro 0.6213 | WorstLoss 2.0481
+[Tracker] Ep   99 | AvgR 0.0002 | Global 0.3037 | Local 0.1192 | F1_macro 0.6355 | WorstLoss 1.9344
+[Tracker] Ep  100 | AvgR 0.0001 | Global 0.2911 | Local 0.1192 | F1_macro 0.6198 | WorstLoss 1.9655
+[Tracker] Saved snapshot: ep0100_phase1_class1
+[Tracker] Ep  101 | AvgR 0.0001 | Global 0.2661 | Local 0.1192 | F1_macro 0.6275 | WorstLoss 2.0387
+[Tracker] Ep  102 | AvgR 0.0001 | Global 0.2574 | Local 0.1192 | F1_macro 0.6151 | WorstLoss 2.0573
+[Tracker] Ep  103 | AvgR 0.0001 | Global 0.2923 | Local 0.1192 | F1_macro 0.6268 | WorstLoss 1.9659
+[Tracker] Ep  104 | AvgR 0.0001 | Global 0.1579 | Local 0.1192 | F1_macro 0.6082 | WorstLoss 2.3382
+[Tracker] Ep  105 | AvgR 0.0001 | Global 0.2251 | Local 0.1192 | F1_macro 0.6249 | WorstLoss 2.1528
+[Tracker] Saved snapshot: ep0105_phase1_class1
+[Tracker] Ep  106 | AvgR 0.0001 | Global 0.2551 | Local 0.1192 | F1_macro 0.6289 | WorstLoss 2.0693
+[Tracker] Ep  107 | AvgR 0.0001 | Global 0.2675 | Local 0.1192 | F1_macro 0.6334 | WorstLoss 2.0346
+[Tracker] Ep  108 | AvgR 0.0001 | Global 0.2051 | Local 0.1192 | F1_macro 0.6103 | WorstLoss 2.1989
+[Tracker] Ep  109 | AvgR 0.0001 | Global 0.1979 | Local 0.1192 | F1_macro 0.6264 | WorstLoss 2.2276
+[Tracker] Ep  110 | AvgR 0.0002 | Global 0.3509 | Local 0.1192 | F1_macro 0.6408 | WorstLoss 1.7968
+[Tracker] Saved snapshot: ep0110_phase1_class1
+[Tracker] Ep  111 | AvgR 0.0002 | Global 0.3158 | Local 0.1192 | F1_macro 0.6352 | WorstLoss 1.9008
+[Tracker] Ep  112 | AvgR 0.0001 | Global 0.2882 | Local 0.1192 | F1_macro 0.6392 | WorstLoss 1.9752
+[Tracker] Ep  113 | AvgR 0.0001 | Global 0.2958 | Local 0.1192 | F1_macro 0.6081 | WorstLoss 1.9527
+[Tracker] Ep  114 | AvgR 0.0001 | Global 0.2914 | Local 0.1192 | F1_macro 0.6392 | WorstLoss 1.9683
+[Tracker] Ep  115 | AvgR 0.0001 | Global 0.1732 | Local 0.1192 | F1_macro 0.6238 | WorstLoss 2.2970
+[Tracker] Saved snapshot: ep0115_phase1_class1
+[Tracker] Ep  116 | AvgR 0.0001 | Global 0.2654 | Local 0.1192 | F1_macro 0.6236 | WorstLoss 2.0391
+[Tracker] Ep  117 | AvgR 0.0001 | Global 0.2950 | Local 0.1192 | F1_macro 0.6053 | WorstLoss 1.9568
+[Tracker] Ep  118 | AvgR 0.0002 | Global 0.3190 | Local 0.1192 | F1_macro 0.6372 | WorstLoss 1.8899
+[Tracker] Ep  119 | AvgR 0.0001 | Global 0.2181 | Local 0.1192 | F1_macro 0.6275 | WorstLoss 2.1686
+[Tracker] Ep  120 | AvgR 0.0001 | Global 0.1883 | Local 0.1192 | F1_macro 0.6189 | WorstLoss 2.2518
+[Tracker] Saved snapshot: ep0120_phase1_class1
+[Tracker] Ep  121 | AvgR 0.0002 | Global 0.3330 | Local 0.1192 | F1_macro 0.6270 | WorstLoss 1.8516
+[Tracker] Ep  122 | AvgR 0.0001 | Global 0.2228 | Local 0.1192 | F1_macro 0.6007 | WorstLoss 2.1592
+[Tracker] Ep  123 | AvgR 0.0001 | Global 0.2546 | Local 0.1192 | F1_macro 0.6337 | WorstLoss 2.0697
+[Tracker] Ep  124 | AvgR 0.0002 | Global 0.3003 | Local 0.1192 | F1_macro 0.6284 | WorstLoss 1.9304
+[Tracker] Ep  125 | AvgR 0.0001 | Global 0.2737 | Local 0.1192 | F1_macro 0.6383 | WorstLoss 2.0164
+[Tracker] Saved snapshot: ep0125_phase1_class1
+[Tracker] Ep  126 | AvgR 0.0001 | Global 0.1426 | Local 0.1192 | F1_macro 0.6078 | WorstLoss 2.3808
+[Tracker] Ep  127 | AvgR 0.0001 | Global 0.2234 | Local 0.1192 | F1_macro 0.6032 | WorstLoss 2.1575
+[Tracker] Ep  128 | AvgR 0.0001 | Global 0.2118 | Local 0.1192 | F1_macro 0.6321 | WorstLoss 2.1897
+[Tracker] Ep  129 | AvgR 0.0001 | Global 0.2969 | Local 0.1192 | F1_macro 0.6266 | WorstLoss 1.9533
+[Tracker] Ep  130 | AvgR 0.0001 | Global 0.2691 | Local 0.1192 | F1_macro 0.6111 | WorstLoss 2.0305
+[Tracker] Saved snapshot: ep0130_phase1_class1
+[CMA-ES Phase] Finished phase1_class1 | best global_obj=0.3755
+Phase 2 anchors: 1763 (y=0 & disadv=1)
+[CMAESAgent] reset phase='phase2_class0' | D=10 param_dim=20 popsize=12 sigma0=1.000
+FFNN Using device: cuda:1
+
+============================================================
+[CMA-ES Phase] phase2_class0 | target_class=0 | episodes=26 | popsize=12
+============================================================
+[Tracker] Ep    1 | AvgR 0.0002 | Global 0.3868 | Local 0.1192 | F1_macro 0.6613 | WorstLoss 1.6949
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.386750) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    2 | AvgR 0.0002 | Global 0.3695 | Local 0.1192 | F1_macro 0.6499 | WorstLoss 1.7342
+[Tracker] Ep    3 | AvgR 0.0001 | Global 0.2805 | Local 0.1192 | F1_macro 0.6143 | WorstLoss 1.9764
+[Tracker] Ep    4 | AvgR 0.0001 | Global 0.1956 | Local 0.1192 | F1_macro 0.6226 | WorstLoss 2.2239
+[Tracker] Ep    5 | AvgR 0.0002 | Global 0.3151 | Local 0.1192 | F1_macro 0.6276 | WorstLoss 1.8905
+[Tracker] Saved snapshot: ep0005_phase2_class0
+[Tracker] Ep    6 | AvgR 0.0001 | Global 0.2859 | Local 0.1192 | F1_macro 0.6321 | WorstLoss 1.9644
+[Tracker] Ep    7 | AvgR 0.0002 | Global 0.3381 | Local 0.1192 | F1_macro 0.6543 | WorstLoss 1.8199
+[Tracker] Ep    8 | AvgR 0.0002 | Global 0.3397 | Local 0.1192 | F1_macro 0.6414 | WorstLoss 1.8166
+[Tracker] Ep    9 | AvgR 0.0002 | Global 0.3631 | Local 0.1192 | F1_macro 0.6505 | WorstLoss 1.7493
+[Tracker] Ep   10 | AvgR 0.0001 | Global 0.2311 | Local 0.1192 | F1_macro 0.6391 | WorstLoss 2.1232
+[Tracker] Saved snapshot: ep0010_phase2_class0
+[Tracker] Ep   11 | AvgR 0.0001 | Global 0.2992 | Local 0.1192 | F1_macro 0.6387 | WorstLoss 1.9271
+[Tracker] Ep   12 | AvgR 0.0002 | Global 0.3661 | Local 0.1192 | F1_macro 0.6453 | WorstLoss 1.7398
+[Tracker] Ep   13 | AvgR 0.0001 | Global 0.2843 | Local 0.1192 | F1_macro 0.6310 | WorstLoss 1.9795
+[Tracker] Ep   14 | AvgR 0.0002 | Global 0.3570 | Local 0.1192 | F1_macro 0.6475 | WorstLoss 1.7697
+[Tracker] Ep   15 | AvgR 0.0001 | Global 0.2281 | Local 0.1192 | F1_macro 0.6021 | WorstLoss 2.1278
+[Tracker] Saved snapshot: ep0015_phase2_class0
+[Tracker] Ep   16 | AvgR 0.0002 | Global 0.3943 | Local 0.1192 | F1_macro 0.6537 | WorstLoss 1.6659
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.394338) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep   17 | AvgR 0.0002 | Global 0.3146 | Local 0.1192 | F1_macro 0.6452 | WorstLoss 1.8964
+[Tracker] Ep   18 | AvgR 0.0002 | Global 0.3396 | Local 0.1192 | F1_macro 0.6406 | WorstLoss 1.8236
+[Tracker] Ep   19 | AvgR 0.0002 | Global 0.3907 | Local 0.1192 | F1_macro 0.6451 | WorstLoss 1.6757
+[Tracker] Ep   20 | AvgR 0.0002 | Global 0.3332 | Local 0.1192 | F1_macro 0.6161 | WorstLoss 1.8329
+[Tracker] Saved snapshot: ep0020_phase2_class0
+[Tracker] Ep   21 | AvgR 0.0002 | Global 0.4253 | Local 0.1192 | F1_macro 0.6584 | WorstLoss 1.5773
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.425306) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep   22 | AvgR 0.0002 | Global 0.3704 | Local 0.1192 | F1_macro 0.6504 | WorstLoss 1.7346
+[Tracker] Ep   23 | AvgR 0.0001 | Global 0.2704 | Local 0.1192 | F1_macro 0.6159 | WorstLoss 2.0078
+[Tracker] Ep   24 | AvgR 0.0002 | Global 0.3907 | Local 0.1192 | F1_macro 0.6550 | WorstLoss 1.6755
+[Tracker] Ep   25 | AvgR 0.0002 | Global 0.3612 | Local 0.1192 | F1_macro 0.6633 | WorstLoss 1.7641
+[Tracker] Saved snapshot: ep0025_phase2_class0
+[Tracker] Ep   26 | AvgR 0.0002 | Global 0.3820 | Local 0.1192 | F1_macro 0.6481 | WorstLoss 1.6962
+[CMA-ES Phase] Finished phase2_class0 | best global_obj=0.4253
+FFNN Using device: cuda:1
+[Combined] Saved combined beta -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_beta_state_dict.pt
+[Combined] Saved combined synthetic -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_synthetic_combined.npz
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/best_beta_state_dict.pt
+
+[TEST] Alpha -> F1(min)=0.3200 | F1(maj)=0.8852 | F1(weighted)=0.7491 | F1(macro)=0.6026 | Brier=0.1458
+[TEST] Beta  -> F1(min)=0.3221 | F1(maj)=0.8820 | F1(weighted)=0.7471 | F1(macro)=0.6021 | Brier=0.1524
+[TestSuite] Final test metrics appended to (seed): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/final_test_metrics.csv
+Total time 505.71s
+[Tracker] Finished. Run folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_42
+[main] ---- running seed=0 ----
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+[Tracker] Experiment: SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed
+[Tracker] Seed folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0
+[Tracker] Run: 2026-04-04_11-26-49_seed0_81563_6313df39
+[Tracker] Metrics CSV: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/metrics.csv
+[Tracker] Mirroring console to: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/console.log
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+Beta will train with: 60.00% real data, 40.00% synthetic data: 
+[disadv] group=1 per_g={0: 0.36822783946990967, 1: 0.5950813293457031} worst_4g=3.1799 soft_eo_alpha=0.1641
+Anchors: 137 (disadv=1) sigma_anchor=0.8500
+[Tracker] Alpha model state_dict saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/alpha_state_dict.pt
+[Tracker] Alpha model config saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/ffnn_meta.json
+[CMAESAgent] reset phase='phase1_class1' | D=10 param_dim=20 popsize=12 sigma0=1.000
+
+============================================================
+[CMA-ES Phase] phase1_class1 | target_class=1 | episodes=130 | popsize=12
+============================================================
+[Tracker] CSV header written with 47 columns.
+[Tracker] Ep    1 | AvgR 0.0000 | Global 0.0046 | Local 0.1192 | F1_macro 0.5887 | WorstLoss 3.1651
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.004590) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    2 | AvgR 0.0000 | Global 0.0708 | Local 0.1192 | F1_macro 0.5931 | WorstLoss 2.9529
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.070765) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    3 | AvgR 0.0000 | Global 0.0397 | Local 0.1192 | F1_macro 0.5622 | WorstLoss 3.0520
+[Tracker] Ep    4 | AvgR 0.0001 | Global 0.1386 | Local 0.1192 | F1_macro 0.5811 | WorstLoss 2.7267
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.138627) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    5 | AvgR 0.0001 | Global 0.2391 | Local 0.1192 | F1_macro 0.6212 | WorstLoss 2.4178
+[Tracker] Saved snapshot: ep0005_phase1_class1
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.239053) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    6 | AvgR -0.0001 | Global -0.1429 | Local 0.1192 | F1_macro 0.6328 | WorstLoss 3.6409
+[Tracker] Ep    7 | AvgR 0.0001 | Global 0.1395 | Local 0.1192 | F1_macro 0.6165 | WorstLoss 2.7309
+[Tracker] Ep    8 | AvgR 0.0001 | Global 0.2368 | Local 0.1192 | F1_macro 0.5948 | WorstLoss 2.4269
+[Tracker] Ep    9 | AvgR 0.0001 | Global 0.1742 | Local 0.1192 | F1_macro 0.6240 | WorstLoss 2.6260
+[Tracker] Ep   10 | AvgR -0.0000 | Global -0.0417 | Local 0.1192 | F1_macro 0.6034 | WorstLoss 3.3137
+[Tracker] Saved snapshot: ep0010_phase1_class1
+[Tracker] Ep   11 | AvgR 0.0001 | Global 0.2815 | Local 0.1192 | F1_macro 0.5921 | WorstLoss 2.2721
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.281502) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   12 | AvgR 0.0000 | Global 0.0660 | Local 0.1192 | F1_macro 0.5806 | WorstLoss 2.9698
+[Tracker] Ep   13 | AvgR 0.0001 | Global 0.1461 | Local 0.1192 | F1_macro 0.5868 | WorstLoss 2.7154
+[Tracker] Ep   14 | AvgR 0.0001 | Global 0.1736 | Local 0.1192 | F1_macro 0.6022 | WorstLoss 2.6278
+[Tracker] Ep   15 | AvgR 0.0000 | Global 0.0731 | Local 0.1192 | F1_macro 0.5865 | WorstLoss 2.9475
+[Tracker] Saved snapshot: ep0015_phase1_class1
+[Tracker] Ep   16 | AvgR 0.0000 | Global 0.0983 | Local 0.1192 | F1_macro 0.5636 | WorstLoss 2.8673
+[Tracker] Ep   17 | AvgR 0.0001 | Global 0.1690 | Local 0.1192 | F1_macro 0.5969 | WorstLoss 2.6414
+[Tracker] Ep   18 | AvgR 0.0002 | Global 0.3269 | Local 0.1192 | F1_macro 0.5981 | WorstLoss 2.1310
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.326913) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   19 | AvgR 0.0001 | Global 0.1246 | Local 0.1192 | F1_macro 0.5786 | WorstLoss 2.7837
+[Tracker] Ep   20 | AvgR 0.0000 | Global 0.0417 | Local 0.1192 | F1_macro 0.5815 | WorstLoss 3.0425
+[Tracker] Saved snapshot: ep0020_phase1_class1
+[Tracker] Ep   21 | AvgR 0.0000 | Global 0.0564 | Local 0.1192 | F1_macro 0.5780 | WorstLoss 2.9976
+[Tracker] Ep   22 | AvgR 0.0001 | Global 0.1879 | Local 0.1192 | F1_macro 0.6129 | WorstLoss 2.5756
+[Tracker] Ep   23 | AvgR -0.0000 | Global -0.0195 | Local 0.1192 | F1_macro 0.5981 | WorstLoss 3.2421
+[Tracker] Ep   24 | AvgR 0.0001 | Global 0.2744 | Local 0.1192 | F1_macro 0.6124 | WorstLoss 2.3022
+[Tracker] Ep   25 | AvgR 0.0001 | Global 0.1125 | Local 0.1192 | F1_macro 0.5653 | WorstLoss 2.8183
+[Tracker] Saved snapshot: ep0025_phase1_class1
+[Tracker] Ep   26 | AvgR 0.0001 | Global 0.2451 | Local 0.1192 | F1_macro 0.5781 | WorstLoss 2.3913
+[Tracker] Ep   27 | AvgR 0.0001 | Global 0.2611 | Local 0.1192 | F1_macro 0.5994 | WorstLoss 2.3237
+[Tracker] Ep   28 | AvgR 0.0000 | Global 0.0867 | Local 0.1192 | F1_macro 0.5779 | WorstLoss 2.9029
+[Tracker] Ep   29 | AvgR 0.0001 | Global 0.1379 | Local 0.1192 | F1_macro 0.6133 | WorstLoss 2.7358
+[Tracker] Ep   30 | AvgR 0.0001 | Global 0.2110 | Local 0.1192 | F1_macro 0.5788 | WorstLoss 2.5028
+[Tracker] Saved snapshot: ep0030_phase1_class1
+[Tracker] Ep   31 | AvgR 0.0000 | Global 0.0990 | Local 0.1192 | F1_macro 0.6171 | WorstLoss 2.8644
+[Tracker] Ep   32 | AvgR 0.0002 | Global 0.3599 | Local 0.1192 | F1_macro 0.5889 | WorstLoss 2.0291
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.359930) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   33 | AvgR 0.0002 | Global 0.3568 | Local 0.1192 | F1_macro 0.5838 | WorstLoss 2.0414
+[Tracker] Ep   34 | AvgR 0.0000 | Global 0.0652 | Local 0.1192 | F1_macro 0.6047 | WorstLoss 2.9696
+[Tracker] Ep   35 | AvgR 0.0001 | Global 0.2138 | Local 0.1192 | F1_macro 0.5895 | WorstLoss 2.4999
+[Tracker] Saved snapshot: ep0035_phase1_class1
+[Tracker] Ep   36 | AvgR 0.0001 | Global 0.2144 | Local 0.1192 | F1_macro 0.6022 | WorstLoss 2.4941
+[Tracker] Ep   37 | AvgR 0.0001 | Global 0.1618 | Local 0.1192 | F1_macro 0.5729 | WorstLoss 2.6653
+[Tracker] Ep   38 | AvgR 0.0001 | Global 0.1260 | Local 0.1192 | F1_macro 0.5785 | WorstLoss 2.7764
+[Tracker] Ep   39 | AvgR 0.0002 | Global 0.3010 | Local 0.1192 | F1_macro 0.5739 | WorstLoss 2.2111
+[Tracker] Ep   40 | AvgR 0.0001 | Global 0.1470 | Local 0.1192 | F1_macro 0.5815 | WorstLoss 2.7039
+[Tracker] Saved snapshot: ep0040_phase1_class1
+[Tracker] Ep   41 | AvgR 0.0001 | Global 0.1877 | Local 0.1192 | F1_macro 0.5799 | WorstLoss 2.5821
+[Tracker] Ep   42 | AvgR 0.0001 | Global 0.1463 | Local 0.1192 | F1_macro 0.5833 | WorstLoss 2.7127
+[Tracker] Ep   43 | AvgR 0.0002 | Global 0.3163 | Local 0.1192 | F1_macro 0.5907 | WorstLoss 2.1679
+[Tracker] Ep   44 | AvgR 0.0001 | Global 0.1411 | Local 0.1192 | F1_macro 0.5721 | WorstLoss 2.7283
+[Tracker] Ep   45 | AvgR 0.0002 | Global 0.3254 | Local 0.1192 | F1_macro 0.5948 | WorstLoss 2.1182
+[Tracker] Saved snapshot: ep0045_phase1_class1
+[Tracker] Ep   46 | AvgR 0.0001 | Global 0.1011 | Local 0.1192 | F1_macro 0.5997 | WorstLoss 2.8536
+[Tracker] Ep   47 | AvgR 0.0001 | Global 0.2258 | Local 0.1192 | F1_macro 0.5771 | WorstLoss 2.4382
+[Tracker] Ep   48 | AvgR 0.0001 | Global 0.2132 | Local 0.1192 | F1_macro 0.6008 | WorstLoss 2.5019
+[Tracker] Ep   49 | AvgR 0.0001 | Global 0.1551 | Local 0.1192 | F1_macro 0.5586 | WorstLoss 2.6835
+[Tracker] Ep   50 | AvgR 0.0001 | Global 0.2546 | Local 0.1192 | F1_macro 0.6132 | WorstLoss 2.3704
+[Tracker] Saved snapshot: ep0050_phase1_class1
+[Tracker] Ep   51 | AvgR 0.0001 | Global 0.2289 | Local 0.1192 | F1_macro 0.5824 | WorstLoss 2.4469
+[Tracker] Ep   52 | AvgR 0.0000 | Global 0.0503 | Local 0.1192 | F1_macro 0.5718 | WorstLoss 3.0173
+[Tracker] Ep   53 | AvgR 0.0000 | Global 0.0186 | Local 0.1192 | F1_macro 0.5934 | WorstLoss 3.1190
+[Tracker] Ep   54 | AvgR 0.0001 | Global 0.2547 | Local 0.1192 | F1_macro 0.5507 | WorstLoss 2.3675
+[Tracker] Ep   55 | AvgR 0.0001 | Global 0.1250 | Local 0.1192 | F1_macro 0.5872 | WorstLoss 2.7789
+[Tracker] Saved snapshot: ep0055_phase1_class1
+[Tracker] Ep   56 | AvgR 0.0001 | Global 0.1227 | Local 0.1192 | F1_macro 0.5648 | WorstLoss 2.7873
+[Tracker] Ep   57 | AvgR 0.0001 | Global 0.1576 | Local 0.1192 | F1_macro 0.5891 | WorstLoss 2.6749
+[Tracker] Ep   58 | AvgR 0.0001 | Global 0.2272 | Local 0.1192 | F1_macro 0.5855 | WorstLoss 2.4458
+[Tracker] Ep   59 | AvgR 0.0001 | Global 0.2728 | Local 0.1192 | F1_macro 0.5660 | WorstLoss 2.3084
+[Tracker] Ep   60 | AvgR 0.0000 | Global 0.0935 | Local 0.1192 | F1_macro 0.5634 | WorstLoss 2.8775
+[Tracker] Saved snapshot: ep0060_phase1_class1
+[Tracker] Ep   61 | AvgR 0.0001 | Global 0.1707 | Local 0.1192 | F1_macro 0.5800 | WorstLoss 2.6319
+[Tracker] Ep   62 | AvgR 0.0001 | Global 0.2818 | Local 0.1192 | F1_macro 0.5815 | WorstLoss 2.2784
+[Tracker] Ep   63 | AvgR 0.0001 | Global 0.2688 | Local 0.1192 | F1_macro 0.5915 | WorstLoss 2.3206
+[Tracker] Ep   64 | AvgR 0.0001 | Global 0.1091 | Local 0.1192 | F1_macro 0.5607 | WorstLoss 2.8309
+[Tracker] Ep   65 | AvgR 0.0001 | Global 0.2351 | Local 0.1192 | F1_macro 0.5825 | WorstLoss 2.4299
+[Tracker] Saved snapshot: ep0065_phase1_class1
+[Tracker] Ep   66 | AvgR 0.0001 | Global 0.2480 | Local 0.1192 | F1_macro 0.5996 | WorstLoss 2.3810
+[Tracker] Ep   67 | AvgR 0.0001 | Global 0.2628 | Local 0.1192 | F1_macro 0.5869 | WorstLoss 2.3389
+[Tracker] Ep   68 | AvgR 0.0000 | Global 0.0927 | Local 0.1192 | F1_macro 0.5747 | WorstLoss 2.8823
+[Tracker] Ep   69 | AvgR 0.0001 | Global 0.1457 | Local 0.1192 | F1_macro 0.5650 | WorstLoss 2.7166
+[Tracker] Ep   70 | AvgR 0.0001 | Global 0.2576 | Local 0.1192 | F1_macro 0.5791 | WorstLoss 2.3366
+[Tracker] Saved snapshot: ep0070_phase1_class1
+[Tracker] Ep   71 | AvgR 0.0001 | Global 0.1879 | Local 0.1192 | F1_macro 0.5784 | WorstLoss 2.5789
+[Tracker] Ep   72 | AvgR 0.0001 | Global 0.2812 | Local 0.1192 | F1_macro 0.5732 | WorstLoss 2.2702
+[Tracker] Ep   73 | AvgR 0.0001 | Global 0.1998 | Local 0.1192 | F1_macro 0.5837 | WorstLoss 2.5442
+[Tracker] Ep   74 | AvgR 0.0002 | Global 0.3406 | Local 0.1192 | F1_macro 0.5936 | WorstLoss 2.0899
+[Tracker] Ep   75 | AvgR 0.0000 | Global 0.0987 | Local 0.1192 | F1_macro 0.5631 | WorstLoss 2.8660
+[Tracker] Saved snapshot: ep0075_phase1_class1
+[Tracker] Ep   76 | AvgR 0.0001 | Global 0.1977 | Local 0.1192 | F1_macro 0.5596 | WorstLoss 2.5512
+[Tracker] Ep   77 | AvgR 0.0001 | Global 0.2445 | Local 0.1192 | F1_macro 0.5702 | WorstLoss 2.3876
+[Tracker] Ep   78 | AvgR 0.0001 | Global 0.2241 | Local 0.1192 | F1_macro 0.5793 | WorstLoss 2.4673
+[Tracker] Ep   79 | AvgR 0.0001 | Global 0.1991 | Local 0.1192 | F1_macro 0.5599 | WorstLoss 2.5387
+[Tracker] Ep   80 | AvgR 0.0001 | Global 0.2038 | Local 0.1192 | F1_macro 0.6052 | WorstLoss 2.5290
+[Tracker] Saved snapshot: ep0080_phase1_class1
+[Tracker] Ep   81 | AvgR 0.0002 | Global 0.3133 | Local 0.1192 | F1_macro 0.5855 | WorstLoss 2.1600
+[Tracker] Ep   82 | AvgR 0.0002 | Global 0.3135 | Local 0.1192 | F1_macro 0.5973 | WorstLoss 2.1830
+[Tracker] Ep   83 | AvgR 0.0001 | Global 0.2188 | Local 0.1192 | F1_macro 0.5783 | WorstLoss 2.4795
+[Tracker] Ep   84 | AvgR 0.0002 | Global 0.3005 | Local 0.1192 | F1_macro 0.6050 | WorstLoss 2.2227
+[Tracker] Ep   85 | AvgR 0.0002 | Global 0.3621 | Local 0.1192 | F1_macro 0.6005 | WorstLoss 2.0242
+[Tracker] Saved snapshot: ep0085_phase1_class1
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.362059) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   86 | AvgR 0.0001 | Global 0.1716 | Local 0.1192 | F1_macro 0.5985 | WorstLoss 2.6289
+[Tracker] Ep   87 | AvgR 0.0001 | Global 0.1274 | Local 0.1192 | F1_macro 0.5565 | WorstLoss 2.7739
+[Tracker] Ep   88 | AvgR 0.0002 | Global 0.3342 | Local 0.1192 | F1_macro 0.5865 | WorstLoss 2.0952
+[Tracker] Ep   89 | AvgR 0.0001 | Global 0.2621 | Local 0.1192 | F1_macro 0.5702 | WorstLoss 2.3422
+[Tracker] Ep   90 | AvgR 0.0001 | Global 0.2323 | Local 0.1192 | F1_macro 0.6033 | WorstLoss 2.4412
+[Tracker] Saved snapshot: ep0090_phase1_class1
+[Tracker] Ep   91 | AvgR 0.0001 | Global 0.2506 | Local 0.1192 | F1_macro 0.5798 | WorstLoss 2.3763
+[Tracker] Ep   92 | AvgR 0.0001 | Global 0.1142 | Local 0.1192 | F1_macro 0.5532 | WorstLoss 2.8102
+[Tracker] Ep   93 | AvgR 0.0001 | Global 0.2589 | Local 0.1192 | F1_macro 0.5820 | WorstLoss 2.3509
+[Tracker] Ep   94 | AvgR 0.0001 | Global 0.1896 | Local 0.1192 | F1_macro 0.5793 | WorstLoss 2.5656
+[Tracker] Ep   95 | AvgR 0.0001 | Global 0.2446 | Local 0.1192 | F1_macro 0.5890 | WorstLoss 2.3996
+[Tracker] Saved snapshot: ep0095_phase1_class1
+[Tracker] Ep   96 | AvgR 0.0001 | Global 0.2538 | Local 0.1192 | F1_macro 0.5887 | WorstLoss 2.3670
+[Tracker] Ep   97 | AvgR 0.0001 | Global 0.1203 | Local 0.1192 | F1_macro 0.5487 | WorstLoss 2.7898
+[Tracker] Ep   98 | AvgR 0.0002 | Global 0.3199 | Local 0.1192 | F1_macro 0.5947 | WorstLoss 2.1465
+[Tracker] Ep   99 | AvgR 0.0002 | Global 0.3799 | Local 0.1192 | F1_macro 0.6090 | WorstLoss 1.9424
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.379946) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep  100 | AvgR 0.0001 | Global 0.2532 | Local 0.1192 | F1_macro 0.5658 | WorstLoss 2.3727
+[Tracker] Saved snapshot: ep0100_phase1_class1
+[Tracker] Ep  101 | AvgR 0.0001 | Global 0.2750 | Local 0.1192 | F1_macro 0.5684 | WorstLoss 2.3002
+[Tracker] Ep  102 | AvgR 0.0002 | Global 0.3849 | Local 0.1192 | F1_macro 0.5907 | WorstLoss 1.9521
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.384859) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep  103 | AvgR 0.0001 | Global 0.2504 | Local 0.1192 | F1_macro 0.5630 | WorstLoss 2.3759
+[Tracker] Ep  104 | AvgR 0.0001 | Global 0.2817 | Local 0.1192 | F1_macro 0.5737 | WorstLoss 2.2841
+[Tracker] Ep  105 | AvgR 0.0002 | Global 0.3367 | Local 0.1192 | F1_macro 0.5889 | WorstLoss 2.0926
+[Tracker] Saved snapshot: ep0105_phase1_class1
+[Tracker] Ep  106 | AvgR 0.0002 | Global 0.3110 | Local 0.1192 | F1_macro 0.5759 | WorstLoss 2.1847
+[Tracker] Ep  107 | AvgR 0.0001 | Global 0.2969 | Local 0.1192 | F1_macro 0.5767 | WorstLoss 2.2324
+[Tracker] Ep  108 | AvgR 0.0001 | Global 0.2683 | Local 0.1192 | F1_macro 0.5718 | WorstLoss 2.3239
+[Tracker] Ep  109 | AvgR 0.0001 | Global 0.1626 | Local 0.1192 | F1_macro 0.5727 | WorstLoss 2.6629
+[Tracker] Ep  110 | AvgR 0.0001 | Global 0.2873 | Local 0.1192 | F1_macro 0.6136 | WorstLoss 2.2531
+[Tracker] Saved snapshot: ep0110_phase1_class1
+[Tracker] Ep  111 | AvgR 0.0001 | Global 0.2923 | Local 0.1192 | F1_macro 0.5766 | WorstLoss 2.2389
+[Tracker] Ep  112 | AvgR 0.0002 | Global 0.4605 | Local 0.1192 | F1_macro 0.6277 | WorstLoss 1.6761
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.460549) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep  113 | AvgR 0.0002 | Global 0.3147 | Local 0.1192 | F1_macro 0.5746 | WorstLoss 2.1687
+[Tracker] Ep  114 | AvgR 0.0001 | Global 0.2941 | Local 0.1192 | F1_macro 0.5725 | WorstLoss 2.2043
+[Tracker] Ep  115 | AvgR 0.0002 | Global 0.3304 | Local 0.1192 | F1_macro 0.5680 | WorstLoss 2.1224
+[Tracker] Saved snapshot: ep0115_phase1_class1
+[Tracker] Ep  116 | AvgR 0.0002 | Global 0.3578 | Local 0.1192 | F1_macro 0.5893 | WorstLoss 2.0098
+[Tracker] Ep  117 | AvgR 0.0001 | Global 0.2210 | Local 0.1192 | F1_macro 0.5631 | WorstLoss 2.4702
+[Tracker] Ep  118 | AvgR 0.0002 | Global 0.3024 | Local 0.1192 | F1_macro 0.5969 | WorstLoss 2.2159
+[Tracker] Ep  119 | AvgR 0.0001 | Global 0.2875 | Local 0.1192 | F1_macro 0.5901 | WorstLoss 2.2500
+[Tracker] Ep  120 | AvgR 0.0001 | Global 0.2010 | Local 0.1192 | F1_macro 0.5763 | WorstLoss 2.5318
+[Tracker] Saved snapshot: ep0120_phase1_class1
+[Tracker] Ep  121 | AvgR 0.0001 | Global 0.2637 | Local 0.1192 | F1_macro 0.5738 | WorstLoss 2.3377
+[Tracker] Ep  122 | AvgR 0.0002 | Global 0.3438 | Local 0.1192 | F1_macro 0.5960 | WorstLoss 2.0822
+[Tracker] Ep  123 | AvgR 0.0002 | Global 0.3348 | Local 0.1192 | F1_macro 0.5966 | WorstLoss 2.0759
+[Tracker] Ep  124 | AvgR 0.0001 | Global 0.1713 | Local 0.1192 | F1_macro 0.5470 | WorstLoss 2.6310
+[Tracker] Ep  125 | AvgR 0.0001 | Global 0.2671 | Local 0.1192 | F1_macro 0.5742 | WorstLoss 2.3277
+[Tracker] Saved snapshot: ep0125_phase1_class1
+[Tracker] Ep  126 | AvgR 0.0002 | Global 0.3138 | Local 0.1192 | F1_macro 0.5811 | WorstLoss 2.1727
+[Tracker] Ep  127 | AvgR 0.0001 | Global 0.2602 | Local 0.1192 | F1_macro 0.5638 | WorstLoss 2.3331
+[Tracker] Ep  128 | AvgR 0.0002 | Global 0.3315 | Local 0.1192 | F1_macro 0.5465 | WorstLoss 2.1207
+[Tracker] Ep  129 | AvgR 0.0001 | Global 0.2207 | Local 0.1192 | F1_macro 0.5714 | WorstLoss 2.4679
+[Tracker] Ep  130 | AvgR 0.0002 | Global 0.3378 | Local 0.1192 | F1_macro 0.5820 | WorstLoss 2.0822
+[Tracker] Saved snapshot: ep0130_phase1_class1
+[CMA-ES Phase] Finished phase1_class1 | best global_obj=0.4605
+Phase 2 anchors: 1706 (y=0 & disadv=1)
+[CMAESAgent] reset phase='phase2_class0' | D=10 param_dim=20 popsize=12 sigma0=1.000
+FFNN Using device: cuda:1
+
+============================================================
+[CMA-ES Phase] phase2_class0 | target_class=0 | episodes=26 | popsize=12
+============================================================
+[Tracker] Ep    1 | AvgR 0.0002 | Global 0.4048 | Local 0.1192 | F1_macro 0.6072 | WorstLoss 1.8432
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.404773) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    2 | AvgR 0.0001 | Global 0.2548 | Local 0.1192 | F1_macro 0.5829 | WorstLoss 2.3193
+[Tracker] Ep    3 | AvgR 0.0002 | Global 0.3219 | Local 0.1192 | F1_macro 0.5865 | WorstLoss 2.0735
+[Tracker] Ep    4 | AvgR 0.0001 | Global 0.2605 | Local 0.1192 | F1_macro 0.5727 | WorstLoss 2.3037
+[Tracker] Ep    5 | AvgR 0.0001 | Global 0.2722 | Local 0.1192 | F1_macro 0.5599 | WorstLoss 2.2621
+[Tracker] Saved snapshot: ep0005_phase2_class0
+[Tracker] Ep    6 | AvgR 0.0002 | Global 0.3256 | Local 0.1192 | F1_macro 0.5674 | WorstLoss 2.0892
+[Tracker] Ep    7 | AvgR 0.0002 | Global 0.3081 | Local 0.1192 | F1_macro 0.5778 | WorstLoss 2.1344
+[Tracker] Ep    8 | AvgR 0.0002 | Global 0.3129 | Local 0.1192 | F1_macro 0.5633 | WorstLoss 2.1143
+[Tracker] Ep    9 | AvgR 0.0002 | Global 0.4034 | Local 0.1192 | F1_macro 0.6083 | WorstLoss 1.8520
+[Tracker] Ep   10 | AvgR 0.0001 | Global 0.2802 | Local 0.1192 | F1_macro 0.5365 | WorstLoss 2.2052
+[Tracker] Saved snapshot: ep0010_phase2_class0
+[Tracker] Ep   11 | AvgR 0.0002 | Global 0.3464 | Local 0.1192 | F1_macro 0.6022 | WorstLoss 2.0179
+[Tracker] Ep   12 | AvgR 0.0001 | Global 0.2684 | Local 0.1192 | F1_macro 0.5626 | WorstLoss 2.2696
+[Tracker] Ep   13 | AvgR 0.0002 | Global 0.3447 | Local 0.1192 | F1_macro 0.5945 | WorstLoss 2.0358
+[Tracker] Ep   14 | AvgR 0.0002 | Global 0.3083 | Local 0.1192 | F1_macro 0.5785 | WorstLoss 2.1361
+[Tracker] Ep   15 | AvgR 0.0002 | Global 0.3590 | Local 0.1192 | F1_macro 0.5859 | WorstLoss 1.9851
+[Tracker] Saved snapshot: ep0015_phase2_class0
+[Tracker] Ep   16 | AvgR 0.0002 | Global 0.3125 | Local 0.1192 | F1_macro 0.5841 | WorstLoss 2.1197
+[Tracker] Ep   17 | AvgR 0.0002 | Global 0.3101 | Local 0.1192 | F1_macro 0.5517 | WorstLoss 2.1392
+[Tracker] Ep   18 | AvgR 0.0002 | Global 0.3027 | Local 0.1192 | F1_macro 0.5755 | WorstLoss 2.1644
+[Tracker] Ep   19 | AvgR 0.0001 | Global 0.2550 | Local 0.1192 | F1_macro 0.5663 | WorstLoss 2.3120
+[Tracker] Ep   20 | AvgR 0.0002 | Global 0.3284 | Local 0.1192 | F1_macro 0.5645 | WorstLoss 2.0955
+[Tracker] Saved snapshot: ep0020_phase2_class0
+[Tracker] Ep   21 | AvgR 0.0001 | Global 0.2923 | Local 0.1192 | F1_macro 0.5740 | WorstLoss 2.1794
+[Tracker] Ep   22 | AvgR 0.0002 | Global 0.3113 | Local 0.1192 | F1_macro 0.5877 | WorstLoss 2.1373
+[Tracker] Ep   23 | AvgR 0.0002 | Global 0.3079 | Local 0.1192 | F1_macro 0.5849 | WorstLoss 2.1368
+[Tracker] Ep   24 | AvgR 0.0002 | Global 0.3302 | Local 0.1192 | F1_macro 0.5874 | WorstLoss 2.0602
+[Tracker] Ep   25 | AvgR 0.0001 | Global 0.2688 | Local 0.1192 | F1_macro 0.5599 | WorstLoss 2.2937
+[Tracker] Saved snapshot: ep0025_phase2_class0
+[Tracker] Ep   26 | AvgR 0.0002 | Global 0.3427 | Local 0.1192 | F1_macro 0.5846 | WorstLoss 2.0356
+[CMA-ES Phase] Finished phase2_class0 | best global_obj=0.4048
+FFNN Using device: cuda:1
+[Combined] Saved combined beta -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict.pt
+[Combined] Saved combined synthetic -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_synthetic_combined.npz
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/best_beta_state_dict.pt
+
+[TEST] Alpha -> F1(min)=0.2620 | F1(maj)=0.8804 | F1(weighted)=0.7314 | F1(macro)=0.5712 | Brier=0.1563
+[TEST] Beta  -> F1(min)=0.2740 | F1(maj)=0.8795 | F1(weighted)=0.7336 | F1(macro)=0.5768 | Brier=0.1604
+[TestSuite] Final test metrics appended to (seed): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/final_test_metrics.csv
+Total time 491.75s
+[Tracker] Finished. Run folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_0
+[main] ---- running seed=1 ----
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+[Tracker] Experiment: SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed
+[Tracker] Seed folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1
+[Tracker] Run: 2026-04-04_11-35-01_seed1_81563_11b1d9d3
+[Tracker] Metrics CSV: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/metrics.csv
+[Tracker] Mirroring console to: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/console.log
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+Beta will train with: 60.00% real data, 40.00% synthetic data: 
+[disadv] group=1 per_g={0: 0.27939537167549133, 1: 0.6195669174194336} worst_4g=2.3866 soft_eo_alpha=0.0403
+Anchors: 126 (disadv=1) sigma_anchor=0.8500
+[Tracker] Alpha model state_dict saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/alpha_state_dict.pt
+[Tracker] Alpha model config saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/ffnn_meta.json
+[CMAESAgent] reset phase='phase1_class1' | D=10 param_dim=20 popsize=12 sigma0=1.000
+
+============================================================
+[CMA-ES Phase] phase1_class1 | target_class=1 | episodes=130 | popsize=12
+============================================================
+[Tracker] CSV header written with 47 columns.
+[Tracker] Ep    1 | AvgR 0.0000 | Global 0.0712 | Local 0.1192 | F1_macro 0.6174 | WorstLoss 2.2135
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.071205) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    2 | AvgR 0.0000 | Global 0.0924 | Local 0.1192 | F1_macro 0.6159 | WorstLoss 2.1660
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.092418) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    3 | AvgR 0.0000 | Global 0.0432 | Local 0.1192 | F1_macro 0.6193 | WorstLoss 2.2826
+[Tracker] Ep    4 | AvgR 0.0001 | Global 0.2432 | Local 0.1192 | F1_macro 0.6550 | WorstLoss 1.8062
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.243203) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    5 | AvgR 0.0001 | Global 0.1082 | Local 0.1192 | F1_macro 0.6368 | WorstLoss 2.1147
+[Tracker] Saved snapshot: ep0005_phase1_class1
+[Tracker] Ep    6 | AvgR 0.0001 | Global 0.2586 | Local 0.1192 | F1_macro 0.6523 | WorstLoss 1.7647
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.258645) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    7 | AvgR 0.0001 | Global 0.1327 | Local 0.1192 | F1_macro 0.6109 | WorstLoss 2.0632
+[Tracker] Ep    8 | AvgR 0.0000 | Global 0.0368 | Local 0.1192 | F1_macro 0.6472 | WorstLoss 2.2985
+[Tracker] Ep    9 | AvgR 0.0000 | Global 0.0724 | Local 0.1192 | F1_macro 0.6270 | WorstLoss 2.2112
+[Tracker] Ep   10 | AvgR 0.0001 | Global 0.1830 | Local 0.1192 | F1_macro 0.6485 | WorstLoss 1.9426
+[Tracker] Saved snapshot: ep0010_phase1_class1
+[Tracker] Ep   11 | AvgR 0.0001 | Global 0.2051 | Local 0.1192 | F1_macro 0.6351 | WorstLoss 1.8968
+[Tracker] Ep   12 | AvgR 0.0000 | Global 0.0958 | Local 0.1192 | F1_macro 0.6407 | WorstLoss 2.1579
+[Tracker] Ep   13 | AvgR 0.0000 | Global 0.0956 | Local 0.1192 | F1_macro 0.6225 | WorstLoss 2.1560
+[Tracker] Ep   14 | AvgR 0.0001 | Global 0.2406 | Local 0.1192 | F1_macro 0.6347 | WorstLoss 1.7924
+[Tracker] Ep   15 | AvgR 0.0001 | Global 0.1994 | Local 0.1192 | F1_macro 0.6350 | WorstLoss 1.9104
+[Tracker] Saved snapshot: ep0015_phase1_class1
+[Tracker] Ep   16 | AvgR 0.0001 | Global 0.1069 | Local 0.1192 | F1_macro 0.6125 | WorstLoss 2.1314
+[Tracker] Ep   17 | AvgR 0.0000 | Global 0.0542 | Local 0.1192 | F1_macro 0.6222 | WorstLoss 2.2572
+[Tracker] Ep   18 | AvgR 0.0001 | Global 0.2204 | Local 0.1192 | F1_macro 0.6100 | WorstLoss 1.8580
+[Tracker] Ep   19 | AvgR 0.0001 | Global 0.1135 | Local 0.1192 | F1_macro 0.6252 | WorstLoss 2.1158
+[Tracker] Ep   20 | AvgR 0.0000 | Global 0.0954 | Local 0.1192 | F1_macro 0.6542 | WorstLoss 2.1587
+[Tracker] Saved snapshot: ep0020_phase1_class1
+[Tracker] Ep   21 | AvgR 0.0001 | Global 0.1547 | Local 0.1192 | F1_macro 0.6173 | WorstLoss 2.0174
+[Tracker] Ep   22 | AvgR 0.0000 | Global 0.0318 | Local 0.1192 | F1_macro 0.6129 | WorstLoss 2.3095
+[Tracker] Ep   23 | AvgR 0.0000 | Global 0.0871 | Local 0.1192 | F1_macro 0.6285 | WorstLoss 2.1786
+[Tracker] Ep   24 | AvgR 0.0001 | Global 0.1424 | Local 0.1192 | F1_macro 0.6257 | WorstLoss 2.0384
+[Tracker] Ep   25 | AvgR 0.0001 | Global 0.1583 | Local 0.1192 | F1_macro 0.6192 | WorstLoss 2.0011
+[Tracker] Saved snapshot: ep0025_phase1_class1
+[Tracker] Ep   26 | AvgR 0.0001 | Global 0.2622 | Local 0.1192 | F1_macro 0.6466 | WorstLoss 1.7574
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.262249) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   27 | AvgR 0.0000 | Global 0.0555 | Local 0.1192 | F1_macro 0.5930 | WorstLoss 2.2537
+[Tracker] Ep   28 | AvgR 0.0001 | Global 0.1120 | Local 0.1192 | F1_macro 0.6226 | WorstLoss 2.1183
+[Tracker] Ep   29 | AvgR 0.0001 | Global 0.1609 | Local 0.1192 | F1_macro 0.6169 | WorstLoss 2.0025
+[Tracker] Ep   30 | AvgR 0.0001 | Global 0.1908 | Local 0.1192 | F1_macro 0.6254 | WorstLoss 1.9313
+[Tracker] Saved snapshot: ep0030_phase1_class1
+[Tracker] Ep   31 | AvgR 0.0001 | Global 0.1705 | Local 0.1192 | F1_macro 0.6208 | WorstLoss 1.9778
+[Tracker] Ep   32 | AvgR 0.0001 | Global 0.2352 | Local 0.1192 | F1_macro 0.6370 | WorstLoss 1.8106
+[Tracker] Ep   33 | AvgR 0.0001 | Global 0.1205 | Local 0.1192 | F1_macro 0.6474 | WorstLoss 2.0947
+[Tracker] Ep   34 | AvgR 0.0001 | Global 0.2266 | Local 0.1192 | F1_macro 0.6340 | WorstLoss 1.8457
+[Tracker] Ep   35 | AvgR 0.0000 | Global 0.0815 | Local 0.1192 | F1_macro 0.6103 | WorstLoss 2.1922
+[Tracker] Saved snapshot: ep0035_phase1_class1
+[Tracker] Ep   36 | AvgR 0.0001 | Global 0.2654 | Local 0.1192 | F1_macro 0.6311 | WorstLoss 1.7531
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.265443) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   37 | AvgR 0.0001 | Global 0.1696 | Local 0.1192 | F1_macro 0.5944 | WorstLoss 1.9811
+[Tracker] Ep   38 | AvgR 0.0001 | Global 0.2561 | Local 0.1192 | F1_macro 0.6245 | WorstLoss 1.7753
+[Tracker] Ep   39 | AvgR 0.0001 | Global 0.1841 | Local 0.1192 | F1_macro 0.6132 | WorstLoss 1.9463
+[Tracker] Ep   40 | AvgR 0.0001 | Global 0.1394 | Local 0.1192 | F1_macro 0.6231 | WorstLoss 2.0514
+[Tracker] Saved snapshot: ep0040_phase1_class1
+[Tracker] Ep   41 | AvgR 0.0001 | Global 0.1869 | Local 0.1192 | F1_macro 0.5949 | WorstLoss 1.9404
+[Tracker] Ep   42 | AvgR 0.0001 | Global 0.1738 | Local 0.1192 | F1_macro 0.6299 | WorstLoss 1.9655
+[Tracker] Ep   43 | AvgR 0.0001 | Global 0.2425 | Local 0.1192 | F1_macro 0.6354 | WorstLoss 1.8079
+[Tracker] Ep   44 | AvgR 0.0001 | Global 0.2199 | Local 0.1192 | F1_macro 0.6234 | WorstLoss 1.8618
+[Tracker] Ep   45 | AvgR 0.0000 | Global 0.0980 | Local 0.1192 | F1_macro 0.6141 | WorstLoss 2.1528
+[Tracker] Saved snapshot: ep0045_phase1_class1
+[Tracker] Ep   46 | AvgR 0.0001 | Global 0.1918 | Local 0.1192 | F1_macro 0.5963 | WorstLoss 1.9254
+[Tracker] Ep   47 | AvgR 0.0001 | Global 0.1636 | Local 0.1192 | F1_macro 0.6211 | WorstLoss 1.9962
+[Tracker] Ep   48 | AvgR 0.0000 | Global 0.0704 | Local 0.1192 | F1_macro 0.6218 | WorstLoss 2.2185
+[Tracker] Ep   49 | AvgR 0.0001 | Global 0.2587 | Local 0.1192 | F1_macro 0.6392 | WorstLoss 1.7659
+[Tracker] Ep   50 | AvgR 0.0001 | Global 0.2426 | Local 0.1192 | F1_macro 0.6316 | WorstLoss 1.8076
+[Tracker] Saved snapshot: ep0050_phase1_class1
+[Tracker] Ep   51 | AvgR 0.0001 | Global 0.1328 | Local 0.1192 | F1_macro 0.6274 | WorstLoss 2.0696
+[Tracker] Ep   52 | AvgR 0.0001 | Global 0.1735 | Local 0.1192 | F1_macro 0.6043 | WorstLoss 1.9664
+[Tracker] Ep   53 | AvgR 0.0001 | Global 0.1174 | Local 0.1192 | F1_macro 0.6023 | WorstLoss 2.1045
+[Tracker] Ep   54 | AvgR 0.0001 | Global 0.1281 | Local 0.1192 | F1_macro 0.6193 | WorstLoss 2.0809
+[Tracker] Ep   55 | AvgR 0.0001 | Global 0.2071 | Local 0.1192 | F1_macro 0.6173 | WorstLoss 1.8923
+[Tracker] Saved snapshot: ep0055_phase1_class1
+[Tracker] Ep   56 | AvgR 0.0001 | Global 0.1806 | Local 0.1192 | F1_macro 0.6102 | WorstLoss 1.9555
+[Tracker] Ep   57 | AvgR 0.0001 | Global 0.1214 | Local 0.1192 | F1_macro 0.6137 | WorstLoss 2.0969
+[Tracker] Ep   58 | AvgR 0.0001 | Global 0.2781 | Local 0.1192 | F1_macro 0.6476 | WorstLoss 1.7229
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.278077) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   59 | AvgR 0.0001 | Global 0.1905 | Local 0.1192 | F1_macro 0.6289 | WorstLoss 1.9320
+[Tracker] Ep   60 | AvgR 0.0001 | Global 0.2640 | Local 0.1192 | F1_macro 0.6532 | WorstLoss 1.7555
+[Tracker] Saved snapshot: ep0060_phase1_class1
+[Tracker] Ep   61 | AvgR 0.0001 | Global 0.2005 | Local 0.1192 | F1_macro 0.6076 | WorstLoss 1.9054
+[Tracker] Ep   62 | AvgR 0.0001 | Global 0.2130 | Local 0.1192 | F1_macro 0.6213 | WorstLoss 1.8754
+[Tracker] Ep   63 | AvgR 0.0001 | Global 0.2215 | Local 0.1192 | F1_macro 0.6199 | WorstLoss 1.8579
+[Tracker] Ep   64 | AvgR 0.0001 | Global 0.2489 | Local 0.1192 | F1_macro 0.6138 | WorstLoss 1.7926
+[Tracker] Ep   65 | AvgR 0.0000 | Global 0.0595 | Local 0.1192 | F1_macro 0.6127 | WorstLoss 2.2419
+[Tracker] Saved snapshot: ep0065_phase1_class1
+[Tracker] Ep   66 | AvgR 0.0001 | Global 0.1711 | Local 0.1192 | F1_macro 0.6166 | WorstLoss 1.9784
+[Tracker] Ep   67 | AvgR 0.0001 | Global 0.2966 | Local 0.1192 | F1_macro 0.6523 | WorstLoss 1.6788
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.296573) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   68 | AvgR 0.0001 | Global 0.1353 | Local 0.1192 | F1_macro 0.6115 | WorstLoss 2.0637
+[Tracker] Ep   69 | AvgR 0.0001 | Global 0.2617 | Local 0.1192 | F1_macro 0.6329 | WorstLoss 1.7620
+[Tracker] Ep   70 | AvgR 0.0001 | Global 0.1764 | Local 0.1192 | F1_macro 0.6200 | WorstLoss 1.9656
+[Tracker] Saved snapshot: ep0070_phase1_class1
+[Tracker] Ep   71 | AvgR 0.0001 | Global 0.2527 | Local 0.1192 | F1_macro 0.6213 | WorstLoss 1.7836
+[Tracker] Ep   72 | AvgR 0.0001 | Global 0.2447 | Local 0.1192 | F1_macro 0.6354 | WorstLoss 1.8026
+[Tracker] Ep   73 | AvgR 0.0001 | Global 0.2455 | Local 0.1192 | F1_macro 0.6177 | WorstLoss 1.8006
+[Tracker] Ep   74 | AvgR 0.0001 | Global 0.1731 | Local 0.1192 | F1_macro 0.6244 | WorstLoss 1.9720
+[Tracker] Ep   75 | AvgR 0.0001 | Global 0.1763 | Local 0.1192 | F1_macro 0.6346 | WorstLoss 1.9646
+[Tracker] Saved snapshot: ep0075_phase1_class1
+[Tracker] Ep   76 | AvgR 0.0001 | Global 0.2409 | Local 0.1192 | F1_macro 0.6212 | WorstLoss 1.8116
+[Tracker] Ep   77 | AvgR 0.0001 | Global 0.1662 | Local 0.1192 | F1_macro 0.6318 | WorstLoss 1.9900
+[Tracker] Ep   78 | AvgR 0.0001 | Global 0.2182 | Local 0.1192 | F1_macro 0.6241 | WorstLoss 1.8659
+[Tracker] Ep   79 | AvgR 0.0001 | Global 0.2536 | Local 0.1192 | F1_macro 0.6136 | WorstLoss 1.7813
+[Tracker] Ep   80 | AvgR 0.0001 | Global 0.1039 | Local 0.1192 | F1_macro 0.6126 | WorstLoss 2.1386
+[Tracker] Saved snapshot: ep0080_phase1_class1
+[Tracker] Ep   81 | AvgR 0.0001 | Global 0.2597 | Local 0.1192 | F1_macro 0.6212 | WorstLoss 1.7668
+[Tracker] Ep   82 | AvgR 0.0001 | Global 0.2396 | Local 0.1192 | F1_macro 0.6311 | WorstLoss 1.8147
+[Tracker] Ep   83 | AvgR 0.0001 | Global 0.2405 | Local 0.1192 | F1_macro 0.6245 | WorstLoss 1.8126
+[Tracker] Ep   84 | AvgR 0.0001 | Global 0.2539 | Local 0.1192 | F1_macro 0.6229 | WorstLoss 1.7807
+[Tracker] Ep   85 | AvgR 0.0001 | Global 0.1610 | Local 0.1192 | F1_macro 0.6057 | WorstLoss 2.0024
+[Tracker] Saved snapshot: ep0085_phase1_class1
+[Tracker] Ep   86 | AvgR 0.0001 | Global 0.2004 | Local 0.1192 | F1_macro 0.6334 | WorstLoss 1.8987
+[Tracker] Ep   87 | AvgR 0.0001 | Global 0.2894 | Local 0.1192 | F1_macro 0.6386 | WorstLoss 1.6861
+[Tracker] Ep   88 | AvgR 0.0001 | Global 0.2705 | Local 0.1192 | F1_macro 0.6398 | WorstLoss 1.7410
+[Tracker] Ep   89 | AvgR 0.0001 | Global 0.2900 | Local 0.1192 | F1_macro 0.6345 | WorstLoss 1.6944
+[Tracker] Ep   90 | AvgR 0.0001 | Global 0.2366 | Local 0.1192 | F1_macro 0.6216 | WorstLoss 1.8219
+[Tracker] Saved snapshot: ep0090_phase1_class1
+[Tracker] Ep   91 | AvgR 0.0001 | Global 0.2148 | Local 0.1192 | F1_macro 0.6094 | WorstLoss 1.8739
+[Tracker] Ep   92 | AvgR 0.0001 | Global 0.2190 | Local 0.1192 | F1_macro 0.6119 | WorstLoss 1.8639
+[Tracker] Ep   93 | AvgR 0.0001 | Global 0.1835 | Local 0.1192 | F1_macro 0.6083 | WorstLoss 1.9487
+[Tracker] Ep   94 | AvgR 0.0001 | Global 0.2483 | Local 0.1192 | F1_macro 0.6321 | WorstLoss 1.7941
+[Tracker] Ep   95 | AvgR 0.0001 | Global 0.1721 | Local 0.1192 | F1_macro 0.6092 | WorstLoss 1.9752
+[Tracker] Saved snapshot: ep0095_phase1_class1
+[Tracker] Ep   96 | AvgR 0.0001 | Global 0.2236 | Local 0.1192 | F1_macro 0.6336 | WorstLoss 1.8529
+[Tracker] Ep   97 | AvgR 0.0001 | Global 0.2393 | Local 0.1192 | F1_macro 0.6138 | WorstLoss 1.8114
+[Tracker] Ep   98 | AvgR 0.0001 | Global 0.1468 | Local 0.1192 | F1_macro 0.5995 | WorstLoss 2.0362
+[Tracker] Ep   99 | AvgR 0.0001 | Global 0.2604 | Local 0.1192 | F1_macro 0.6299 | WorstLoss 1.7652
+[Tracker] Ep  100 | AvgR 0.0001 | Global 0.2417 | Local 0.1192 | F1_macro 0.6143 | WorstLoss 1.8036
+[Tracker] Saved snapshot: ep0100_phase1_class1
+[Tracker] Ep  101 | AvgR 0.0001 | Global 0.2246 | Local 0.1192 | F1_macro 0.6066 | WorstLoss 1.8489
+[Tracker] Ep  102 | AvgR 0.0001 | Global 0.1711 | Local 0.1192 | F1_macro 0.6213 | WorstLoss 1.9782
+[Tracker] Ep  103 | AvgR 0.0001 | Global 0.2121 | Local 0.1192 | F1_macro 0.5981 | WorstLoss 1.8762
+[Tracker] Ep  104 | AvgR 0.0001 | Global 0.1463 | Local 0.1192 | F1_macro 0.5870 | WorstLoss 2.0362
+[Tracker] Ep  105 | AvgR 0.0001 | Global 0.2559 | Local 0.1192 | F1_macro 0.6283 | WorstLoss 1.7758
+[Tracker] Saved snapshot: ep0105_phase1_class1
+[Tracker] Ep  106 | AvgR 0.0001 | Global 0.2415 | Local 0.1192 | F1_macro 0.6269 | WorstLoss 1.8101
+[Tracker] Ep  107 | AvgR 0.0000 | Global 0.0944 | Local 0.1192 | F1_macro 0.5927 | WorstLoss 2.1604
+[Tracker] Ep  108 | AvgR 0.0001 | Global 0.1677 | Local 0.1192 | F1_macro 0.6181 | WorstLoss 1.9833
+[Tracker] Ep  109 | AvgR 0.0001 | Global 0.2496 | Local 0.1192 | F1_macro 0.6251 | WorstLoss 1.7841
+[Tracker] Ep  110 | AvgR 0.0001 | Global 0.2236 | Local 0.1192 | F1_macro 0.6103 | WorstLoss 1.8528
+[Tracker] Saved snapshot: ep0110_phase1_class1
+[Tracker] Ep  111 | AvgR 0.0001 | Global 0.2337 | Local 0.1192 | F1_macro 0.6143 | WorstLoss 1.8288
+[Tracker] Ep  112 | AvgR 0.0000 | Global 0.0709 | Local 0.1192 | F1_macro 0.6268 | WorstLoss 2.2163
+[Tracker] Ep  113 | AvgR 0.0001 | Global 0.2138 | Local 0.1192 | F1_macro 0.6146 | WorstLoss 1.8763
+[Tracker] Ep  114 | AvgR 0.0001 | Global 0.2045 | Local 0.1192 | F1_macro 0.6148 | WorstLoss 1.8985
+[Tracker] Ep  115 | AvgR 0.0001 | Global 0.1799 | Local 0.1192 | F1_macro 0.5890 | WorstLoss 1.9566
+[Tracker] Saved snapshot: ep0115_phase1_class1
+[Tracker] Ep  116 | AvgR 0.0001 | Global 0.1680 | Local 0.1192 | F1_macro 0.6157 | WorstLoss 1.9849
+[Tracker] Ep  117 | AvgR 0.0001 | Global 0.2273 | Local 0.1192 | F1_macro 0.6132 | WorstLoss 1.8432
+[Tracker] Ep  118 | AvgR 0.0001 | Global 0.2570 | Local 0.1192 | F1_macro 0.6289 | WorstLoss 1.7733
+[Tracker] Ep  119 | AvgR 0.0001 | Global 0.2681 | Local 0.1192 | F1_macro 0.6178 | WorstLoss 1.7461
+[Tracker] Ep  120 | AvgR 0.0001 | Global 0.2041 | Local 0.1192 | F1_macro 0.6205 | WorstLoss 1.8987
+[Tracker] Saved snapshot: ep0120_phase1_class1
+[Tracker] Ep  121 | AvgR 0.0001 | Global 0.2002 | Local 0.1192 | F1_macro 0.6237 | WorstLoss 1.9088
+[Tracker] Ep  122 | AvgR 0.0001 | Global 0.2545 | Local 0.1192 | F1_macro 0.6242 | WorstLoss 1.7793
+[Tracker] Ep  123 | AvgR 0.0001 | Global 0.1746 | Local 0.1192 | F1_macro 0.6152 | WorstLoss 1.9689
+[Tracker] Ep  124 | AvgR 0.0001 | Global 0.2276 | Local 0.1192 | F1_macro 0.6198 | WorstLoss 1.8433
+[Tracker] Ep  125 | AvgR 0.0001 | Global 0.2176 | Local 0.1192 | F1_macro 0.6109 | WorstLoss 1.8672
+[Tracker] Saved snapshot: ep0125_phase1_class1
+[Tracker] Ep  126 | AvgR 0.0001 | Global 0.2421 | Local 0.1192 | F1_macro 0.6123 | WorstLoss 1.8088
+[Tracker] Ep  127 | AvgR 0.0001 | Global 0.1984 | Local 0.1192 | F1_macro 0.5965 | WorstLoss 1.9131
+[Tracker] Ep  128 | AvgR 0.0001 | Global 0.2460 | Local 0.1192 | F1_macro 0.6212 | WorstLoss 1.7996
+[Tracker] Ep  129 | AvgR 0.0001 | Global 0.1713 | Local 0.1192 | F1_macro 0.6304 | WorstLoss 1.9778
+[Tracker] Ep  130 | AvgR 0.0001 | Global 0.1324 | Local 0.1192 | F1_macro 0.6071 | WorstLoss 2.0690
+[Tracker] Saved snapshot: ep0130_phase1_class1
+[CMA-ES Phase] Finished phase1_class1 | best global_obj=0.2966
+Phase 2 anchors: 1764 (y=0 & disadv=1)
+[CMAESAgent] reset phase='phase2_class0' | D=10 param_dim=20 popsize=12 sigma0=1.000
+FFNN Using device: cuda:1
+
+============================================================
+[CMA-ES Phase] phase2_class0 | target_class=0 | episodes=26 | popsize=12
+============================================================
+[Tracker] Ep    1 | AvgR 0.0001 | Global 0.2057 | Local 0.1192 | F1_macro 0.6089 | WorstLoss 1.8957
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.205668) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    2 | AvgR 0.0001 | Global 0.1147 | Local 0.1192 | F1_macro 0.5996 | WorstLoss 2.1128
+[Tracker] Ep    3 | AvgR 0.0000 | Global 0.0565 | Local 0.1192 | F1_macro 0.5472 | WorstLoss 2.2501
+[Tracker] Ep    4 | AvgR 0.0001 | Global 0.1732 | Local 0.1192 | F1_macro 0.6299 | WorstLoss 1.9733
+[Tracker] Ep    5 | AvgR 0.0001 | Global 0.2111 | Local 0.1192 | F1_macro 0.6219 | WorstLoss 1.8828
+[Tracker] Saved snapshot: ep0005_phase2_class0
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.211078) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    6 | AvgR 0.0001 | Global 0.2803 | Local 0.1192 | F1_macro 0.6573 | WorstLoss 1.7175
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.280336) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    7 | AvgR 0.0001 | Global 0.1756 | Local 0.1192 | F1_macro 0.6526 | WorstLoss 1.9674
+[Tracker] Ep    8 | AvgR 0.0001 | Global 0.2037 | Local 0.1192 | F1_macro 0.6287 | WorstLoss 1.9000
+[Tracker] Ep    9 | AvgR 0.0001 | Global 0.2161 | Local 0.1192 | F1_macro 0.6167 | WorstLoss 1.8708
+[Tracker] Ep   10 | AvgR 0.0001 | Global 0.1750 | Local 0.1192 | F1_macro 0.5950 | WorstLoss 1.9690
+[Tracker] Saved snapshot: ep0010_phase2_class0
+[Tracker] Ep   11 | AvgR 0.0001 | Global 0.2191 | Local 0.1192 | F1_macro 0.6346 | WorstLoss 1.8637
+[Tracker] Ep   12 | AvgR 0.0001 | Global 0.2043 | Local 0.1192 | F1_macro 0.6330 | WorstLoss 1.8990
+[Tracker] Ep   13 | AvgR 0.0001 | Global 0.2186 | Local 0.1192 | F1_macro 0.6272 | WorstLoss 1.8649
+[Tracker] Ep   14 | AvgR 0.0000 | Global 0.0492 | Local 0.1192 | F1_macro 0.5801 | WorstLoss 2.2674
+[Tracker] Ep   15 | AvgR 0.0001 | Global 0.2533 | Local 0.1192 | F1_macro 0.6333 | WorstLoss 1.7821
+[Tracker] Saved snapshot: ep0015_phase2_class0
+[Tracker] Ep   16 | AvgR 0.0001 | Global 0.1919 | Local 0.1192 | F1_macro 0.6235 | WorstLoss 1.9286
+[Tracker] Ep   17 | AvgR 0.0001 | Global 0.2157 | Local 0.1192 | F1_macro 0.6358 | WorstLoss 1.8718
+[Tracker] Ep   18 | AvgR 0.0001 | Global 0.1528 | Local 0.1192 | F1_macro 0.6199 | WorstLoss 2.0219
+[Tracker] Ep   19 | AvgR 0.0001 | Global 0.1266 | Local 0.1192 | F1_macro 0.6043 | WorstLoss 2.0845
+[Tracker] Ep   20 | AvgR 0.0001 | Global 0.1727 | Local 0.1192 | F1_macro 0.6116 | WorstLoss 1.9737
+[Tracker] Saved snapshot: ep0020_phase2_class0
+[Tracker] Ep   21 | AvgR 0.0001 | Global 0.2476 | Local 0.1192 | F1_macro 0.6420 | WorstLoss 1.7956
+[Tracker] Ep   22 | AvgR 0.0001 | Global 0.2305 | Local 0.1192 | F1_macro 0.6294 | WorstLoss 1.8366
+[Tracker] Ep   23 | AvgR 0.0001 | Global 0.2389 | Local 0.1192 | F1_macro 0.6411 | WorstLoss 1.8163
+[Tracker] Ep   24 | AvgR 0.0001 | Global 0.2018 | Local 0.1192 | F1_macro 0.6286 | WorstLoss 1.9050
+[Tracker] Ep   25 | AvgR 0.0001 | Global 0.1280 | Local 0.1192 | F1_macro 0.5884 | WorstLoss 2.0808
+[Tracker] Saved snapshot: ep0025_phase2_class0
+[Tracker] Ep   26 | AvgR 0.0001 | Global 0.2000 | Local 0.1192 | F1_macro 0.6186 | WorstLoss 1.9092
+[CMA-ES Phase] Finished phase2_class0 | best global_obj=0.2803
+FFNN Using device: cuda:1
+[Combined] Saved combined beta -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict.pt
+[Combined] Saved combined synthetic -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_synthetic_combined.npz
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/best_beta_state_dict.pt
+
+[TEST] Alpha -> F1(min)=0.2350 | F1(maj)=0.8784 | F1(weighted)=0.7234 | F1(macro)=0.5567 | Brier=0.1547
+[TEST] Beta  -> F1(min)=0.3375 | F1(maj)=0.8842 | F1(weighted)=0.7525 | F1(macro)=0.6108 | Brier=0.1499
+[TestSuite] Final test metrics appended to (seed): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/final_test_metrics.csv
+Total time 502.36s
+[Tracker] Finished. Run folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_1
+[main] ---- running seed=2 ----
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+[Tracker] Experiment: SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed
+[Tracker] Seed folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2
+[Tracker] Run: 2026-04-04_11-43-24_seed2_81563_7d6c7856
+[Tracker] Metrics CSV: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/metrics.csv
+[Tracker] Mirroring console to: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/console.log
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+Beta will train with: 60.00% real data, 40.00% synthetic data: 
+[disadv] group=1 per_g={0: 0.28776609897613525, 1: 0.6049872636795044} worst_4g=2.6626 soft_eo_alpha=0.0638
+Anchors: 122 (disadv=1) sigma_anchor=0.8500
+[Tracker] Alpha model state_dict saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/alpha_state_dict.pt
+[Tracker] Alpha model config saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/ffnn_meta.json
+[CMAESAgent] reset phase='phase1_class1' | D=10 param_dim=20 popsize=12 sigma0=1.000
+
+============================================================
+[CMA-ES Phase] phase1_class1 | target_class=1 | episodes=130 | popsize=12
+============================================================
+[Tracker] CSV header written with 47 columns.
+[Tracker] Ep    1 | AvgR 0.0000 | Global 0.0676 | Local 0.1192 | F1_macro 0.5676 | WorstLoss 2.4806
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.067562) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    2 | AvgR 0.0000 | Global 0.0804 | Local 0.1192 | F1_macro 0.5981 | WorstLoss 2.4433
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.080356) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    3 | AvgR 0.0000 | Global 0.0468 | Local 0.1192 | F1_macro 0.5994 | WorstLoss 2.5371
+[Tracker] Ep    4 | AvgR -0.0000 | Global -0.0046 | Local 0.1192 | F1_macro 0.5843 | WorstLoss 2.6749
+[Tracker] Ep    5 | AvgR -0.0000 | Global -0.0346 | Local 0.1192 | F1_macro 0.6077 | WorstLoss 2.7593
+[Tracker] Saved snapshot: ep0005_phase1_class1
+[Tracker] Ep    6 | AvgR 0.0001 | Global 0.1191 | Local 0.1192 | F1_macro 0.6220 | WorstLoss 2.3456
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.119081) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    7 | AvgR -0.0000 | Global -0.0195 | Local 0.1192 | F1_macro 0.6020 | WorstLoss 2.7152
+[Tracker] Ep    8 | AvgR 0.0000 | Global 0.0886 | Local 0.1192 | F1_macro 0.6246 | WorstLoss 2.4248
+[Tracker] Ep    9 | AvgR 0.0000 | Global 0.0894 | Local 0.1192 | F1_macro 0.6206 | WorstLoss 2.4246
+[Tracker] Ep   10 | AvgR 0.0000 | Global 0.0090 | Local 0.1192 | F1_macro 0.6111 | WorstLoss 2.6384
+[Tracker] Saved snapshot: ep0010_phase1_class1
+[Tracker] Ep   11 | AvgR -0.0000 | Global -0.0702 | Local 0.1192 | F1_macro 0.5967 | WorstLoss 2.8508
+[Tracker] Ep   12 | AvgR 0.0000 | Global 0.0688 | Local 0.1192 | F1_macro 0.6094 | WorstLoss 2.4787
+[Tracker] Ep   13 | AvgR 0.0000 | Global 0.0381 | Local 0.1192 | F1_macro 0.6277 | WorstLoss 2.5612
+[Tracker] Ep   14 | AvgR -0.0001 | Global -0.1157 | Local 0.1192 | F1_macro 0.5870 | WorstLoss 2.9778
+[Tracker] Ep   15 | AvgR -0.0000 | Global -0.0467 | Local 0.1192 | F1_macro 0.5980 | WorstLoss 2.7900
+[Tracker] Saved snapshot: ep0015_phase1_class1
+[Tracker] Ep   16 | AvgR 0.0001 | Global 0.1127 | Local 0.1192 | F1_macro 0.5905 | WorstLoss 2.3625
+[Tracker] Ep   17 | AvgR 0.0000 | Global 0.0935 | Local 0.1192 | F1_macro 0.6155 | WorstLoss 2.4107
+[Tracker] Ep   18 | AvgR 0.0000 | Global 0.0244 | Local 0.1192 | F1_macro 0.5956 | WorstLoss 2.5961
+[Tracker] Ep   19 | AvgR 0.0000 | Global 0.0897 | Local 0.1192 | F1_macro 0.6171 | WorstLoss 2.4230
+[Tracker] Ep   20 | AvgR 0.0001 | Global 0.1173 | Local 0.1192 | F1_macro 0.6286 | WorstLoss 2.3459
+[Tracker] Saved snapshot: ep0020_phase1_class1
+[Tracker] Ep   21 | AvgR 0.0000 | Global 0.0771 | Local 0.1192 | F1_macro 0.6046 | WorstLoss 2.4571
+[Tracker] Ep   22 | AvgR -0.0000 | Global -0.0045 | Local 0.1192 | F1_macro 0.6030 | WorstLoss 2.6747
+[Tracker] Ep   23 | AvgR -0.0000 | Global -0.0157 | Local 0.1192 | F1_macro 0.5786 | WorstLoss 2.7053
+[Tracker] Ep   24 | AvgR 0.0000 | Global 0.0012 | Local 0.1192 | F1_macro 0.5912 | WorstLoss 2.6594
+[Tracker] Ep   25 | AvgR 0.0001 | Global 0.1319 | Local 0.1192 | F1_macro 0.5806 | WorstLoss 2.3055
+[Tracker] Saved snapshot: ep0025_phase1_class1
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.131881) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   26 | AvgR 0.0000 | Global 0.0659 | Local 0.1192 | F1_macro 0.6040 | WorstLoss 2.4867
+[Tracker] Ep   27 | AvgR -0.0000 | Global -0.0553 | Local 0.1192 | F1_macro 0.5759 | WorstLoss 2.8130
+[Tracker] Ep   28 | AvgR 0.0000 | Global 0.0085 | Local 0.1192 | F1_macro 0.5937 | WorstLoss 2.6399
+[Tracker] Ep   29 | AvgR 0.0000 | Global 0.0422 | Local 0.1192 | F1_macro 0.6118 | WorstLoss 2.5433
+[Tracker] Ep   30 | AvgR 0.0000 | Global 0.0961 | Local 0.1192 | F1_macro 0.6016 | WorstLoss 2.4055
+[Tracker] Saved snapshot: ep0030_phase1_class1
+[Tracker] Ep   31 | AvgR 0.0001 | Global 0.1165 | Local 0.1192 | F1_macro 0.6079 | WorstLoss 2.3525
+[Tracker] Ep   32 | AvgR 0.0001 | Global 0.1298 | Local 0.1192 | F1_macro 0.6066 | WorstLoss 2.3167
+[Tracker] Ep   33 | AvgR 0.0001 | Global 0.1045 | Local 0.1192 | F1_macro 0.6058 | WorstLoss 2.3817
+[Tracker] Ep   34 | AvgR 0.0000 | Global 0.0819 | Local 0.1192 | F1_macro 0.5903 | WorstLoss 2.4400
+[Tracker] Ep   35 | AvgR 0.0001 | Global 0.1663 | Local 0.1192 | F1_macro 0.5999 | WorstLoss 2.2168
+[Tracker] Saved snapshot: ep0035_phase1_class1
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.166275) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   36 | AvgR 0.0001 | Global 0.1226 | Local 0.1192 | F1_macro 0.6150 | WorstLoss 2.3352
+[Tracker] Ep   37 | AvgR 0.0001 | Global 0.1557 | Local 0.1192 | F1_macro 0.5737 | WorstLoss 2.2430
+[Tracker] Ep   38 | AvgR 0.0000 | Global 0.0696 | Local 0.1192 | F1_macro 0.5859 | WorstLoss 2.4694
+[Tracker] Ep   39 | AvgR -0.0000 | Global -0.0125 | Local 0.1192 | F1_macro 0.5846 | WorstLoss 2.6966
+[Tracker] Ep   40 | AvgR 0.0000 | Global 0.0460 | Local 0.1192 | F1_macro 0.5753 | WorstLoss 2.5394
+[Tracker] Saved snapshot: ep0040_phase1_class1
+[Tracker] Ep   41 | AvgR 0.0000 | Global 0.0852 | Local 0.1192 | F1_macro 0.6019 | WorstLoss 2.4326
+[Tracker] Ep   42 | AvgR 0.0000 | Global 0.0689 | Local 0.1192 | F1_macro 0.5798 | WorstLoss 2.4762
+[Tracker] Ep   43 | AvgR 0.0000 | Global 0.0680 | Local 0.1192 | F1_macro 0.5934 | WorstLoss 2.4813
+[Tracker] Ep   44 | AvgR 0.0000 | Global 0.0672 | Local 0.1192 | F1_macro 0.5882 | WorstLoss 2.4837
+[Tracker] Ep   45 | AvgR 0.0001 | Global 0.1192 | Local 0.1192 | F1_macro 0.5943 | WorstLoss 2.3408
+[Tracker] Saved snapshot: ep0045_phase1_class1
+[Tracker] Ep   46 | AvgR 0.0001 | Global 0.1678 | Local 0.1192 | F1_macro 0.5927 | WorstLoss 2.2158
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.167793) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   47 | AvgR 0.0001 | Global 0.2673 | Local 0.1192 | F1_macro 0.6271 | WorstLoss 1.9373
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.267264) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   48 | AvgR 0.0000 | Global 0.0045 | Local 0.1192 | F1_macro 0.5717 | WorstLoss 2.6504
+[Tracker] Ep   49 | AvgR 0.0001 | Global 0.2208 | Local 0.1192 | F1_macro 0.5972 | WorstLoss 2.0610
+[Tracker] Ep   50 | AvgR 0.0001 | Global 0.1065 | Local 0.1192 | F1_macro 0.6005 | WorstLoss 2.3784
+[Tracker] Saved snapshot: ep0050_phase1_class1
+[Tracker] Ep   51 | AvgR 0.0001 | Global 0.1157 | Local 0.1192 | F1_macro 0.5785 | WorstLoss 2.3517
+[Tracker] Ep   52 | AvgR -0.0000 | Global -0.0226 | Local 0.1192 | F1_macro 0.5753 | WorstLoss 2.7250
+[Tracker] Ep   53 | AvgR 0.0000 | Global 0.0799 | Local 0.1192 | F1_macro 0.5907 | WorstLoss 2.4470
+[Tracker] Ep   54 | AvgR 0.0000 | Global 0.0219 | Local 0.1192 | F1_macro 0.5511 | WorstLoss 2.6038
+[Tracker] Ep   55 | AvgR 0.0000 | Global 0.0994 | Local 0.1192 | F1_macro 0.5865 | WorstLoss 2.3951
+[Tracker] Saved snapshot: ep0055_phase1_class1
+[Tracker] Ep   56 | AvgR 0.0001 | Global 0.1127 | Local 0.1192 | F1_macro 0.5887 | WorstLoss 2.3624
+[Tracker] Ep   57 | AvgR 0.0001 | Global 0.1395 | Local 0.1192 | F1_macro 0.5980 | WorstLoss 2.2877
+[Tracker] Ep   58 | AvgR 0.0001 | Global 0.1191 | Local 0.1192 | F1_macro 0.5930 | WorstLoss 2.3394
+[Tracker] Ep   59 | AvgR 0.0000 | Global 0.0253 | Local 0.1192 | F1_macro 0.5776 | WorstLoss 2.5943
+[Tracker] Ep   60 | AvgR 0.0001 | Global 0.1370 | Local 0.1192 | F1_macro 0.5771 | WorstLoss 2.2979
+[Tracker] Saved snapshot: ep0060_phase1_class1
+[Tracker] Ep   61 | AvgR 0.0001 | Global 0.1248 | Local 0.1192 | F1_macro 0.6052 | WorstLoss 2.3237
+[Tracker] Ep   62 | AvgR 0.0001 | Global 0.1109 | Local 0.1192 | F1_macro 0.5698 | WorstLoss 2.3655
+[Tracker] Ep   63 | AvgR 0.0000 | Global 0.0601 | Local 0.1192 | F1_macro 0.5715 | WorstLoss 2.4996
+[Tracker] Ep   64 | AvgR 0.0001 | Global 0.1129 | Local 0.1192 | F1_macro 0.5660 | WorstLoss 2.3606
+[Tracker] Ep   65 | AvgR 0.0000 | Global 0.0692 | Local 0.1192 | F1_macro 0.6020 | WorstLoss 2.4785
+[Tracker] Saved snapshot: ep0065_phase1_class1
+[Tracker] Ep   66 | AvgR 0.0000 | Global 0.0984 | Local 0.1192 | F1_macro 0.5808 | WorstLoss 2.3984
+[Tracker] Ep   67 | AvgR 0.0001 | Global 0.1248 | Local 0.1192 | F1_macro 0.6011 | WorstLoss 2.3303
+[Tracker] Ep   68 | AvgR 0.0000 | Global 0.0420 | Local 0.1192 | F1_macro 0.5996 | WorstLoss 2.5503
+[Tracker] Ep   69 | AvgR 0.0000 | Global 0.0414 | Local 0.1192 | F1_macro 0.5838 | WorstLoss 2.5498
+[Tracker] Ep   70 | AvgR 0.0001 | Global 0.1183 | Local 0.1192 | F1_macro 0.5857 | WorstLoss 2.3477
+[Tracker] Saved snapshot: ep0070_phase1_class1
+[Tracker] Ep   71 | AvgR 0.0001 | Global 0.1016 | Local 0.1192 | F1_macro 0.5790 | WorstLoss 2.3917
+[Tracker] Ep   72 | AvgR 0.0000 | Global 0.0601 | Local 0.1192 | F1_macro 0.6066 | WorstLoss 2.4995
+[Tracker] Ep   73 | AvgR 0.0000 | Global 0.0861 | Local 0.1192 | F1_macro 0.5782 | WorstLoss 2.4332
+[Tracker] Ep   74 | AvgR 0.0000 | Global 0.0472 | Local 0.1192 | F1_macro 0.5916 | WorstLoss 2.5370
+[Tracker] Ep   75 | AvgR 0.0001 | Global 0.1170 | Local 0.1192 | F1_macro 0.5798 | WorstLoss 2.3512
+[Tracker] Saved snapshot: ep0075_phase1_class1
+[Tracker] Ep   76 | AvgR 0.0001 | Global 0.1037 | Local 0.1192 | F1_macro 0.6056 | WorstLoss 2.3828
+[Tracker] Ep   77 | AvgR 0.0001 | Global 0.1855 | Local 0.1192 | F1_macro 0.5851 | WorstLoss 2.1632
+[Tracker] Ep   78 | AvgR 0.0000 | Global 0.0688 | Local 0.1192 | F1_macro 0.5921 | WorstLoss 2.4775
+[Tracker] Ep   79 | AvgR 0.0001 | Global 0.2042 | Local 0.1192 | F1_macro 0.6118 | WorstLoss 2.1189
+[Tracker] Ep   80 | AvgR 0.0000 | Global 0.0099 | Local 0.1192 | F1_macro 0.5666 | WorstLoss 2.6359
+[Tracker] Saved snapshot: ep0080_phase1_class1
+[Tracker] Ep   81 | AvgR 0.0000 | Global 0.0850 | Local 0.1192 | F1_macro 0.6149 | WorstLoss 2.4321
+[Tracker] Ep   82 | AvgR 0.0001 | Global 0.1133 | Local 0.1192 | F1_macro 0.5898 | WorstLoss 2.3583
+[Tracker] Ep   83 | AvgR 0.0000 | Global 0.0235 | Local 0.1192 | F1_macro 0.5637 | WorstLoss 2.5991
+[Tracker] Ep   84 | AvgR 0.0000 | Global 0.0682 | Local 0.1192 | F1_macro 0.5827 | WorstLoss 2.4807
+[Tracker] Ep   85 | AvgR 0.0001 | Global 0.1787 | Local 0.1192 | F1_macro 0.5694 | WorstLoss 2.1868
+[Tracker] Saved snapshot: ep0085_phase1_class1
+[Tracker] Ep   86 | AvgR 0.0000 | Global 0.0810 | Local 0.1192 | F1_macro 0.5713 | WorstLoss 2.4471
+[Tracker] Ep   87 | AvgR 0.0001 | Global 0.1636 | Local 0.1192 | F1_macro 0.5957 | WorstLoss 2.2270
+[Tracker] Ep   88 | AvgR 0.0000 | Global 0.0858 | Local 0.1192 | F1_macro 0.5960 | WorstLoss 2.4322
+[Tracker] Ep   89 | AvgR 0.0001 | Global 0.1054 | Local 0.1192 | F1_macro 0.5926 | WorstLoss 2.3821
+[Tracker] Ep   90 | AvgR 0.0000 | Global 0.0516 | Local 0.1192 | F1_macro 0.5766 | WorstLoss 2.5251
+[Tracker] Saved snapshot: ep0090_phase1_class1
+[Tracker] Ep   91 | AvgR 0.0001 | Global 0.1816 | Local 0.1192 | F1_macro 0.6071 | WorstLoss 2.1791
+[Tracker] Ep   92 | AvgR 0.0001 | Global 0.2214 | Local 0.1192 | F1_macro 0.6060 | WorstLoss 2.0732
+[Tracker] Ep   93 | AvgR 0.0000 | Global 0.0255 | Local 0.1192 | F1_macro 0.5731 | WorstLoss 2.5947
+[Tracker] Ep   94 | AvgR 0.0001 | Global 0.1174 | Local 0.1192 | F1_macro 0.5975 | WorstLoss 2.3501
+[Tracker] Ep   95 | AvgR 0.0000 | Global 0.0533 | Local 0.1192 | F1_macro 0.5801 | WorstLoss 2.5207
+[Tracker] Saved snapshot: ep0095_phase1_class1
+[Tracker] Ep   96 | AvgR 0.0001 | Global 0.1158 | Local 0.1192 | F1_macro 0.5839 | WorstLoss 2.3544
+[Tracker] Ep   97 | AvgR 0.0000 | Global 0.0845 | Local 0.1192 | F1_macro 0.5804 | WorstLoss 2.4371
+[Tracker] Ep   98 | AvgR 0.0000 | Global 0.0671 | Local 0.1192 | F1_macro 0.5927 | WorstLoss 2.4838
+[Tracker] Ep   99 | AvgR 0.0000 | Global 0.0890 | Local 0.1192 | F1_macro 0.5840 | WorstLoss 2.4256
+[Tracker] Ep  100 | AvgR 0.0001 | Global 0.1360 | Local 0.1192 | F1_macro 0.5860 | WorstLoss 2.3006
+[Tracker] Saved snapshot: ep0100_phase1_class1
+[Tracker] Ep  101 | AvgR 0.0001 | Global 0.1434 | Local 0.1192 | F1_macro 0.5833 | WorstLoss 2.2809
+[Tracker] Ep  102 | AvgR 0.0000 | Global 0.0935 | Local 0.1192 | F1_macro 0.5786 | WorstLoss 2.4113
+[Tracker] Ep  103 | AvgR 0.0001 | Global 0.1194 | Local 0.1192 | F1_macro 0.5969 | WorstLoss 2.3443
+[Tracker] Ep  104 | AvgR 0.0000 | Global 0.0625 | Local 0.1192 | F1_macro 0.5948 | WorstLoss 2.4941
+[Tracker] Ep  105 | AvgR 0.0000 | Global 0.0789 | Local 0.1192 | F1_macro 0.5785 | WorstLoss 2.4524
+[Tracker] Saved snapshot: ep0105_phase1_class1
+[Tracker] Ep  106 | AvgR 0.0001 | Global 0.2002 | Local 0.1192 | F1_macro 0.5987 | WorstLoss 2.1296
+[Tracker] Ep  107 | AvgR 0.0001 | Global 0.1613 | Local 0.1192 | F1_macro 0.6163 | WorstLoss 2.2321
+[Tracker] Ep  108 | AvgR 0.0000 | Global 0.0788 | Local 0.1192 | F1_macro 0.5775 | WorstLoss 2.4525
+[Tracker] Ep  109 | AvgR 0.0000 | Global 0.0943 | Local 0.1192 | F1_macro 0.5647 | WorstLoss 2.4082
+[Tracker] Ep  110 | AvgR 0.0000 | Global 0.0892 | Local 0.1192 | F1_macro 0.5647 | WorstLoss 2.4229
+[Tracker] Saved snapshot: ep0110_phase1_class1
+[Tracker] Ep  111 | AvgR 0.0001 | Global 0.1319 | Local 0.1192 | F1_macro 0.5733 | WorstLoss 2.3103
+[Tracker] Ep  112 | AvgR 0.0000 | Global 0.0983 | Local 0.1192 | F1_macro 0.5646 | WorstLoss 2.4009
+[Tracker] Ep  113 | AvgR 0.0001 | Global 0.1492 | Local 0.1192 | F1_macro 0.5966 | WorstLoss 2.2654
+[Tracker] Ep  114 | AvgR 0.0001 | Global 0.1369 | Local 0.1192 | F1_macro 0.5965 | WorstLoss 2.2982
+[Tracker] Ep  115 | AvgR 0.0001 | Global 0.1170 | Local 0.1192 | F1_macro 0.5733 | WorstLoss 2.3506
+[Tracker] Saved snapshot: ep0115_phase1_class1
+[Tracker] Ep  116 | AvgR 0.0001 | Global 0.1179 | Local 0.1192 | F1_macro 0.5699 | WorstLoss 2.3486
+[Tracker] Ep  117 | AvgR 0.0001 | Global 0.1086 | Local 0.1192 | F1_macro 0.5872 | WorstLoss 2.3734
+[Tracker] Ep  118 | AvgR 0.0000 | Global 0.0502 | Local 0.1192 | F1_macro 0.5730 | WorstLoss 2.5279
+[Tracker] Ep  119 | AvgR 0.0000 | Global 0.0631 | Local 0.1192 | F1_macro 0.5813 | WorstLoss 2.4929
+[Tracker] Ep  120 | AvgR 0.0000 | Global 0.0803 | Local 0.1192 | F1_macro 0.5921 | WorstLoss 2.4475
+[Tracker] Saved snapshot: ep0120_phase1_class1
+[Tracker] Ep  121 | AvgR 0.0000 | Global 0.0382 | Local 0.1192 | F1_macro 0.5749 | WorstLoss 2.5610
+[Tracker] Ep  122 | AvgR 0.0001 | Global 0.1218 | Local 0.1192 | F1_macro 0.5847 | WorstLoss 2.3377
+[Tracker] Ep  123 | AvgR 0.0000 | Global 0.0860 | Local 0.1192 | F1_macro 0.5931 | WorstLoss 2.4330
+[Tracker] Ep  124 | AvgR 0.0000 | Global 0.0651 | Local 0.1192 | F1_macro 0.5665 | WorstLoss 2.4889
+[Tracker] Ep  125 | AvgR 0.0001 | Global 0.1688 | Local 0.1192 | F1_macro 0.6021 | WorstLoss 2.2132
+[Tracker] Saved snapshot: ep0125_phase1_class1
+[Tracker] Ep  126 | AvgR 0.0000 | Global 0.0818 | Local 0.1192 | F1_macro 0.5814 | WorstLoss 2.4449
+[Tracker] Ep  127 | AvgR 0.0001 | Global 0.1415 | Local 0.1192 | F1_macro 0.5898 | WorstLoss 2.2857
+[Tracker] Ep  128 | AvgR 0.0001 | Global 0.1331 | Local 0.1192 | F1_macro 0.6005 | WorstLoss 2.3083
+[Tracker] Ep  129 | AvgR 0.0001 | Global 0.1212 | Local 0.1192 | F1_macro 0.5949 | WorstLoss 2.3399
+[Tracker] Ep  130 | AvgR 0.0001 | Global 0.1359 | Local 0.1192 | F1_macro 0.5790 | WorstLoss 2.3000
+[Tracker] Saved snapshot: ep0130_phase1_class1
+[CMA-ES Phase] Finished phase1_class1 | best global_obj=0.2673
+Phase 2 anchors: 1727 (y=0 & disadv=1)
+[CMAESAgent] reset phase='phase2_class0' | D=10 param_dim=20 popsize=12 sigma0=1.000
+FFNN Using device: cuda:1
+
+============================================================
+[CMA-ES Phase] phase2_class0 | target_class=0 | episodes=26 | popsize=12
+============================================================
+[Tracker] Ep    1 | AvgR -0.0000 | Global -0.0112 | Local 0.1192 | F1_macro 0.5055 | WorstLoss 2.6935
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: -0.011185) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    2 | AvgR 0.0001 | Global 0.1373 | Local 0.1192 | F1_macro 0.5798 | WorstLoss 2.2874
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.137283) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    3 | AvgR 0.0001 | Global 0.1405 | Local 0.1192 | F1_macro 0.5478 | WorstLoss 2.2794
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.140520) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    4 | AvgR -0.0001 | Global -0.1235 | Local 0.1192 | F1_macro 0.5283 | WorstLoss 3.0038
+[Tracker] Ep    5 | AvgR 0.0001 | Global 0.1982 | Local 0.1192 | F1_macro 0.6054 | WorstLoss 2.1184
+[Tracker] Saved snapshot: ep0005_phase2_class0
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.198178) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    6 | AvgR 0.0001 | Global 0.1414 | Local 0.1192 | F1_macro 0.6328 | WorstLoss 2.2758
+[Tracker] Ep    7 | AvgR -0.0000 | Global -0.0357 | Local 0.1192 | F1_macro 0.5939 | WorstLoss 2.7606
+[Tracker] Ep    8 | AvgR 0.0000 | Global 0.0007 | Local 0.1192 | F1_macro 0.5905 | WorstLoss 2.6607
+[Tracker] Ep    9 | AvgR 0.0001 | Global 0.1159 | Local 0.1192 | F1_macro 0.5742 | WorstLoss 2.3413
+[Tracker] Ep   10 | AvgR 0.0001 | Global 0.1361 | Local 0.1192 | F1_macro 0.5980 | WorstLoss 2.2874
+[Tracker] Saved snapshot: ep0010_phase2_class0
+[Tracker] Ep   11 | AvgR 0.0000 | Global 0.0607 | Local 0.1192 | F1_macro 0.5847 | WorstLoss 2.4962
+[Tracker] Ep   12 | AvgR 0.0001 | Global 0.1517 | Local 0.1192 | F1_macro 0.5534 | WorstLoss 2.2440
+[Tracker] Ep   13 | AvgR 0.0000 | Global 0.0326 | Local 0.1192 | F1_macro 0.5842 | WorstLoss 2.5736
+[Tracker] Ep   14 | AvgR 0.0000 | Global 0.0624 | Local 0.1192 | F1_macro 0.6163 | WorstLoss 2.4931
+[Tracker] Ep   15 | AvgR 0.0000 | Global 0.0422 | Local 0.1192 | F1_macro 0.5683 | WorstLoss 2.5475
+[Tracker] Saved snapshot: ep0015_phase2_class0
+[Tracker] Ep   16 | AvgR 0.0001 | Global 0.1591 | Local 0.1192 | F1_macro 0.5752 | WorstLoss 2.2285
+[Tracker] Ep   17 | AvgR 0.0001 | Global 0.1240 | Local 0.1192 | F1_macro 0.5873 | WorstLoss 2.3239
+[Tracker] Ep   18 | AvgR 0.0001 | Global 0.1456 | Local 0.1192 | F1_macro 0.6037 | WorstLoss 2.2668
+[Tracker] Ep   19 | AvgR 0.0001 | Global 0.1589 | Local 0.1192 | F1_macro 0.6043 | WorstLoss 2.2281
+[Tracker] Ep   20 | AvgR 0.0000 | Global 0.0032 | Local 0.1192 | F1_macro 0.5543 | WorstLoss 2.6538
+[Tracker] Saved snapshot: ep0020_phase2_class0
+[Tracker] Ep   21 | AvgR 0.0001 | Global 0.1373 | Local 0.1192 | F1_macro 0.6239 | WorstLoss 2.2889
+[Tracker] Ep   22 | AvgR 0.0001 | Global 0.1072 | Local 0.1192 | F1_macro 0.6045 | WorstLoss 2.3703
+[Tracker] Ep   23 | AvgR 0.0001 | Global 0.1155 | Local 0.1192 | F1_macro 0.5825 | WorstLoss 2.3447
+[Tracker] Ep   24 | AvgR 0.0000 | Global 0.0089 | Local 0.1192 | F1_macro 0.5874 | WorstLoss 2.6383
+[Tracker] Ep   25 | AvgR 0.0000 | Global 0.0958 | Local 0.1192 | F1_macro 0.5919 | WorstLoss 2.4018
+[Tracker] Saved snapshot: ep0025_phase2_class0
+[Tracker] Ep   26 | AvgR 0.0001 | Global 0.2440 | Local 0.1192 | F1_macro 0.6109 | WorstLoss 2.0003
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.244031) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict_phase2_class0.pt
+[CMA-ES Phase] Finished phase2_class0 | best global_obj=0.2440
+FFNN Using device: cuda:1
+[Combined] Saved combined beta -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict.pt
+[Combined] Saved combined synthetic -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_synthetic_combined.npz
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/best_beta_state_dict.pt
+
+[TEST] Alpha -> F1(min)=0.2846 | F1(maj)=0.8817 | F1(weighted)=0.7379 | F1(macro)=0.5832 | Brier=0.1523
+[TEST] Beta  -> F1(min)=0.3037 | F1(maj)=0.8804 | F1(weighted)=0.7414 | F1(macro)=0.5920 | Brier=0.1509
+[TestSuite] Final test metrics appended to (seed): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/final_test_metrics.csv
+Total time 496.90s
+[Tracker] Finished. Run folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_2
+[main] ---- running seed=3 ----
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+[Tracker] Experiment: SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed
+[Tracker] Seed folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3
+[Tracker] Run: 2026-04-04_11-51-40_seed3_81563_1ddb231d
+[Tracker] Metrics CSV: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/metrics.csv
+[Tracker] Mirroring console to: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/console.log
+[TRAIN] size=3000, minority=150 (5.00%)
+[VAL] size=6512, minority=1568 (24.08%)
+[TEST] size=6513, minority=1569 (24.09%)
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+Beta will train with: 60.00% real data, 40.00% synthetic data: 
+[disadv] group=1 per_g={0: 0.2911631762981415, 1: 0.6131846308708191} worst_4g=2.5189 soft_eo_alpha=0.1045
+Anchors: 124 (disadv=1) sigma_anchor=0.8500
+[Tracker] Alpha model state_dict saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/alpha_state_dict.pt
+[Tracker] Alpha model config saved to paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/ffnn_meta.json
+[CMAESAgent] reset phase='phase1_class1' | D=10 param_dim=20 popsize=12 sigma0=1.000
+
+============================================================
+[CMA-ES Phase] phase1_class1 | target_class=1 | episodes=130 | popsize=12
+============================================================
+[Tracker] CSV header written with 47 columns.
+[Tracker] Ep    1 | AvgR 0.0000 | Global 0.0001 | Local 0.1192 | F1_macro 0.6051 | WorstLoss 2.5186
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.000131) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    2 | AvgR 0.0000 | Global 0.0556 | Local 0.1192 | F1_macro 0.6171 | WorstLoss 2.3767
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.055561) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep    3 | AvgR -0.0001 | Global -0.1526 | Local 0.1192 | F1_macro 0.5824 | WorstLoss 2.9151
+[Tracker] Ep    4 | AvgR -0.0001 | Global -0.1422 | Local 0.1192 | F1_macro 0.5834 | WorstLoss 2.8786
+[Tracker] Ep    5 | AvgR -0.0000 | Global -0.0138 | Local 0.1192 | F1_macro 0.5952 | WorstLoss 2.5539
+[Tracker] Saved snapshot: ep0005_phase1_class1
+[Tracker] Ep    6 | AvgR -0.0001 | Global -0.1268 | Local 0.1192 | F1_macro 0.6079 | WorstLoss 2.8449
+[Tracker] Ep    7 | AvgR -0.0000 | Global -0.0335 | Local 0.1192 | F1_macro 0.6111 | WorstLoss 2.6059
+[Tracker] Ep    8 | AvgR -0.0001 | Global -0.1236 | Local 0.1192 | F1_macro 0.6001 | WorstLoss 2.8395
+[Tracker] Ep    9 | AvgR -0.0001 | Global -0.2797 | Local 0.1192 | F1_macro 0.6075 | WorstLoss 3.2484
+[Tracker] Ep   10 | AvgR -0.0001 | Global -0.1408 | Local 0.1192 | F1_macro 0.5977 | WorstLoss 2.8777
+[Tracker] Saved snapshot: ep0010_phase1_class1
+[Tracker] Ep   11 | AvgR -0.0000 | Global -0.0927 | Local 0.1192 | F1_macro 0.5915 | WorstLoss 2.7579
+[Tracker] Ep   12 | AvgR 0.0000 | Global 0.0160 | Local 0.1192 | F1_macro 0.5964 | WorstLoss 2.4779
+[Tracker] Ep   13 | AvgR -0.0000 | Global -0.0203 | Local 0.1192 | F1_macro 0.5904 | WorstLoss 2.5707
+[Tracker] Ep   14 | AvgR -0.0000 | Global -0.0988 | Local 0.1192 | F1_macro 0.6132 | WorstLoss 2.7708
+[Tracker] Ep   15 | AvgR 0.0000 | Global 0.0224 | Local 0.1192 | F1_macro 0.5961 | WorstLoss 2.4619
+[Tracker] Saved snapshot: ep0015_phase1_class1
+[Tracker] Ep   16 | AvgR -0.0001 | Global -0.1125 | Local 0.1192 | F1_macro 0.6055 | WorstLoss 2.8094
+[Tracker] Ep   17 | AvgR -0.0001 | Global -0.1868 | Local 0.1192 | F1_macro 0.5950 | WorstLoss 2.9928
+[Tracker] Ep   18 | AvgR 0.0001 | Global 0.1425 | Local 0.1192 | F1_macro 0.6052 | WorstLoss 2.1600
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.142505) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   19 | AvgR -0.0001 | Global -0.1754 | Local 0.1192 | F1_macro 0.5957 | WorstLoss 2.9739
+[Tracker] Ep   20 | AvgR -0.0001 | Global -0.1534 | Local 0.1192 | F1_macro 0.6158 | WorstLoss 2.9188
+[Tracker] Saved snapshot: ep0020_phase1_class1
+[Tracker] Ep   21 | AvgR -0.0000 | Global -0.0811 | Local 0.1192 | F1_macro 0.5824 | WorstLoss 2.7324
+[Tracker] Ep   22 | AvgR -0.0000 | Global -0.0500 | Local 0.1192 | F1_macro 0.5834 | WorstLoss 2.6455
+[Tracker] Ep   23 | AvgR -0.0001 | Global -0.2278 | Local 0.1192 | F1_macro 0.5991 | WorstLoss 3.1023
+[Tracker] Ep   24 | AvgR -0.0000 | Global -0.0955 | Local 0.1192 | F1_macro 0.5827 | WorstLoss 2.7620
+[Tracker] Ep   25 | AvgR -0.0000 | Global -0.0215 | Local 0.1192 | F1_macro 0.5960 | WorstLoss 2.5734
+[Tracker] Saved snapshot: ep0025_phase1_class1
+[Tracker] Ep   26 | AvgR -0.0000 | Global -0.0309 | Local 0.1192 | F1_macro 0.5659 | WorstLoss 2.5976
+[Tracker] Ep   27 | AvgR -0.0000 | Global -0.0315 | Local 0.1192 | F1_macro 0.5929 | WorstLoss 2.5986
+[Tracker] Ep   28 | AvgR 0.0001 | Global 0.1338 | Local 0.1192 | F1_macro 0.5589 | WorstLoss 2.1720
+[Tracker] Ep   29 | AvgR 0.0000 | Global 0.0102 | Local 0.1192 | F1_macro 0.5840 | WorstLoss 2.4924
+[Tracker] Ep   30 | AvgR 0.0000 | Global 0.0944 | Local 0.1192 | F1_macro 0.6024 | WorstLoss 2.2812
+[Tracker] Saved snapshot: ep0030_phase1_class1
+[Tracker] Ep   31 | AvgR -0.0000 | Global -0.0097 | Local 0.1192 | F1_macro 0.6191 | WorstLoss 2.5436
+[Tracker] Ep   32 | AvgR 0.0001 | Global 0.1265 | Local 0.1192 | F1_macro 0.5893 | WorstLoss 2.1994
+[Tracker] Ep   33 | AvgR 0.0000 | Global 0.0701 | Local 0.1192 | F1_macro 0.5840 | WorstLoss 2.3423
+[Tracker] Ep   34 | AvgR -0.0000 | Global -0.0606 | Local 0.1192 | F1_macro 0.5855 | WorstLoss 2.6726
+[Tracker] Ep   35 | AvgR -0.0000 | Global -0.0243 | Local 0.1192 | F1_macro 0.5974 | WorstLoss 2.5801
+[Tracker] Saved snapshot: ep0035_phase1_class1
+[Tracker] Ep   36 | AvgR -0.0000 | Global -0.0404 | Local 0.1192 | F1_macro 0.5808 | WorstLoss 2.6211
+[Tracker] Ep   37 | AvgR -0.0000 | Global -0.0035 | Local 0.1192 | F1_macro 0.5982 | WorstLoss 2.5278
+[Tracker] Ep   38 | AvgR 0.0000 | Global 0.0416 | Local 0.1192 | F1_macro 0.5781 | WorstLoss 2.4132
+[Tracker] Ep   39 | AvgR -0.0000 | Global -0.0138 | Local 0.1192 | F1_macro 0.5883 | WorstLoss 2.5546
+[Tracker] Ep   40 | AvgR 0.0000 | Global 0.0177 | Local 0.1192 | F1_macro 0.5971 | WorstLoss 2.4733
+[Tracker] Saved snapshot: ep0040_phase1_class1
+[Tracker] Ep   41 | AvgR -0.0000 | Global -0.0853 | Local 0.1192 | F1_macro 0.5653 | WorstLoss 2.7407
+[Tracker] Ep   42 | AvgR -0.0000 | Global -0.0353 | Local 0.1192 | F1_macro 0.6150 | WorstLoss 2.6082
+[Tracker] Ep   43 | AvgR -0.0000 | Global -0.0831 | Local 0.1192 | F1_macro 0.6001 | WorstLoss 2.7300
+[Tracker] Ep   44 | AvgR 0.0000 | Global 0.0663 | Local 0.1192 | F1_macro 0.6091 | WorstLoss 2.3514
+[Tracker] Ep   45 | AvgR 0.0000 | Global 0.0518 | Local 0.1192 | F1_macro 0.5772 | WorstLoss 2.3864
+[Tracker] Saved snapshot: ep0045_phase1_class1
+[Tracker] Ep   46 | AvgR -0.0000 | Global -0.0448 | Local 0.1192 | F1_macro 0.5846 | WorstLoss 2.6317
+[Tracker] Ep   47 | AvgR 0.0000 | Global 0.0122 | Local 0.1192 | F1_macro 0.5698 | WorstLoss 2.4879
+[Tracker] Ep   48 | AvgR 0.0000 | Global 0.0205 | Local 0.1192 | F1_macro 0.5661 | WorstLoss 2.4669
+[Tracker] Ep   49 | AvgR 0.0001 | Global 0.1385 | Local 0.1192 | F1_macro 0.6011 | WorstLoss 2.1700
+[Tracker] Ep   50 | AvgR 0.0000 | Global 0.0378 | Local 0.1192 | F1_macro 0.5970 | WorstLoss 2.4236
+[Tracker] Saved snapshot: ep0050_phase1_class1
+[Tracker] Ep   51 | AvgR -0.0000 | Global -0.0447 | Local 0.1192 | F1_macro 0.5818 | WorstLoss 2.6317
+[Tracker] Ep   52 | AvgR 0.0000 | Global 0.0944 | Local 0.1192 | F1_macro 0.6040 | WorstLoss 2.2810
+[Tracker] Ep   53 | AvgR 0.0000 | Global 0.0474 | Local 0.1192 | F1_macro 0.5996 | WorstLoss 2.3989
+[Tracker] Ep   54 | AvgR -0.0000 | Global -0.0966 | Local 0.1192 | F1_macro 0.5839 | WorstLoss 2.7637
+[Tracker] Ep   55 | AvgR 0.0000 | Global 0.0564 | Local 0.1192 | F1_macro 0.5966 | WorstLoss 2.3769
+[Tracker] Saved snapshot: ep0055_phase1_class1
+[Tracker] Ep   56 | AvgR 0.0000 | Global 0.0953 | Local 0.1192 | F1_macro 0.5955 | WorstLoss 2.2666
+[Tracker] Ep   57 | AvgR -0.0000 | Global -0.0100 | Local 0.1192 | F1_macro 0.5827 | WorstLoss 2.5444
+[Tracker] Ep   58 | AvgR 0.0000 | Global 0.0740 | Local 0.1192 | F1_macro 0.5882 | WorstLoss 2.3321
+[Tracker] Ep   59 | AvgR -0.0000 | Global -0.0915 | Local 0.1192 | F1_macro 0.5796 | WorstLoss 2.7496
+[Tracker] Ep   60 | AvgR 0.0001 | Global 0.1309 | Local 0.1192 | F1_macro 0.5945 | WorstLoss 2.1893
+[Tracker] Saved snapshot: ep0060_phase1_class1
+[Tracker] Ep   61 | AvgR 0.0000 | Global 0.0771 | Local 0.1192 | F1_macro 0.5872 | WorstLoss 2.3232
+[Tracker] Ep   62 | AvgR 0.0001 | Global 0.1706 | Local 0.1192 | F1_macro 0.5881 | WorstLoss 2.0893
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.170573) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   63 | AvgR 0.0001 | Global 0.1129 | Local 0.1192 | F1_macro 0.6079 | WorstLoss 2.2346
+[Tracker] Ep   64 | AvgR 0.0000 | Global 0.0195 | Local 0.1192 | F1_macro 0.5786 | WorstLoss 2.4698
+[Tracker] Ep   65 | AvgR -0.0000 | Global -0.0935 | Local 0.1192 | F1_macro 0.5684 | WorstLoss 2.7584
+[Tracker] Saved snapshot: ep0065_phase1_class1
+[Tracker] Ep   66 | AvgR 0.0001 | Global 0.1660 | Local 0.1192 | F1_macro 0.6184 | WorstLoss 2.1009
+[Tracker] Ep   67 | AvgR -0.0000 | Global -0.0183 | Local 0.1192 | F1_macro 0.5697 | WorstLoss 2.5654
+[Tracker] Ep   68 | AvgR -0.0000 | Global -0.0406 | Local 0.1192 | F1_macro 0.5866 | WorstLoss 2.6234
+[Tracker] Ep   69 | AvgR 0.0000 | Global 0.0539 | Local 0.1192 | F1_macro 0.5878 | WorstLoss 2.3826
+[Tracker] Ep   70 | AvgR 0.0000 | Global 0.0809 | Local 0.1192 | F1_macro 0.5763 | WorstLoss 2.3140
+[Tracker] Saved snapshot: ep0070_phase1_class1
+[Tracker] Ep   71 | AvgR 0.0001 | Global 0.1199 | Local 0.1192 | F1_macro 0.5998 | WorstLoss 2.2170
+[Tracker] Ep   72 | AvgR 0.0000 | Global 0.0610 | Local 0.1192 | F1_macro 0.5868 | WorstLoss 2.3641
+[Tracker] Ep   73 | AvgR 0.0000 | Global 0.0447 | Local 0.1192 | F1_macro 0.5815 | WorstLoss 2.4063
+[Tracker] Ep   74 | AvgR 0.0000 | Global 0.0312 | Local 0.1192 | F1_macro 0.6070 | WorstLoss 2.4389
+[Tracker] Ep   75 | AvgR 0.0001 | Global 0.1294 | Local 0.1192 | F1_macro 0.6012 | WorstLoss 2.1931
+[Tracker] Saved snapshot: ep0075_phase1_class1
+[Tracker] Ep   76 | AvgR 0.0001 | Global 0.1057 | Local 0.1192 | F1_macro 0.6004 | WorstLoss 2.2527
+[Tracker] Ep   77 | AvgR 0.0000 | Global 0.0969 | Local 0.1192 | F1_macro 0.5778 | WorstLoss 2.2748
+[Tracker] Ep   78 | AvgR 0.0000 | Global 0.0542 | Local 0.1192 | F1_macro 0.5946 | WorstLoss 2.3820
+[Tracker] Ep   79 | AvgR 0.0001 | Global 0.1844 | Local 0.1192 | F1_macro 0.6167 | WorstLoss 2.0544
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.184420) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep   80 | AvgR 0.0001 | Global 0.1238 | Local 0.1192 | F1_macro 0.6050 | WorstLoss 2.2070
+[Tracker] Saved snapshot: ep0080_phase1_class1
+[Tracker] Ep   81 | AvgR 0.0000 | Global 0.0799 | Local 0.1192 | F1_macro 0.5794 | WorstLoss 2.3177
+[Tracker] Ep   82 | AvgR -0.0000 | Global -0.0059 | Local 0.1192 | F1_macro 0.5751 | WorstLoss 2.5339
+[Tracker] Ep   83 | AvgR 0.0001 | Global 0.1287 | Local 0.1192 | F1_macro 0.6009 | WorstLoss 2.1940
+[Tracker] Ep   84 | AvgR 0.0000 | Global 0.0464 | Local 0.1192 | F1_macro 0.5871 | WorstLoss 2.4021
+[Tracker] Ep   85 | AvgR 0.0000 | Global 0.0739 | Local 0.1192 | F1_macro 0.6023 | WorstLoss 2.3329
+[Tracker] Saved snapshot: ep0085_phase1_class1
+[Tracker] Ep   86 | AvgR 0.0000 | Global 0.0422 | Local 0.1192 | F1_macro 0.5904 | WorstLoss 2.4127
+[Tracker] Ep   87 | AvgR 0.0000 | Global 0.0768 | Local 0.1192 | F1_macro 0.5900 | WorstLoss 2.3256
+[Tracker] Ep   88 | AvgR 0.0000 | Global 0.0145 | Local 0.1192 | F1_macro 0.5926 | WorstLoss 2.4824
+[Tracker] Ep   89 | AvgR -0.0000 | Global -0.0962 | Local 0.1192 | F1_macro 0.5947 | WorstLoss 2.7612
+[Tracker] Ep   90 | AvgR 0.0000 | Global 0.0744 | Local 0.1192 | F1_macro 0.6018 | WorstLoss 2.3315
+[Tracker] Saved snapshot: ep0090_phase1_class1
+[Tracker] Ep   91 | AvgR 0.0000 | Global 0.0505 | Local 0.1192 | F1_macro 0.6097 | WorstLoss 2.3918
+[Tracker] Ep   92 | AvgR -0.0000 | Global -0.0275 | Local 0.1192 | F1_macro 0.5907 | WorstLoss 2.5882
+[Tracker] Ep   93 | AvgR 0.0000 | Global 0.0212 | Local 0.1192 | F1_macro 0.6042 | WorstLoss 2.4656
+[Tracker] Ep   94 | AvgR 0.0001 | Global 0.1530 | Local 0.1192 | F1_macro 0.6081 | WorstLoss 2.1335
+[Tracker] Ep   95 | AvgR 0.0001 | Global 0.1547 | Local 0.1192 | F1_macro 0.6120 | WorstLoss 2.1292
+[Tracker] Saved snapshot: ep0095_phase1_class1
+[Tracker] Ep   96 | AvgR 0.0001 | Global 0.1304 | Local 0.1192 | F1_macro 0.5852 | WorstLoss 2.1905
+[Tracker] Ep   97 | AvgR 0.0001 | Global 0.1643 | Local 0.1192 | F1_macro 0.5780 | WorstLoss 2.1047
+[Tracker] Ep   98 | AvgR 0.0000 | Global 0.0991 | Local 0.1192 | F1_macro 0.5910 | WorstLoss 2.2672
+[Tracker] Ep   99 | AvgR -0.0000 | Global -0.0344 | Local 0.1192 | F1_macro 0.5813 | WorstLoss 2.6057
+[Tracker] Ep  100 | AvgR 0.0001 | Global 0.1717 | Local 0.1192 | F1_macro 0.5985 | WorstLoss 2.0865
+[Tracker] Saved snapshot: ep0100_phase1_class1
+[Tracker] Ep  101 | AvgR -0.0000 | Global -0.0642 | Local 0.1192 | F1_macro 0.5707 | WorstLoss 2.6845
+[Tracker] Ep  102 | AvgR 0.0001 | Global 0.1692 | Local 0.1192 | F1_macro 0.6124 | WorstLoss 2.0929
+[Tracker] Ep  103 | AvgR 0.0000 | Global 0.0621 | Local 0.1192 | F1_macro 0.6177 | WorstLoss 2.3624
+[Tracker] Ep  104 | AvgR 0.0000 | Global 0.0956 | Local 0.1192 | F1_macro 0.6251 | WorstLoss 2.2783
+[Tracker] Ep  105 | AvgR -0.0000 | Global -0.0013 | Local 0.1192 | F1_macro 0.5898 | WorstLoss 2.5222
+[Tracker] Saved snapshot: ep0105_phase1_class1
+[Tracker] Ep  106 | AvgR -0.0000 | Global -0.0207 | Local 0.1192 | F1_macro 0.6000 | WorstLoss 2.5710
+[Tracker] Ep  107 | AvgR 0.0001 | Global 0.1484 | Local 0.1192 | F1_macro 0.6033 | WorstLoss 2.1453
+[Tracker] Ep  108 | AvgR 0.0000 | Global 0.0499 | Local 0.1192 | F1_macro 0.5940 | WorstLoss 2.3926
+[Tracker] Ep  109 | AvgR 0.0001 | Global 0.1475 | Local 0.1192 | F1_macro 0.6141 | WorstLoss 2.1474
+[Tracker] Ep  110 | AvgR 0.0001 | Global 0.1314 | Local 0.1192 | F1_macro 0.5969 | WorstLoss 2.1881
+[Tracker] Saved snapshot: ep0110_phase1_class1
+[Tracker] Ep  111 | AvgR 0.0000 | Global 0.0617 | Local 0.1192 | F1_macro 0.5904 | WorstLoss 2.3635
+[Tracker] Ep  112 | AvgR 0.0001 | Global 0.1402 | Local 0.1192 | F1_macro 0.5897 | WorstLoss 2.1659
+[Tracker] Ep  113 | AvgR 0.0001 | Global 0.1502 | Local 0.1192 | F1_macro 0.6116 | WorstLoss 2.1406
+[Tracker] Ep  114 | AvgR 0.0000 | Global 0.0601 | Local 0.1192 | F1_macro 0.5845 | WorstLoss 2.3675
+[Tracker] Ep  115 | AvgR 0.0001 | Global 0.1695 | Local 0.1192 | F1_macro 0.6153 | WorstLoss 2.0921
+[Tracker] Saved snapshot: ep0115_phase1_class1
+[Tracker] Ep  116 | AvgR 0.0000 | Global 0.0945 | Local 0.1192 | F1_macro 0.5940 | WorstLoss 2.2809
+[Tracker] Ep  117 | AvgR -0.0000 | Global -0.0119 | Local 0.1192 | F1_macro 0.5949 | WorstLoss 2.5490
+[Tracker] Ep  118 | AvgR 0.0000 | Global 0.0159 | Local 0.1192 | F1_macro 0.6043 | WorstLoss 2.4787
+[Tracker] Ep  119 | AvgR 0.0001 | Global 0.1962 | Local 0.1192 | F1_macro 0.6282 | WorstLoss 2.0247
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.196204) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep  120 | AvgR 0.0001 | Global 0.1356 | Local 0.1192 | F1_macro 0.5937 | WorstLoss 2.1774
+[Tracker] Saved snapshot: ep0120_phase1_class1
+[Tracker] Ep  121 | AvgR 0.0001 | Global 0.2815 | Local 0.1192 | F1_macro 0.6332 | WorstLoss 1.8068
+[Tracker] New BEST synthetic [phase1_class1] (by global.global_obj: 0.281510) saved.
+[Tracker] BEST β weights [phase1_class1] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase1_class1.pt
+[Tracker] Ep  122 | AvgR -0.0000 | Global -0.0039 | Local 0.1192 | F1_macro 0.5812 | WorstLoss 2.5288
+[Tracker] Ep  123 | AvgR 0.0001 | Global 0.2037 | Local 0.1192 | F1_macro 0.6063 | WorstLoss 2.0058
+[Tracker] Ep  124 | AvgR 0.0000 | Global 0.0350 | Local 0.1192 | F1_macro 0.5810 | WorstLoss 2.4307
+[Tracker] Ep  125 | AvgR 0.0001 | Global 0.1038 | Local 0.1192 | F1_macro 0.5931 | WorstLoss 2.2576
+[Tracker] Saved snapshot: ep0125_phase1_class1
+[Tracker] Ep  126 | AvgR 0.0001 | Global 0.1345 | Local 0.1192 | F1_macro 0.6139 | WorstLoss 2.1802
+[Tracker] Ep  127 | AvgR 0.0001 | Global 0.1356 | Local 0.1192 | F1_macro 0.6150 | WorstLoss 2.1773
+[Tracker] Ep  128 | AvgR 0.0001 | Global 0.1298 | Local 0.1192 | F1_macro 0.5880 | WorstLoss 2.1910
+[Tracker] Ep  129 | AvgR 0.0001 | Global 0.1063 | Local 0.1192 | F1_macro 0.6044 | WorstLoss 2.2512
+[Tracker] Ep  130 | AvgR 0.0000 | Global 0.0397 | Local 0.1192 | F1_macro 0.6077 | WorstLoss 2.4189
+[Tracker] Saved snapshot: ep0130_phase1_class1
+[CMA-ES Phase] Finished phase1_class1 | best global_obj=0.2815
+Phase 2 anchors: 1734 (y=0 & disadv=1)
+[CMAESAgent] reset phase='phase2_class0' | D=10 param_dim=20 popsize=12 sigma0=1.000
+FFNN Using device: cuda:1
+
+============================================================
+[CMA-ES Phase] phase2_class0 | target_class=0 | episodes=26 | popsize=12
+============================================================
+[Tracker] Ep    1 | AvgR 0.0001 | Global 0.1312 | Local 0.1192 | F1_macro 0.6151 | WorstLoss 2.1827
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.131157) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    2 | AvgR 0.0001 | Global 0.1387 | Local 0.1192 | F1_macro 0.5940 | WorstLoss 2.1649
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.138701) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    3 | AvgR 0.0001 | Global 0.2431 | Local 0.1192 | F1_macro 0.6022 | WorstLoss 1.9045
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.243051) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    4 | AvgR 0.0001 | Global 0.2439 | Local 0.1192 | F1_macro 0.5941 | WorstLoss 1.8838
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.243879) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    5 | AvgR 0.0000 | Global 0.0978 | Local 0.1192 | F1_macro 0.5920 | WorstLoss 2.2703
+[Tracker] Saved snapshot: ep0005_phase2_class0
+[Tracker] Ep    6 | AvgR 0.0001 | Global 0.1482 | Local 0.1192 | F1_macro 0.5985 | WorstLoss 2.1391
+[Tracker] Ep    7 | AvgR 0.0001 | Global 0.1676 | Local 0.1192 | F1_macro 0.6119 | WorstLoss 2.0898
+[Tracker] Ep    8 | AvgR 0.0001 | Global 0.2882 | Local 0.1192 | F1_macro 0.6392 | WorstLoss 1.7927
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.288224) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep    9 | AvgR 0.0001 | Global 0.1967 | Local 0.1192 | F1_macro 0.6138 | WorstLoss 2.0143
+[Tracker] Ep   10 | AvgR 0.0000 | Global 0.0938 | Local 0.1192 | F1_macro 0.6012 | WorstLoss 2.2768
+[Tracker] Saved snapshot: ep0010_phase2_class0
+[Tracker] Ep   11 | AvgR 0.0001 | Global 0.1905 | Local 0.1192 | F1_macro 0.6062 | WorstLoss 2.0335
+[Tracker] Ep   12 | AvgR 0.0001 | Global 0.2583 | Local 0.1192 | F1_macro 0.6102 | WorstLoss 1.8622
+[Tracker] Ep   13 | AvgR 0.0001 | Global 0.2191 | Local 0.1192 | F1_macro 0.6035 | WorstLoss 1.9586
+[Tracker] Ep   14 | AvgR 0.0001 | Global 0.1983 | Local 0.1192 | F1_macro 0.6109 | WorstLoss 2.0018
+[Tracker] Ep   15 | AvgR 0.0001 | Global 0.2293 | Local 0.1192 | F1_macro 0.6277 | WorstLoss 1.9247
+[Tracker] Saved snapshot: ep0015_phase2_class0
+[Tracker] Ep   16 | AvgR 0.0001 | Global 0.1750 | Local 0.1192 | F1_macro 0.6113 | WorstLoss 2.0726
+[Tracker] Ep   17 | AvgR 0.0001 | Global 0.1361 | Local 0.1192 | F1_macro 0.5652 | WorstLoss 2.1692
+[Tracker] Ep   18 | AvgR 0.0001 | Global 0.1472 | Local 0.1192 | F1_macro 0.6017 | WorstLoss 2.1460
+[Tracker] Ep   19 | AvgR 0.0001 | Global 0.2166 | Local 0.1192 | F1_macro 0.6159 | WorstLoss 1.9630
+[Tracker] Ep   20 | AvgR 0.0001 | Global 0.2870 | Local 0.1192 | F1_macro 0.6321 | WorstLoss 1.7935
+[Tracker] Saved snapshot: ep0020_phase2_class0
+[Tracker] Ep   21 | AvgR 0.0001 | Global 0.2964 | Local 0.1192 | F1_macro 0.6401 | WorstLoss 1.7672
+[Tracker] New BEST synthetic [phase2_class0] (by global.global_obj: 0.296446) saved.
+[Tracker] BEST β weights [phase2_class0] saved -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict_phase2_class0.pt
+[Tracker] Ep   22 | AvgR 0.0001 | Global 0.2256 | Local 0.1192 | F1_macro 0.6046 | WorstLoss 1.9356
+[Tracker] Ep   23 | AvgR 0.0001 | Global 0.1292 | Local 0.1192 | F1_macro 0.5834 | WorstLoss 2.1921
+[Tracker] Ep   24 | AvgR 0.0001 | Global 0.2611 | Local 0.1192 | F1_macro 0.6456 | WorstLoss 1.8570
+[Tracker] Ep   25 | AvgR 0.0001 | Global 0.1815 | Local 0.1192 | F1_macro 0.6104 | WorstLoss 2.0530
+[Tracker] Saved snapshot: ep0025_phase2_class0
+[Tracker] Ep   26 | AvgR 0.0001 | Global 0.2819 | Local 0.1192 | F1_macro 0.6275 | WorstLoss 1.8073
+[CMA-ES Phase] Finished phase2_class0 | best global_obj=0.2964
+FFNN Using device: cuda:1
+[Combined] Saved combined beta -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict.pt
+[Combined] Saved combined synthetic -> paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_synthetic_combined.npz
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/best_beta_state_dict.pt
+
+[TEST] Alpha -> F1(min)=0.3192 | F1(maj)=0.8847 | F1(weighted)=0.7485 | F1(macro)=0.6020 | Brier=0.1512
+[TEST] Beta  -> F1(min)=0.4236 | F1(maj)=0.8900 | F1(weighted)=0.7777 | F1(macro)=0.6568 | Brier=0.1393
+[TestSuite] Final test metrics appended to (seed): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/final_test_metrics.csv
+Total time 494.10s
+[Tracker] Finished. Run folder: paper_results_v4/SPECsc_census_cmaes_bias005_5s_EP130_PCA10_REWfairness_minID1_majID0_TRJ2000_REAL3000_BIAS0.05_GG202604041118_f6f4faed/seed_3

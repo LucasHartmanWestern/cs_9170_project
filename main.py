@@ -47,6 +47,7 @@ _KNOWN_TOP_LEVEL_FIELDS = {
     "reward_shaping", "local_weights", "ffnn", "reinforce", "curriculum", "benchmarks",
     "win_seconds", "step_seconds", "eo_guard_threshold",
     "whiten_pca", "beta_reset_interval", "beta_warmstart_from_alpha",
+    "pool_pos_fraction",
 }
 _KNOWN_LOCAL_WEIGHTS = {
     "w_ot", "use_dvrl_local", "dvrl_max_bce",
@@ -58,6 +59,7 @@ _KNOWN_LOCAL_WEIGHTS = {
 _KNOWN_REWARD_SHAPING = {
     "global_sigmoid_k", "utility_guard_min_factor",
     "local_squash_k", "local_squash_center", "hard_from_beta",
+    "roc_eo_lambda",
 }
 _REQUIRED_TOP_LEVEL = {
     "dataset_name", "reward_mode", "lambda_schedule",
@@ -212,6 +214,7 @@ def run_spec_all_seeds(spec_path: str, device: str, output_dir: str = "training_
 
             global_sigmoid_k=float(rs.get("global_sigmoid_k", 10.0)),
             utility_guard_min_factor=float(rs.get("utility_guard_min_factor", 1.0)),
+            roc_eo_lambda=float(rs.get("roc_eo_lambda", 0.5)),
             phase2_episodes=spec.get("phase2_episodes", None),
             beta_reset_interval=int(spec.get("beta_reset_interval", 1)),
             beta_warmstart_from_alpha=bool(spec.get("beta_warmstart_from_alpha", False)),
@@ -220,6 +223,7 @@ def run_spec_all_seeds(spec_path: str, device: str, output_dir: str = "training_
             w_ot=float(lw.get("w_ot", 0.0)),
             use_cmaes=bool(spec.get("use_cmaes", False)),
             cmaes=spec.get("cmaes", None),
+            pool_pos_fraction=spec.get("pool_pos_fraction", None),
         )
 
         trainer.save_dir = output_dir

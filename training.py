@@ -86,6 +86,9 @@ class Training:
         #dataset protected attribute column (passed to get_data_splits)
         dp_protected_col: str | None = None,
 
+        #FairJob: target positive fraction for neg-undersampling of train+val
+        pool_pos_fraction: float | None = None,
+
         #two-phase generation
         gen_both_classes=False,
 
@@ -114,6 +117,7 @@ class Training:
         #reward shaping
         global_sigmoid_k: float = 10.0,
         utility_guard_min_factor: float = 1.0,  # 1.0 = disabled; <1.0 enables multiplicative utility guard
+        roc_eo_lambda: float = 0.5,             # for reward_mode="roc_eo": weight on AUC vs EO penalty
 
         #beta warm-start
         beta_reset_interval: int = 1,       # 1 = reset every episode (default); N>1 = warm-start
@@ -175,6 +179,7 @@ class Training:
         self.phase2_episodes = int(phase2_episodes) if phase2_episodes is not None else None
         self.global_sigmoid_k = float(global_sigmoid_k)
         self.utility_guard_min_factor = float(utility_guard_min_factor)
+        self.roc_eo_lambda = float(roc_eo_lambda)
         self.hard_margin = hard_margin
         self.beta_reset_interval = max(1, int(beta_reset_interval))
         self.beta_warmstart_from_alpha = bool(beta_warmstart_from_alpha)
@@ -188,6 +193,7 @@ class Training:
         self.win_seconds = win_seconds
         self.step_seconds = step_seconds
         self.dp_protected_col = dp_protected_col
+        self.pool_pos_fraction = pool_pos_fraction
 
         self.minority_id = minority_id
         self.majority_id = majority_id
@@ -373,6 +379,7 @@ class Training:
         use_dvrl_local: bool = False,
         dvrl_max_bce: float = 0.693,
         utility_guard_min_factor: float = 1.0,
+        roc_eo_lambda: float = 0.5,
     ):
         """
         Reward combines:
@@ -381,7 +388,7 @@ class Training:
         """
 
         mode = self.reward_mode
-        valid = {"local_gauss", "local_gauss_penalty", "fairness"}
+        valid = {"local_gauss", "local_gauss_penalty", "fairness", "roc_eo"}
         if mode not in valid:
             raise ValueError(f"reward_mode must be one of {valid}, got {self.reward_mode!r}")
 
@@ -428,7 +435,7 @@ class Training:
         ep_eod_avg_diff = float("nan")
         ep_soft_eo_beta = float("nan")
 
-        if mode == "fairness":
+        if mode in ("fairness", "roc_eo"):
             a_theta_val = self.dataset.a_val
             assert len(a_theta_val) == x_theta_val.shape[0], "a_val misaligned with x_theta_val"
 
@@ -619,6 +626,15 @@ class Training:
                     global_term = float(torch.sigmoid(torch.tensor(global_sigmoid_k * (wgl_alpha - wgl_beta))).item())
             else:
                 global_term = 0.0  # neutral fallback when worst-group loss unavailable
+        elif mode == "roc_eo":
+            # G(θ) = λ·AUC − (1−λ)·EO  (supervisor proposal)
+            # Directly optimizes the fairness-utility tradeoff without a reference baseline.
+            # Uses hard EO (threshold-based TPR diff) — consistent with what we report.
+            eo = ep_eo_tpr_diff if ep_eo_tpr_diff == ep_eo_tpr_diff else float("nan")
+            if auc_beta == auc_beta and eo == eo:
+                global_term = float(roc_eo_lambda * auc_beta - (1.0 - roc_eo_lambda) * eo)
+            else:
+                global_term = 0.0
         else:
             with torch.no_grad():
                 f1_minority_alpha = rh.f1_from_probs(y_val_bin, p1_alpha_val, f1_thresh)
@@ -858,6 +874,7 @@ class Training:
                 use_dvrl_local=self.use_dvrl_local,
                 dvrl_max_bce=self.dvrl_max_bce,
                 utility_guard_min_factor=self.utility_guard_min_factor,
+                roc_eo_lambda=self.roc_eo_lambda,
             )
 
             # Truncate episode tensors and learn
@@ -1023,6 +1040,7 @@ class Training:
                 use_dvrl_local=self.use_dvrl_local,
                 dvrl_max_bce=self.dvrl_max_bce,
                 utility_guard_min_factor=self.utility_guard_min_factor,
+                roc_eo_lambda=self.roc_eo_lambda,
             )
 
             global_obj = diagnostics.get("global", {}).get("global_obj", 0.0)
@@ -1160,6 +1178,7 @@ class Training:
                     win_seconds=self.win_seconds,
                     step_seconds=self.step_seconds,
                     **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
+                    **({"pool_pos_fraction": self.pool_pos_fraction} if self.pool_pos_fraction is not None else {}),
                 )
             )
 
