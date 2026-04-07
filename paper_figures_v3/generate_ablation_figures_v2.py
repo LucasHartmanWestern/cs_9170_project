@@ -118,13 +118,10 @@ def get_alpha_eo(df): return stats(df, "alpha_eod_max_diff")
 
 
 def transform_eo(means, stds):
-    """Convert EO gap to fairness score: x' = 1 - x/max(X). Higher is better."""
+    """Negate EO gap so higher bars indicate better fairness."""
     means = np.array([float(m) for m in means])
     stds  = np.array([float(s) for s in stds])
-    max_x = np.nanmax(means)
-    if max_x == 0:
-        return means.tolist(), stds.tolist()
-    return (1.0 - means / max_x).tolist(), (stds / max_x).tolist()
+    return (-means).tolist(), stds.tolist()
 
 
 def save_fig(name):
@@ -135,7 +132,7 @@ def save_fig(name):
 
 
 def make_bar_ax(ax, labels, means, stds, colors, hatches=None,
-                ylabel="Fairness score", title="", fontsize_labels=11,
+                ylabel="\u2212EO Gap", title="", fontsize_labels=11,
                 fontsize_ticks=10, fontsize_title=12):
     x = np.arange(len(labels))
     bars = ax.bar(x, means, yerr=stds, capsize=4,
@@ -217,7 +214,7 @@ def _make_ep_eo_fig(datasets, ncols, figsize, fname, show_compas_placeholder,
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Episode budget ablation", fontsize=14, fontweight="bold")
+    fig.suptitle("Episode Budget", fontsize=14, fontweight="bold")
 
     ep_keys_use   = ep_keys_override   if ep_keys_override   is not None else EP_KEYS
     ep_chosen_use = ep_chosen_override if ep_chosen_override is not None else EP_CHOSEN
@@ -313,7 +310,7 @@ def _make_delta_fig(datasets, ncols, figsize, fname):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Delta scale ablation", fontsize=14, fontweight="bold")
+    fig.suptitle("Delta Scale", fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
         seeds = EXPECTED_SEEDS[ds]
@@ -372,7 +369,7 @@ def _make_dvrl_fig(datasets, ncols, figsize, fname):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Global-only vs. local reward augmentation",
+    fig.suptitle("Global-Only vs. Local Reward Augmentation",
                  fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
@@ -445,7 +442,7 @@ def _make_pca_fig(datasets, ncols, figsize, fname):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("PCA dimensionality ablation", fontsize=14, fontweight="bold")
+    fig.suptitle("PCA Dimensionality", fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
         seeds  = EXPECTED_SEEDS[ds]
@@ -516,7 +513,7 @@ def _make_ffnn_fig(datasets, ncols, figsize, fname):
     fig, axes = plt.subplots(1, ncols, figsize=figsize)
     if ncols == 1:
         axes = [axes]
-    fig.suptitle("Beta classifier training epochs ablation",
+    fig.suptitle("Beta Classifier Training Epochs",
                  fontsize=14, fontweight="bold")
 
     for ci, ds in enumerate(datasets):
