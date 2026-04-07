@@ -27,10 +27,8 @@ CHOSEN_KEY = "ep1500ph400"
 
 # (key_fragment, display_label, gen_both_classes)
 EP_CONFIGS = [
-    ("ep800ph0",    "ep800 / ph0\n(minority only, no phase 2)",  False),
-    ("ep800ph200",  "ep800 / ph200\n(+ majority recovery)",       True),
-    ("ep1500ph400", "ep1500 / ph400\n(+ majority recovery)",      True),
-    ("ep2000ph600", "ep2000 / ph600\n(+ majority recovery)",      True),
+    ("ep1500ph400", "ep1500 / ph400", True),
+    ("ep2000ph600", "ep2000 / ph600", True),
 ]
 
 SMOOTH_WINDOW = 40
@@ -68,11 +66,12 @@ def load_full(path):
 
 # ── figure ─────────────────────────────────────────────────────────────────────
 
-fig, axes = plt.subplots(2, 2, figsize=(11, 8), sharey=False)
-fig.suptitle("Episode Return — Census Income (all 4 episode configs, 5 seeds)",
+fig, axes_row = plt.subplots(1, 2, figsize=(11, 4.5), sharey=False)
+axes = np.array([[axes_row[0], axes_row[1]]])
+fig.suptitle("Episode Return — Census Income (5 seeds)",
              fontsize=13, fontweight="bold")
 
-panel_order = [(0,0), (0,1), (1,0), (1,1)]
+panel_order = [(0,0), (0,1)]
 
 for (row, col), (ep_key, cfg_label, gen_both) in zip(panel_order, EP_CONFIGS):
     ax = axes[row, col]
@@ -145,14 +144,13 @@ for (row, col), (ep_key, cfg_label, gen_both) in zip(panel_order, EP_CONFIGS):
                  fontweight=title_weight, color=title_color)
 
     ax.set_xlabel("Episode", fontsize=10)
-    ax.set_ylabel("Episode return (↑)", fontsize=10)
+    ax.set_ylabel("Episode return", fontsize=10)
     ax.tick_params(labelsize=9)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.grid(axis="y", linewidth=0.4, alpha=0.4)
 
-    if row == 0 and col == 0:
-        ax.legend(fontsize=8, loc="lower right")
+    ax.legend(fontsize=8, loc="lower right")
 
 plt.tight_layout()
 
