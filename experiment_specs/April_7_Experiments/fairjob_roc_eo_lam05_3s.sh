@@ -18,7 +18,7 @@ export OPENBLAS_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
 module purge
-module load python/3.12.4 cuda cudnn
+module load python/3.12.4 cuda cudnn gcc arrow/23.0.1
 source ~/envs/rl/bin/activate
 mkdir -p experiment_specs/April_7_Experiments/logs
 
