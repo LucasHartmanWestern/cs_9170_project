@@ -1,14 +1,18 @@
 """
-Census-only training curves: episode return, 2×2 grid (one panel per episode config).
+Training curves: episode return for two panels.
 
 Layout:
-  [ep800/ph0]      [ep800/ph200 ★chosen]
-  [ep1500/ph400 ★] [ep2000/ph600]
+  [Census — ep1500/ph400 (chosen)]
+  [Capture-24 — ep800/ph200 (chosen)]
 
-Mean ± std band across 5 seeds. Individual seed traces shown faintly.
-Phase-2 boundary marked with a dashed red line.
+Also generates a no-phase-2 variant showing only phase-1 portion of each.
 
-Output: fig_training_curves_census.png  (paper_figures_v3/ and paper/figures/)
+Mean ± range band across seeds. Individual seed traces shown faintly.
+Phase-2 boundary marked with a dashed red line (two-phase variant only).
+
+Output:
+  fig_training_curves_census.png        — two-phase version
+  fig_training_curves_nophase2.png      — phase-1 only version
 """
 
 import os
@@ -22,23 +26,25 @@ BASE_V3  = "/home/epigou/cs_9170_project/paper_results_v3/training_runs"
 OUT_DIR  = "/home/epigou/cs_9170_project/paper_figures_v3"
 FIG_DIR  = "/home/epigou/cs_9170_project/paper/figures"
 
-SEEDS = ["0", "2", "3", "5", "42"]
-CHOSEN_KEY = "ep1500ph400"
+SEEDS = {
+    "census":    ["0", "2", "3", "5", "42"],
+    "capture24": ["0", "3", "4", "5", "42"],
+}
 
-# (key_fragment, display_label, gen_both_classes)
-EP_CONFIGS = [
-    ("ep1500ph400", "ep1500 / ph400", True),
-    ("ep2000ph600", "ep2000 / ph600", True),
+# (dataset, key_fragment, display_label, gen_both_classes)
+PANELS = [
+    ("census",    "ep1500ph400", "ep1500 / ph400", True),
+    ("capture24", "ep800ph200",  "ep800 / ph200",  True),
 ]
 
 SMOOTH_WINDOW = 40
 METRIC_COL    = "meta.episode_return"
-COLOR_MAIN    = "#1a4f8a"
-COLOR_SEED    = "#6699cc"
+COLOR_MAIN    = {"census": "#1a4f8a", "capture24": "#27ae60"}
+COLOR_SEED    = {"census": "#6699cc", "capture24": "#7ecfa0"}
 
 
-def find_run_dir(ep_key):
-    fragment = f"SPECablation_census_{ep_key}_5s"
+def find_run_dir(ds, ep_key):
+    fragment = f"SPECablation_{ds}_{ep_key}_5s"
     matches = [d for d in os.listdir(BASE_V3) if fragment in d]
     if not matches:
         return None
@@ -50,101 +56,107 @@ def smooth(s, w=SMOOTH_WINDOW):
     return s.rolling(window=w, min_periods=1, center=True).mean()
 
 
-def load_full(path):
-    """Load metric with continuous x-axis across phase 1 and phase 2."""
+def load_full(path, phase1_only=False):
+    """Load metric with continuous x-axis. If phase1_only, drop phase-2 rows."""
     df = pd.read_csv(path, usecols=["episode", "meta.phase", METRIC_COL])
     phase1 = df[df["meta.phase"] == "phase1_class1"].copy()
     phase2 = df[df["meta.phase"] == "phase2_class0"].copy()
     offset = len(phase1)
-    if len(phase2) > 0:
+    if not phase1_only and len(phase2) > 0:
         phase2 = phase2.copy()
         phase2["episode"] = phase2["episode"] + offset
-    combined = pd.concat([phase1, phase2])
+        combined = pd.concat([phase1, phase2])
+    else:
+        combined = phase1
     combined = combined[~combined["episode"].duplicated(keep="last")].set_index("episode")[METRIC_COL]
-    return combined, offset  # offset = phase-1 length = phase-2 x boundary
+    return combined, offset
 
 
-# ── figure ─────────────────────────────────────────────────────────────────────
+def make_fig(phase1_only=False):
+    fig, axes_col = plt.subplots(2, 1, figsize=(4.5, 6.75), sharey=False)
 
-fig, axes_col = plt.subplots(2, 1, figsize=(6, 9), sharey=False)
-axes = np.array([[axes_col[0]], [axes_col[1]]])
-fig.suptitle("Episode Return", fontsize=13, fontweight="bold")
+    for panel_idx, (ax, (ds, ep_key, cfg_label, gen_both)) in enumerate(zip(axes_col, PANELS)):
+        panel_label = ["a)", "b)"][panel_idx]
+        ax.text(-0.20, 0.97, panel_label, transform=ax.transAxes,
+                fontsize=14, fontweight="bold", va="top", ha="left", clip_on=False)
+        seeds = SEEDS[ds]
+        seed_curves = []
+        actual_ph2_start = None
 
-panel_order = [(0,0), (1,0)]
-
-for (row, col), (ep_key, cfg_label, gen_both) in zip(panel_order, EP_CONFIGS):
-    ax = axes[row, col]
-    is_chosen = (ep_key == CHOSEN_KEY)
-
-    run_dir = find_run_dir(ep_key)
-    if run_dir is None:
-        ax.text(0.5, 0.5, f"Missing:\n{ep_key}", ha="center", va="center",
-                transform=ax.transAxes, fontsize=10, color="#cc0000")
-        continue
-
-    seed_curves = []
-    actual_ph2_start = None
-
-    for s in SEEDS:
-        p = os.path.join(run_dir, f"seed_{s}", "metrics.csv")
-        if not os.path.exists(p):
-            continue
-        try:
-            series, ph2_x = load_full(p)
-        except Exception as e:
-            print(f"  Warning: seed {s} failed: {e}")
+        run_dir = find_run_dir(ds, ep_key)
+        if run_dir is None:
+            ax.text(0.5, 0.5, f"Missing:\n{ds} {ep_key}", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=12, color="#cc0000")
             continue
 
-        if ph2_x > 0 and actual_ph2_start is None:
-            actual_ph2_start = ph2_x
+        for s in seeds:
+            p = os.path.join(run_dir, f"seed_{s}", "metrics.csv")
+            if not os.path.exists(p):
+                continue
+            try:
+                series, ph2_x = load_full(p, phase1_only=phase1_only)
+            except Exception as e:
+                print(f"  Warning: {ds} seed {s} failed: {e}")
+                continue
 
-        smoothed = smooth(series)
-        seed_curves.append(smoothed)
+            if ph2_x > 0 and actual_ph2_start is None:
+                actual_ph2_start = ph2_x
 
-        # individual seed trace (faint)
-        ax.plot(smoothed.index, smoothed.values,
-                color=COLOR_SEED, linewidth=0.5, alpha=0.35, zorder=2)
+            smoothed = smooth(series)
+            seed_curves.append(smoothed)
 
-    if not seed_curves:
-        ax.text(0.5, 0.5, "No data", ha="center", va="center",
-                transform=ax.transAxes, fontsize=10)
-        continue
+            ax.plot(smoothed.index, smoothed.values,
+                    color=COLOR_SEED[ds], linewidth=0.5, alpha=0.35, zorder=2)
 
-    # Align to common index and aggregate
-    min_len = min(len(c) for c in seed_curves)
-    arr  = np.array([c.values[:min_len] for c in seed_curves])
-    eps  = seed_curves[0].index[:min_len]
-    mean    = arr.mean(0)
-    arr_min = arr.min(0)
-    arr_max = arr.max(0)
+        if not seed_curves:
+            ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=12)
+            continue
 
-    ax.plot(eps, mean, color=COLOR_MAIN, linewidth=2.2, zorder=5,
-            label="Mean")
-    ax.fill_between(eps, arr_min, arr_max,
-                    color=COLOR_MAIN, alpha=0.20, zorder=4, label="Min-max range")
+        min_len = min(len(c) for c in seed_curves)
+        arr  = np.array([c.values[:min_len] for c in seed_curves])
+        eps  = seed_curves[0].index[:min_len]
+        mean    = arr.mean(0)
+        arr_min = arr.min(0)
+        arr_max = arr.max(0)
 
-    # Phase-2 boundary
-    if actual_ph2_start and actual_ph2_start > 0:
-        ax.axvline(actual_ph2_start, color="#cc0000", linewidth=1.5,
-                   linestyle="--", alpha=0.85, zorder=6, label="Phase 2 start")
+        ds_mean_label = {"census": "Mean Census Income", "capture24": "Mean Capture-24"}[ds]
+        ax.plot(eps, mean, color=COLOR_MAIN[ds], linewidth=2.2, zorder=5, label=ds_mean_label)
+        ax.fill_between(eps, arr_min, arr_max,
+                        color=COLOR_MAIN[ds], alpha=0.20, zorder=4, label="Min-max range")
+
+        if not phase1_only and actual_ph2_start and actual_ph2_start > 0:
+            ax.axvline(actual_ph2_start, color="#cc0000", linewidth=1.5,
+                       linestyle="--", alpha=0.85, zorder=6, label="Phase 2 start")
+
+        ax.set_xlabel("Episode", fontsize=14)
+        ax.set_ylabel("Episode return", fontsize=14)
+        ax.tick_params(labelsize=14)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.grid(axis="y", linewidth=0.4, alpha=0.4)
+        ax.legend(fontsize=12, loc="lower right")
+
+    plt.tight_layout()
+    return fig
 
 
-    ax.set_xlabel("Episode", fontsize=10)
-    ax.set_ylabel("Episode return", fontsize=10)
-    ax.tick_params(labelsize=9)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.grid(axis="y", linewidth=0.4, alpha=0.4)
-
-    ax.legend(fontsize=8, loc="lower right")
-
-plt.tight_layout()
-
+# ── two-phase figure ───────────────────────────────────────────────────────────
+fig = make_fig(phase1_only=False)
 for fname in ["fig_training_curves_census.png",
               os.path.join(FIG_DIR, "fig_training_curves_census.png")]:
     out = fname if os.path.isabs(fname) else os.path.join(OUT_DIR, fname)
-    plt.savefig(out, dpi=180, bbox_inches="tight", facecolor="white")
+    fig.savefig(out, dpi=180, bbox_inches="tight", facecolor="white")
     print(f"Saved: {out}")
-
 plt.close()
+
+# ── phase-1-only figure ────────────────────────────────────────────────────────
+fig = make_fig(phase1_only=True)
+for fname in ["fig_training_curves_nophase2.png",
+              os.path.join(FIG_DIR, "fig_training_curves_nophase2.png")]:
+    out = fname if os.path.isabs(fname) else os.path.join(OUT_DIR, fname)
+    fig.savefig(out, dpi=180, bbox_inches="tight", facecolor="white")
+    print(f"Saved: {out}")
+plt.close()
+
 print("Done.")

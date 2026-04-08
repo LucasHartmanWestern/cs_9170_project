@@ -62,15 +62,15 @@ COMPAS_DVRL_PH = {
 }
 COMPAS_ALPHA_EO = (0.410, 0.042)
 COMPAS_PCA_PH = {
-    "No PCA":       (0.420, 0.050),
-    "PCA-8":        (0.208, 0.042),
-    "PCA-9":        (0.192, 0.040),
-    "PCA-10": (0.180, 0.040),
+    "0":  (0.420, 0.050),
+    "8":  (0.208, 0.042),
+    "9":  (0.192, 0.040),
+    "10": (0.180, 0.040),
 }
 COMPAS_FFNN_PH = {
-    "10":        (0.308, 0.051),
-    "20 \u2605": (0.180, 0.040),
-    "50":        (0.248, 0.048),
+    "10": (0.308, 0.051),
+    "20": (0.180, 0.040),
+    "50": (0.248, 0.048),
 }
 
 
@@ -145,8 +145,8 @@ def save_fig(name):
 
 
 def make_bar_ax(ax, labels, means, stds, colors, hatches=None,
-                ylabel="EO Gap", title="", fontsize_labels=11,
-                fontsize_ticks=10, fontsize_title=12):
+                ylabel="EO Gap", title="", fontsize_labels=14,
+                fontsize_ticks=14, fontsize_title=14):
     x = np.arange(len(labels))
     bars = ax.bar(x, means, yerr=stds, capsize=4,
                   color=colors, edgecolor="white", linewidth=0.7,
@@ -157,7 +157,8 @@ def make_bar_ax(ax, labels, means, stds, colors, hatches=None,
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=fontsize_labels)
     ax.set_ylabel(ylabel, fontsize=fontsize_labels)
-    ax.set_title(title, fontsize=fontsize_title, fontweight="bold")
+    if title:
+        ax.set_title(title, fontsize=fontsize_title, fontweight="bold")
     ax.tick_params(axis="y", labelsize=fontsize_ticks)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -165,7 +166,7 @@ def make_bar_ax(ax, labels, means, stds, colors, hatches=None,
     return bars
 
 
-def label_bars(ax, bars, means, fontsize=9):
+def label_bars(ax, bars, means, fontsize=11):
     for bar, m in zip(bars, means):
         if not np.isnan(m):
             ax.text(bar.get_x() + bar.get_width() / 2,
@@ -178,7 +179,7 @@ def pending_note(fig):
              ha="right", va="bottom", fontsize=7, color="#888888", style="italic")
 
 
-def draw_pending_panel(ax, title="COMPAS*", fontsize_title=12):
+def draw_pending_panel(ax, title="COMPAS*", fontsize_title=14):
     """Draw an empty panel with 'results pending' text."""
     ax.set_title(title, fontsize=fontsize_title, fontweight="bold",
                  color=DS_COLORS["compas"])
@@ -198,10 +199,10 @@ print("Generating episode ablation EO-only figures ...")
 
 EP_KEYS = {
     "census": [
-        ("census_ep800ph0",    "ep800\nph0"),
-        ("census_ep800ph200",  "ep800\nph200"),
-        ("census_ep1500ph400", "ep1500\nph400"),
-        ("census_ep2000ph600", "ep2000\nph600"),
+        ("census_ep800ph0",    "Case 1"),
+        ("census_ep800ph200",  "Case 2"),
+        ("census_ep1500ph400", "Case 3"),
+        ("census_ep2000ph600", "Case 4"),
     ],
     "capture24": [
         ("capture24_ep800ph0",    "ep800\nph0"),
@@ -266,7 +267,7 @@ def _make_ep_eo_fig(datasets, ncols, figsize, fname, show_compas_placeholder,
         base_rgb = matplotlib.colors.to_rgb(col)
         colors = [base_rgb + (CHOSEN_ALPHA if i == chosen else OTHER_ALPHA,)
                   for i in range(len(labels))]
-        panel_title = "Episode Budget Ablation" if ncols == 1 else DS_LABELS[ds]
+        panel_title = ""
         bars = make_bar_ax(ax, labels, means, stds, colors, title=panel_title)
         bars[chosen].set_edgecolor("#111111")
         bars[chosen].set_linewidth(1.8)
@@ -280,7 +281,7 @@ def _make_ep_eo_fig(datasets, ncols, figsize, fname, show_compas_placeholder,
 
 
 # 3-dataset, COMPAS blank (pending)
-_make_ep_eo_fig(DATASETS_3, 3, (13, 5),
+_make_ep_eo_fig(DATASETS_3, 3, (9.75, 3.75),
                 "fig_episode_ablation_eo_v3.png",
                 show_compas_placeholder=False)
 
@@ -290,7 +291,7 @@ _make_ep_eo_fig(DATASETS_2, 2, (9, 5),
                 show_compas_placeholder=False)
 
 # 1-dataset (census only, all 4 episode configs)
-_make_ep_eo_fig(DATASETS_1, 1, (5, 5),
+_make_ep_eo_fig(DATASETS_1, 1, (3.75, 3.75),
                 "fig_episode_ablation_census.png",
                 show_compas_placeholder=False)
 
@@ -347,12 +348,12 @@ def _make_delta_fig(datasets, ncols, figsize, fname, transform_fn=None):
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA if i == DELTA_CHOSEN else OTHER_ALPHA,)
                     for i in range(len(DELTA_LABELS))]
-        panel_title = "Delta Scale Ablation" if ncols == 1 else DS_LABELS[ds]
+        panel_title = ""
         bars = make_bar_ax(ax, DELTA_LABELS, means, stds, colors, title=panel_title)
         bars[DELTA_CHOSEN].set_edgecolor("#111111")
         bars[DELTA_CHOSEN].set_linewidth(1.8)
         label_bars(ax, bars, means)
-        ax.set_xlabel("Delta scale", fontsize=11)
+        ax.set_xlabel("Delta scale", fontsize=14)
 
     if "compas" in datasets:
         pending_note(fig)
@@ -361,9 +362,9 @@ def _make_delta_fig(datasets, ncols, figsize, fname, transform_fn=None):
     plt.close()
 
 
-_make_delta_fig(DATASETS_3, 3, (13, 5),   "fig_delta_ablation_v3_large.png")
-_make_delta_fig(DATASETS_2, 2, (9,  5),   "fig_delta_ablation_nodataset.png")
-_make_delta_fig(DATASETS_1, 1, (5,  5),   "fig_delta_ablation_census.png")
+_make_delta_fig(DATASETS_3, 3, (9.75, 3.75),   "fig_delta_ablation_v3_large.png")
+_make_delta_fig(DATASETS_2, 2, (6.75, 3.75),   "fig_delta_ablation_nodataset.png")
+_make_delta_fig(DATASETS_1, 1, (3.75, 3.75),   "fig_delta_ablation_census.png")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -408,7 +409,7 @@ def _make_dvrl_fig(datasets, ncols, figsize, fname, transform_fn=None):
 
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA,), base_rgb + (OTHER_ALPHA,)]
-        panel_title = "Local Reward Augmentation" if ncols == 1 else DS_LABELS[ds]
+        panel_title = ""
         bars = make_bar_ax(ax, labels, means, stds, colors, title=panel_title)
         bars[0].set_edgecolor("#111111")
         bars[0].set_linewidth(1.8)
@@ -421,9 +422,9 @@ def _make_dvrl_fig(datasets, ncols, figsize, fname, transform_fn=None):
     plt.close()
 
 
-_make_dvrl_fig(DATASETS_3, 3, (13, 5), "fig_dvrl_ablation_v3_large.png")
-_make_dvrl_fig(DATASETS_2, 2, (9,  5), "fig_dvrl_ablation_nodataset.png")
-_make_dvrl_fig(DATASETS_1, 1, (5,  5), "fig_dvrl_ablation_census.png")
+_make_dvrl_fig(DATASETS_3, 3, (9.75, 3.75), "fig_dvrl_ablation_v3_large.png")
+_make_dvrl_fig(DATASETS_2, 2, (6.75, 3.75), "fig_dvrl_ablation_nodataset.png")
+_make_dvrl_fig(DATASETS_1, 1, (3.75, 3.75), "fig_dvrl_ablation_census.png")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -433,19 +434,19 @@ print("Generating PCA ablation figures ...")
 
 PCA_CONFIGS = {
     "census": [
-        ("census_raw",                   "No PCA"),
-        ("census_ep1500ph400_5s_EP1500", "PCA-10"),
-        ("census_pca15",                 "PCA-15"),
-        ("census_pca20",                 "PCA-20"),
+        ("census_raw",                   "0"),
+        ("census_ep1500ph400_5s_EP1500", "10"),
+        ("census_pca15",                 "15"),
+        ("census_pca20",                 "20"),
     ],
     "capture24": [
-        ("capture24_raw",                "No PCA"),
-        ("capture24_ep800ph200_5s_EP800","PCA-10"),
-        ("capture24_pca15",              "PCA-15"),
-        ("capture24_pca20",              "PCA-20"),
+        ("capture24_raw",                "0"),
+        ("capture24_ep800ph200_5s_EP800","10"),
+        ("capture24_pca15",              "15"),
+        ("capture24_pca20",              "20"),
     ],
 }
-COMPAS_PCA_ORDER = ["No PCA", "PCA-8", "PCA-9", "PCA-10"]
+COMPAS_PCA_ORDER = ["0", "8", "9", "10"]
 PCA_CHOSEN = {"census": 1, "compas": 3, "capture24": 1}
 
 
@@ -481,11 +482,12 @@ def _make_pca_fig(datasets, ncols, figsize, fname, transform_fn=None):
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA if i == chosen else OTHER_ALPHA,)
                     for i in range(len(labels))]
-        panel_title = "PCA Dimensionality Ablation" if ncols == 1 else DS_LABELS[ds]
+        panel_title = ""
         bars = make_bar_ax(ax, labels, means, stds, colors, title=panel_title)
         bars[chosen].set_edgecolor("#111111")
         bars[chosen].set_linewidth(1.8)
         label_bars(ax, bars, means)
+        ax.set_xlabel("PCA components", fontsize=14)
 
     if "compas" in datasets:
         pending_note(fig)
@@ -494,9 +496,9 @@ def _make_pca_fig(datasets, ncols, figsize, fname, transform_fn=None):
     plt.close()
 
 
-_make_pca_fig(DATASETS_3, 3, (13, 5), "fig_pca_ablation_v3_large.png")
-_make_pca_fig(DATASETS_2, 2, (9,  5), "fig_pca_ablation_nodataset.png")
-_make_pca_fig(DATASETS_1, 1, (5,  5), "fig_pca_ablation_census.png")
+_make_pca_fig(DATASETS_3, 3, (9.75, 3.75), "fig_pca_ablation_v3_large.png")
+_make_pca_fig(DATASETS_2, 2, (6.75, 3.75), "fig_pca_ablation_nodataset.png")
+_make_pca_fig(DATASETS_1, 1, (3.75, 3.75), "fig_pca_ablation_census.png")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -507,16 +509,16 @@ print("Generating FFNN ablation figures ...")
 FFNN_CONFIGS = {
     "census": [
         ("census_ffnn10",                "10"),
-        ("census_ep1500ph400_5s_EP1500", "20 \u2605"),
+        ("census_ep1500ph400_5s_EP1500", "20"),
         ("census_ffnn50",                "50"),
     ],
     "capture24": [
         ("capture24_ffnn10",              "10"),
-        ("capture24_ep800ph200_5s_EP800", "20 \u2605"),
+        ("capture24_ep800ph200_5s_EP800", "20"),
         ("capture24_ffnn50",              "50"),
     ],
 }
-COMPAS_FFNN_ORDER = ["10", "20 \u2605", "50"]
+COMPAS_FFNN_ORDER = ["10", "20", "50"]
 FFNN_CHOSEN = 1
 
 
@@ -551,12 +553,12 @@ def _make_ffnn_fig(datasets, ncols, figsize, fname, transform_fn=None):
         base_rgb = matplotlib.colors.to_rgb(col)
         colors   = [base_rgb + (CHOSEN_ALPHA if i == FFNN_CHOSEN else OTHER_ALPHA,)
                     for i in range(len(labels))]
-        panel_title = "Classifier Epochs Ablation" if ncols == 1 else DS_LABELS[ds]
+        panel_title = ""
         bars = make_bar_ax(ax, labels, means, stds, colors, title=panel_title)
         bars[FFNN_CHOSEN].set_edgecolor("#111111")
         bars[FFNN_CHOSEN].set_linewidth(1.8)
         label_bars(ax, bars, means)
-        ax.set_xlabel("Classifier Epochs", fontsize=11)
+        ax.set_xlabel("Classifier Epochs", fontsize=14)
 
     if "compas" in datasets:
         pending_note(fig)
@@ -565,9 +567,9 @@ def _make_ffnn_fig(datasets, ncols, figsize, fname, transform_fn=None):
     plt.close()
 
 
-_make_ffnn_fig(DATASETS_3, 3, (13, 5), "fig_ffnn_ablation_v3_large.png")
-_make_ffnn_fig(DATASETS_2, 2, (9,  5), "fig_ffnn_ablation_nodataset.png")
-_make_ffnn_fig(DATASETS_1, 1, (5,  5), "fig_ffnn_ablation_census.png")
+_make_ffnn_fig(DATASETS_3, 3, (9.75, 3.75), "fig_ffnn_ablation_v3_large.png")
+_make_ffnn_fig(DATASETS_2, 2, (6.75, 3.75), "fig_ffnn_ablation_nodataset.png")
+_make_ffnn_fig(DATASETS_1, 1, (3.75, 3.75), "fig_ffnn_ablation_census.png")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -576,24 +578,24 @@ _make_ffnn_fig(DATASETS_1, 1, (5,  5), "fig_ffnn_ablation_census.png")
 # ─────────────────────────────────────────────────────────────────────────────
 print("Generating EO inverted figures (census only) ...")
 
-_make_ep_eo_fig(DATASETS_1, 1, (5, 5),
+_make_ep_eo_fig(DATASETS_1, 1, (3.75, 3.75),
                 "fig_episode_ablation_eo_inverted_census.png",
                 show_compas_placeholder=False,
                 transform_fn=transform_eo_inverted)
 
-_make_delta_fig(DATASETS_1, 1, (5, 5),
+_make_delta_fig(DATASETS_1, 1, (3.75, 3.75),
                 "fig_delta_ablation_eo_inverted_census.png",
                 transform_fn=transform_eo_inverted)
 
-_make_dvrl_fig(DATASETS_1, 1, (5, 5),
+_make_dvrl_fig(DATASETS_1, 1, (3.75, 3.75),
                "fig_dvrl_ablation_eo_inverted_census.png",
                transform_fn=transform_eo_inverted)
 
-_make_pca_fig(DATASETS_1, 1, (5, 5),
+_make_pca_fig(DATASETS_1, 1, (3.75, 3.75),
               "fig_pca_ablation_eo_inverted_census.png",
               transform_fn=transform_eo_inverted)
 
-_make_ffnn_fig(DATASETS_1, 1, (5, 5),
+_make_ffnn_fig(DATASETS_1, 1, (3.75, 3.75),
                "fig_ffnn_ablation_eo_inverted_census.png",
                transform_fn=transform_eo_inverted)
 

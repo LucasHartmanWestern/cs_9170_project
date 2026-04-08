@@ -48,9 +48,10 @@ _KNOWN_TOP_LEVEL_FIELDS = {
     "win_seconds", "step_seconds", "eo_guard_threshold",
     "whiten_pca", "beta_reset_interval", "beta_warmstart_from_alpha",
     "pool_pos_fraction",
+    "use_ppo", "ppo",
 }
 _KNOWN_LOCAL_WEIGHTS = {
-    "w_ot", "use_dvrl_local", "dvrl_max_bce",
+    "w_ot", "use_dvrl_local", "dvrl_max_bce", "dvrl_scale",
     "w_anchor", "w_hard", "w_div", "sigma_anchor", "rho_div", "hard_margin",
     "use_uncertainty_anchors", "uncertainty_warmup_episodes", "sigma_calibration_factor",
     "anchor_refresh_interval", "anchor_refresh_top_k",
@@ -211,6 +212,7 @@ def run_spec_all_seeds(spec_path: str, device: str, output_dir: str = "training_
             anchor_selection_top_k=int(lw.get("anchor_selection_top_k", 200)),
             use_dvrl_local=bool(lw.get("use_dvrl_local", False)),
             dvrl_max_bce=float(lw.get("dvrl_max_bce", 0.693)),
+            dvrl_scale=float(lw.get("dvrl_scale", 1.0)),
 
             global_sigmoid_k=float(rs.get("global_sigmoid_k", 10.0)),
             utility_guard_min_factor=float(rs.get("utility_guard_min_factor", 1.0)),
@@ -223,6 +225,8 @@ def run_spec_all_seeds(spec_path: str, device: str, output_dir: str = "training_
             w_ot=float(lw.get("w_ot", 0.0)),
             use_cmaes=bool(spec.get("use_cmaes", False)),
             cmaes=spec.get("cmaes", None),
+            use_ppo=bool(spec.get("use_ppo", False)),
+            ppo=spec.get("ppo", None),
             pool_pos_fraction=spec.get("pool_pos_fraction", None),
         )
 
@@ -235,7 +239,10 @@ def run_spec_all_seeds(spec_path: str, device: str, output_dir: str = "training_
 
         completed += 1
 
+        del trainer
         if torch.cuda.is_available() and "cuda" in device:
+            import gc
+            gc.collect()
             torch.cuda.synchronize(torch.device(device))
             torch.cuda.empty_cache()
 

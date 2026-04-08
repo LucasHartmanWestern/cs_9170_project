@@ -2,7 +2,7 @@
 #SBATCH --job-name=compas_roc_eo_lam05
 #SBATCH --account=def-mcapretz
 #SBATCH --time=12:00:00
-#SBATCH --mem=3G
+#SBATCH --mem=8G
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/April_7_Experiments/logs/compas_roc_eo_lam05_3s.out

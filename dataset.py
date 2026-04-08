@@ -1989,12 +1989,12 @@ class Dataset:
               f"female={int((a_all==1).sum()):,}  "
               f"({100.*(a_all==1).mean():.1f}%)")
 
-        # Feature names (32-dim)
+        # Feature names (32 accelerometer stats + sex as input feature)
         feature_names = [
             f"{ax}_{stat}"
             for ax in ("x", "y", "z", "vm")
             for stat in ("mean", "std", "min", "max", "rms", "p25", "p75", "iqr")
-        ]
+        ] + ["sex"]
 
         # ---- Subject-level train / val / test split -------------------------
         # Stratify by sex so each split contains both groups.
@@ -2027,9 +2027,12 @@ class Dataset:
         va_mask = np.isin(sid_all, val_subs)
         te_mask = np.isin(sid_all, test_subs)
 
-        X_train_df = pd.DataFrame(X_all[tr_mask], columns=feature_names)
-        X_val_df   = pd.DataFrame(X_all[va_mask], columns=feature_names)
-        X_test_df  = pd.DataFrame(X_all[te_mask], columns=feature_names)
+        X_train_df = pd.DataFrame(
+            np.column_stack([X_all[tr_mask], a_all[tr_mask]]), columns=feature_names)
+        X_val_df   = pd.DataFrame(
+            np.column_stack([X_all[va_mask], a_all[va_mask]]), columns=feature_names)
+        X_test_df  = pd.DataFrame(
+            np.column_stack([X_all[te_mask], a_all[te_mask]]), columns=feature_names)
 
         y_train = y_all[tr_mask]
         y_val   = y_all[va_mask]

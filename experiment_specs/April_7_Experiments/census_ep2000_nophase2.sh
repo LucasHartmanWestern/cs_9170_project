@@ -2,7 +2,7 @@
 #SBATCH --job-name=census_ep2000_nophase2
 #SBATCH --account=def-mcapretz
 #SBATCH --time=16:00:00
-#SBATCH --mem=3G
+#SBATCH --mem=8G
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/April_7_Experiments/logs/census_ep2000_nophase2.out

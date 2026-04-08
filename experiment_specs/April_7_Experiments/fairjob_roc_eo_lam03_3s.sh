@@ -2,7 +2,7 @@
 #SBATCH --job-name=fairjob_roc_eo_lam03
 #SBATCH --account=def-mcapretz
 #SBATCH --time=20:00:00
-#SBATCH --mem=6G
+#SBATCH --mem=8G
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/April_7_Experiments/logs/fairjob_roc_eo_lam03_3s.out

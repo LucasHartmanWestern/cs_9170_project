@@ -70,79 +70,62 @@ class PPOAgent:
     
     def predict(self, state):
         """
-        Generate a single synthetic data sample
-        
-        Args:
-            state: The current state
-            
+        Sample one action from the current policy.
+
         Returns:
-            Synthetic data sample (a torch.Tensor)
+            action   (Tensor [action_size])  — the delta to apply
+            log_prob (Tensor scalar)         — log-prob under behavior policy,
+                                               stored in the trajectory buffer
+                                               for the PPO importance-ratio
         """
-
-        # already a Tensor—clone+detach to avoid in-place/grad issues
         state = state.clone().detach().float().to(self.device)
-
-        # Ensure state is properly shaped for the network
         if len(state.shape) == 1:
             state = state.unsqueeze(0)
-        
-        # Set networks to evaluation mode
+
         self.actor.eval()
         self.critic.eval()
-        
+
         with torch.no_grad():
-            # Get action mean and log_std from actor network
             mean, log_std = self.actor(state)
-            
-            # Create normal distribution
-            std = log_std.exp()
-            dist = Normal(mean, std)
-            
-            # Sample action from distribution
+            dist = Normal(mean, log_std.exp())
             action = dist.sample()
-    
-            # Calculate log probability of the action
             log_prob = dist.log_prob(action).sum(dim=-1)
-            
-            # Get value estimate from critic
-            value = self.critic(state)
 
-        # Return the synthetic data (action) as a torch.Tensor
-        return action.squeeze(0).cpu()
+        return action.squeeze(0).cpu(), log_prob.squeeze(0).cpu()
 
-    def learn_trajectory(self, states, actions, rewards, next_states, dones, lam: float = 0.95):
+    def learn_trajectory(self, states, actions, old_log_probs, rewards, next_states, dones,
+                         gae_lambda: float = 0.95):
         """
         PPO update from a single trajectory.
 
         Args:
-            states:       list/array/tensor of shape [T, state_size]
-            actions:      list/array/tensor of shape [T, action_size]
-            rewards:      list/array/tensor of shape [T]
-            next_states:  list/array/tensor of shape [T, state_size]  (s_{t+1} for each t)
-            dones:        list/array/tensor of shape [T] with {0,1}
-            lam:          GAE lambda (default 0.95)
+            states:        Tensor [T, state_size]
+            actions:       Tensor [T, action_size]
+            old_log_probs: Tensor [T] — log-probs recorded at rollout time under
+                           the behavior policy.  Must NOT be recomputed here;
+                           recomputing from the already-updated actor breaks the
+                           importance ratio.
+            rewards:       Tensor [T]
+            next_states:   Tensor [T, state_size]
+            dones:         Tensor [T]  (bool or float 0/1)
+            gae_lambda:    GAE λ (default 0.95)
         """
-
         T = states.shape[0]
 
         # ---- Compute values and GAE advantages (bootstrapped) ----
         with torch.no_grad():
-            values       = self.critic(states).squeeze(-1)                 # [T]
-            next_values  = self.critic(next_states).squeeze(-1)            # [T]
-            deltas       = rewards + self.gamma * next_values * (1.0 - dones) - values  # [T]
+            values       = self.critic(states).squeeze(-1)                          # [T]
+            next_values  = self.critic(next_states).squeeze(-1)                     # [T]
+            deltas       = rewards + self.gamma * next_values * (1.0 - dones.float()) - values
 
-            advantages = torch.zeros_like(deltas, device=self.device)      # [T]
+            advantages = torch.zeros_like(deltas, device=self.device)
             gae = 0.0
             for t in reversed(range(T)):
-                gae = deltas[t] + self.gamma * lam * (1.0 - dones[t]) * gae
+                gae = deltas[t] + self.gamma * gae_lambda * (1.0 - dones[t].float()) * gae
                 advantages[t] = gae
 
-            returns = values + advantages                                  # [T]
-
-            # Old log probs under behavior policy (assumed current policy; for off-policy, store these at collection time)
-            mean_old, log_std_old = self.actor(states)
-            dist_old = Normal(mean_old, log_std_old.exp())
-            old_log_probs = dist_old.log_prob(actions).sum(dim=-1)         # [T]
+            returns = values + advantages                                            # [T]
+            # old_log_probs is passed in from rollout — do NOT recompute here
 
         # Normalize advantages
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)

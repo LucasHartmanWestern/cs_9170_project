@@ -1,0 +1,61 @@
+{
+  "dataset_name": "census_income",
+  "multiclass": false,
+  "bias_pct": 0.1,
+  "reward_mode": "fairness",
+  "lambda_schedule": [
+    0.5,
+    0.5
+  ],
+  "minority_id": 1,
+  "majority_id": 0,
+  "third_id": null,
+  "use_pca": true,
+  "pca_components": 10,
+  "traj_length": 2000,
+  "real_data_size": 3000,
+  "total_episodes": 800,
+  "phase2_episodes": 200,
+  "curriculum_learning": false,
+  "use_delta_actions": true,
+  "delta_scale": 0.1,
+  "delta_clip": 0.2,
+  "pca_clip": null,
+  "radius_clip": 3.0,
+  "gen_both_classes": true,
+  "seeds": [
+    42
+  ],
+  "use_ppo": true,
+  "ppo": {
+    "hidden_size": 64,
+    "lr": 0.0003,
+    "gamma": 1.0,
+    "clip_epsilon": 0.2,
+    "update_epochs": 4,
+    "batch_size": 64,
+    "c1": 0.5,
+    "c2": 0.01
+  },
+  "reward_shaping": {
+    "global_sigmoid_k": 10.0,
+    "utility_guard_min_factor": 0.0
+  },
+  "local_weights": {
+    "use_dvrl_local": true,
+    "dvrl_max_bce": 0.693
+  },
+  "ffnn": {
+    "hidden_sizes": [
+      32,
+      16
+    ],
+    "learning_rate": 0.001,
+    "batch_size": 64,
+    "epochs": 20
+  },
+  "benchmarks": {
+    "run_ctgan": false,
+    "run_ctabgan": false
+  }
+}

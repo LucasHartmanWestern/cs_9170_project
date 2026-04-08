@@ -104,7 +104,7 @@ METRICS = [
      None,                                  None,            None),
 ]
 
-fig, axes = plt.subplots(3, 2, figsize=(11, 10), sharey=False)
+fig, axes = plt.subplots(3, 2, figsize=(8.25, 7.5), sharey=False)
 
 for col_idx, ds in enumerate(DATASETS):
     seeds  = EXPECTED_SEEDS[ds]
@@ -170,18 +170,14 @@ for col_idx, ds in enumerate(DATASETS):
             ax.text(x_ph2 + 12, y_lo + (y_hi - y_lo) * 0.97, "→ph2",
                     color=color, fontsize=5.5, va="top", alpha=0.9)
 
-        if row_idx == 0:
-            ax.set_title(DS_LABELS[ds], fontsize=11, fontweight="bold")
-        ax.set_xlabel("Episode", fontsize=9)
-        ax.set_ylabel(ylabel, fontsize=9)
-        ax.tick_params(labelsize=8)
+        ax.set_xlabel("Episode", fontsize=14)
+        ax.set_ylabel(ylabel, fontsize=14)
+        ax.tick_params(labelsize=14)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         ax.grid(axis="y", linewidth=0.4, alpha=0.4)
-        ax.legend(fontsize=7.5, loc=legend_loc)
+        ax.legend(fontsize=12, loc=legend_loc)
 
-fig.suptitle("Episode / Phase-2 Budget Ablation — Learning Curves",
-             fontsize=12, fontweight="bold")
 plt.tight_layout()
 
 for fname in ["fig_episode_learning_curves.png",

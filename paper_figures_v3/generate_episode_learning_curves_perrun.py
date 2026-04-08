@@ -77,11 +77,8 @@ for ds in ["census", "capture24"]:
     n_cfg  = len(EP_CONFIGS)
     n_met  = len(METRICS)
 
-    fig, axes = plt.subplots(n_met, n_cfg, figsize=(4.5 * n_cfg, 3.5 * n_met),
+    fig, axes = plt.subplots(n_met, n_cfg, figsize=(3.375 * n_cfg, 2.625 * n_met),
                              sharey="row", squeeze=False)
-    ds_label = "Census Income" if ds == "census" else "Capture-24"
-    fig.suptitle(f"{ds_label} — Per-Config Learning Curves (individual seeds)",
-                 fontsize=12, fontweight="bold")
 
     for cfg_idx, (ep_key, cfg_label, ph2_start, gen_both) in enumerate(EP_CONFIGS):
         run_dir = find_run_dir(ds, ep_key)
@@ -152,22 +149,15 @@ for ds in ["census", "capture24"]:
                 ax.set_ylim(bottom=0)
 
             # Column header (top row only)
-            if met_idx == 0:
-                star = "★ " if is_chosen else ""
-                tag  = "[single-phase]" if not gen_both else "[two-phase]"
-                ax.set_title(f"{star}{cfg_label}\n{tag}",
-                             fontsize=8.5, fontweight="bold" if is_chosen else "normal",
-                             color="#1a4f8a" if is_chosen else "black")
-
-            ax.set_ylabel(ylabel if cfg_idx == 0 else "", fontsize=8)
-            ax.set_xlabel("Episode", fontsize=8)
-            ax.tick_params(labelsize=7.5)
+            ax.set_ylabel(ylabel if cfg_idx == 0 else "", fontsize=14)
+            ax.set_xlabel("Episode", fontsize=14)
+            ax.tick_params(labelsize=14)
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
             ax.grid(axis="y", linewidth=0.3, alpha=0.4)
 
             if met_idx == 0 and cfg_idx == 0:
-                ax.legend(fontsize=7, loc="upper right")
+                ax.legend(fontsize=12, loc="upper right")
 
     plt.tight_layout()
     for fname in [f"fig_episode_perrun_{ds}.png",

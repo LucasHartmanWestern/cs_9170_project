@@ -1803,3 +1803,83 @@ CMA-ES at bias_pct=0.10 (DA+≈43) is complete from v20 (2 seeds; submit 5-seed 
 Both phases use the same FFNN as CMA-ES beta (20 epochs, [32,16] hidden, lr=0.001).
 
 **Expected result:** Gaussian Augment should outperform doing nothing (alpha) but fall short of CMA-ES — if it matches CMA-ES, the optimization loop adds no value and the paper's core claim is undermined.
+
+---
+
+## April 7, 2026 — Experiments Session
+
+### Infrastructure Changes
+
+**FairJob dataset integrated** (`dataset.py`, `training.py`, `main.py`):
+- New `split_fairjob()` method. Loads Criteo CTR parquet, filters `displayrandom=1`, OHE + scales features, stratified split.
+- `pool_pos_fraction` parameter undersmaples negatives in train+val post-split to enrich positives (~0.7% natural click rate → configurable target fraction). Test set left at natural distribution to preserve AUC/F1 validity.
+- Group-specific bias: only female (a=0, disadvantaged) positives are downsampled by `bias_pct`.
+- Smoke test confirmed: DA+=39 at bias_pct=0.03, pool_pos_fraction=0.05, real_data_size=3000.
+
+**PPO+DVRL integrated** (`agents/ppo_agent.py`, `training.py`, `main.py`):
+- `use_ppo: bool` flag in Training and JSON specs routes agent instantiation to `PPOAgent`.
+- `PPOAgent.predict()` returns `(action, log_prob)` tuple; log-probs stored at rollout time and passed to `learn_trajectory(old_log_probs=...)` — importance ratio is computed from behavior policy, not the updated actor.
+- `_run_phase` pre-allocates `log_probs[T]` buffer; step loop branches on `use_ppo`.
+- Phase 2 also branches to a fresh `PPOAgent` when `use_ppo=True`.
+- GAE advantages (lambda=0.95) subtract the critic's value baseline, isolating per-step local signal even when global term is constant across all trajectory steps. This is the key structural advantage over REINFORCE for DVRL local rewards.
+- Motivation: supervisor noted REINFORCE with gamma=1.0 gives identical global_term/T to every step, so the policy gradient only sees within-trajectory local variation. PPO+GAE can exploit per-step DVRL signal properly.
+
+**Specs saved to `overleaf_figures_specs/`**: All 13 canonical paper_results_v2 specs (census + capture24, ours + all baselines) saved for reproducibility reference.
+
+---
+
+### Experiments Launched — 2026-04-07
+
+#### Running Locally — cuda:0
+
+| Spec | Description | Status |
+|------|-------------|--------|
+| `census_ppo_dvrl_2s` | Census, PPO+DVRL, lambda=0.5, k=10, 800ep+200ph2, seeds [42,0] | Running |
+
+**Config:** `use_ppo=true`, `use_dvrl_local=true`, `lambda_schedule=[0.5, 0.5]`, `global_sigmoid_k=10`, `gen_both_classes=true`, `phase2_episodes=200`, FFNN [32,16], PPO hidden=64, lr=3e-4, gamma=1.0, clip_epsilon=0.2, update_epochs=4.
+
+**Purpose:** First PPO+DVRL run. Tests whether GAE advantage isolation allows per-step DVRL local reward to drive better minority-region targeting than REINFORCE. Comparing against v18 baseline (REINFORCE, lambda=1.0, no local reward, EO=0.076±0.048).
+
+---
+
+#### Running Locally — cuda:1 (sequential)
+
+| Spec | Description | Status |
+|------|-------------|--------|
+| `census_nosigmoid_3s` | Census, REINFORCE, normalized reward (k=0), 3000ep no phase2, seeds [42,0,1] | Running (1st in queue) |
+| `capture24_nosigmoid_3s` | Capture-24, REINFORCE, normalized reward (k=0), 3000ep no phase2, seeds [42,0,1] | Queued |
+| `compas_nosigmoid_3s` | COMPAS race, REINFORCE, normalized reward (k=0), 3000ep no phase2, seeds [42,0,1] | Queued |
+
+**Config (all three):** `reward_mode=fairness`, `global_sigmoid_k=0` (normalized reward: `(wgl_alpha - wgl_beta) / wgl_alpha`), `lambda_schedule=[1.0, 1.0]` (global-only), `gen_both_classes=false`, `total_episodes=3000`. Census: bias_pct=0.10. Capture-24: bias_pct=null, win_seconds=1.0, step_seconds=0.5. COMPAS: bias_pct=0.05, dp_protected_col=race, minority_id=0.
+
+**Purpose:** Supervisor-requested diagnostic. Tests whether removing sigmoid saturation (replacing sigmoid(k*delta) with linear normalized improvement) helps or hurts learning stability across three datasets. Normalized reward gives continuous gradient signal vs sigmoid which saturates near 0 or 1 when k=10. COMPAS included at supervisor request despite known val_pos=14 structural issue.
+
+---
+
+#### Prepared for DRAC — Episode Ablations
+
+| Spec | Description |
+|------|-------------|
+| `census_ep1500_nophase2` | Census, 1500ep, no phase2, seeds [42,0,1,2,3] |
+| `census_ep2000_nophase2` | Census, 2000ep, no phase2, seeds [42,0,1,2,3] |
+| `capture24_ep1500_nophase2` | Capture-24, 1500ep, no phase2, seeds [42,0,1,2,3] |
+| `capture24_ep2000_nophase2` | Capture-24, 2000ep, no phase2, seeds [42,0,1,2,3] |
+
+**Purpose:** Episode count ablation for paper figures. Compared against existing 800ep+phase2 (paper config) to show that additional episodes without phase2 do not materially change results — or to find the optimal episode budget.
+
+---
+
+#### Prepared for DRAC — ROC-EO Lambda Ablation
+
+| Spec | Description |
+|------|-------------|
+| `compas_roc_eo_lam[05,04,03,02]_3s` | COMPAS race, reward_mode=roc_eo, lambda in {0.5,0.4,0.3,0.2}, 1500ep+ph2, seeds [42,0,1] |
+| `fairjob_roc_eo_lam[05,04,03,02]_3s` | FairJob, reward_mode=roc_eo, lambda in {0.5,0.4,0.3,0.2}, 1500ep+ph2, seeds [42,0,1] |
+
+**Purpose:** Sweep roc_eo_lambda (AUC vs EO tradeoff weight) on COMPAS and FairJob. `roc_eo` reward = `lambda * AUC - (1-lambda) * EO`. FairJob uses bias_pct=0.03, pool_pos_fraction=0.05, global_sigmoid_k=3 (WorstLoss ~3.5, k=10 would saturate).
+
+---
+
+### Results — Pending
+
+All runs above are in-progress or queued. Update this section when results are downloaded.
