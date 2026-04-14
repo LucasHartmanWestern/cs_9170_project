@@ -2,7 +2,7 @@
 #SBATCH --job-name=cmp_wgl_k0
 #SBATCH --account=def-mcapretz
 #SBATCH --time=12:00:00
-#SBATCH --mem=3G
+#SBATCH --mem=12G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/April_13_Experiments/logs/compas_wgl_k0_5000ep.out

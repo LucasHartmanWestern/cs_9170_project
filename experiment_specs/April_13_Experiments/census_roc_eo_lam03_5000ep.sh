@@ -2,7 +2,7 @@
 #SBATCH --job-name=cen_eo_l03
 #SBATCH --account=def-mcapretz
 #SBATCH --time=12:00:00
-#SBATCH --mem=3G
+#SBATCH --mem=6G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
 #SBATCH --output=experiment_specs/April_13_Experiments/logs/census_roc_eo_lam03_5000ep.out
