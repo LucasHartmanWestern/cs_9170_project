@@ -1,215 +1,0 @@
-[run_baseline] baseline=ctgan
-[run_baseline] spec=paper_specs_v1/p1_credit_bias010_ctgan_5s_ep20.json
-[run_baseline] device=cpu
-[run_baseline] exp_group=BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545
-[run_baseline] seeds=[42, 0, 1, 2, 3]
-
-[run_baseline] ---- seed=42 ----
-/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
-
-errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
-
-Label distribution: {0: 23364, 1: 6636}
-[TRAIN] size=3000, minority=300 (10.00%)
-[VAL] size=5192, minority=519 (10.00%)
-[TEST] size=6000, minority=1327 (22.12%)
-[CTGAN] exp_group=BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545  seed=42
-[CTGAN] dataset=credit_card  feature_dim=33
-[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
-[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_42
-[CTGAN] Training set: n_pos=300, n_neg=2700, total=3000
-[CTGAN] Fitting CTGAN for 300 epochs …
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
-
-The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
-
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
-
-We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
-
-[CTGAN] CTGAN fitted in 101.8s
-[CTGAN] Sampling 2000 synthetic minority samples …
-  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:  17%|#7        | 343/2000 [00:00<00:01, 1404.62it/s]Sampling conditions:  96%|#########5| 1913/2000 [00:00<00:00, 3288.49it/s]Sampling conditions: 100%|##########| 2000/2000 [00:00<00:00, 2130.74it/s]
-[CTGAN] Got 2000 synthetic minority samples.
-[CTGAN] Augmented set: n_pos=2300, total=5000
-FFNN Using device: cpu
-[CTGAN] ERM trained on augmented features.
-FFNN Using device: cpu
-[CTGAN] Alpha (ERM on original biased data) trained.
-FFNN Using device: cpu
-[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_42/ctgan_model.pt
-
-[TEST] Alpha -> F1(min)=0.1787 | F1(maj)=0.8827 | F1(weighted)=0.7270 | F1(macro)=0.5307 | Brier=0.1560
-[TEST] Beta  -> F1(min)=0.2326 | F1(maj)=0.8648 | F1(weighted)=0.7250 | F1(macro)=0.5487 | Brier=0.1726
-[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_42/final_test_metrics.csv
-[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/final_test_metrics.csv
-[CTGAN] Done. seed=42 | time=109.0s
-[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_42
-
-[run_baseline] ---- seed=0 ----
-/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
-
-errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
-
-Label distribution: {0: 23364, 1: 6636}
-[TRAIN] size=3000, minority=300 (10.00%)
-[VAL] size=5192, minority=519 (10.00%)
-[TEST] size=6000, minority=1327 (22.12%)
-[CTGAN] exp_group=BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545  seed=0
-[CTGAN] dataset=credit_card  feature_dim=33
-[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
-[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_0
-[CTGAN] Training set: n_pos=300, n_neg=2700, total=3000
-[CTGAN] Fitting CTGAN for 300 epochs …
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
-
-The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
-
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
-
-We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
-
-[CTGAN] CTGAN fitted in 101.1s
-[CTGAN] Sampling 2000 synthetic minority samples …
-  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   9%|8         | 178/2000 [00:00<00:02, 732.75it/s]Sampling conditions: 100%|#########9| 1997/2000 [00:00<00:00, 2461.18it/s]Sampling conditions: 100%|##########| 2000/2000 [00:01<00:00, 1720.35it/s]
-[CTGAN] Got 2000 synthetic minority samples.
-[CTGAN] Augmented set: n_pos=2300, total=5000
-FFNN Using device: cpu
-[CTGAN] ERM trained on augmented features.
-FFNN Using device: cpu
-[CTGAN] Alpha (ERM on original biased data) trained.
-FFNN Using device: cpu
-[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_0/ctgan_model.pt
-
-[TEST] Alpha -> F1(min)=0.2478 | F1(maj)=0.8838 | F1(weighted)=0.7431 | F1(macro)=0.5658 | Brier=0.1594
-[TEST] Beta  -> F1(min)=0.3095 | F1(maj)=0.8686 | F1(weighted)=0.7449 | F1(macro)=0.5891 | Brier=0.1653
-[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_0/final_test_metrics.csv
-[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/final_test_metrics.csv
-[CTGAN] Done. seed=0 | time=108.4s
-[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_0
-
-[run_baseline] ---- seed=1 ----
-/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
-
-errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
-
-Label distribution: {0: 23364, 1: 6636}
-[TRAIN] size=3000, minority=300 (10.00%)
-[VAL] size=5192, minority=519 (10.00%)
-[TEST] size=6000, minority=1327 (22.12%)
-[CTGAN] exp_group=BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545  seed=1
-[CTGAN] dataset=credit_card  feature_dim=32
-[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
-[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_1
-[CTGAN] Training set: n_pos=300, n_neg=2700, total=3000
-[CTGAN] Fitting CTGAN for 300 epochs …
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
-
-The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
-
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
-
-We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
-
-[CTGAN] CTGAN fitted in 96.3s
-[CTGAN] Sampling 2000 synthetic minority samples …
-  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:  14%|#3        | 276/2000 [00:00<00:01, 1154.63it/s]Sampling conditions: 100%|##########| 2000/2000 [00:00<00:00, 3232.02it/s]Sampling conditions: 100%|##########| 2000/2000 [00:00<00:00, 3000.22it/s]
-[CTGAN] Got 2000 synthetic minority samples.
-[CTGAN] Augmented set: n_pos=2300, total=5000
-FFNN Using device: cpu
-[CTGAN] ERM trained on augmented features.
-FFNN Using device: cpu
-[CTGAN] Alpha (ERM on original biased data) trained.
-FFNN Using device: cpu
-[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_1/ctgan_model.pt
-
-[TEST] Alpha -> F1(min)=0.1504 | F1(maj)=0.8808 | F1(weighted)=0.7193 | F1(macro)=0.5156 | Brier=0.1574
-[TEST] Beta  -> F1(min)=0.2840 | F1(maj)=0.8604 | F1(weighted)=0.7329 | F1(macro)=0.5722 | Brier=0.1704
-[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_1/final_test_metrics.csv
-[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/final_test_metrics.csv
-[CTGAN] Done. seed=1 | time=103.0s
-[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_1
-
-[run_baseline] ---- seed=2 ----
-/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
-
-errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
-
-Label distribution: {0: 23364, 1: 6636}
-[TRAIN] size=3000, minority=300 (10.00%)
-[VAL] size=5192, minority=519 (10.00%)
-[TEST] size=6000, minority=1327 (22.12%)
-[CTGAN] exp_group=BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545  seed=2
-[CTGAN] dataset=credit_card  feature_dim=33
-[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
-[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_2
-[CTGAN] Training set: n_pos=300, n_neg=2700, total=3000
-[CTGAN] Fitting CTGAN for 300 epochs …
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
-
-The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
-
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
-
-We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
-
-[CTGAN] CTGAN fitted in 97.5s
-[CTGAN] Sampling 2000 synthetic minority samples …
-  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:  18%|#7        | 351/2000 [00:00<00:01, 891.74it/s]Sampling conditions: 100%|##########| 2000/2000 [00:01<00:00, 1603.89it/s]Sampling conditions: 100%|##########| 2000/2000 [00:01<00:00, 1536.53it/s]
-[CTGAN] Got 2000 synthetic minority samples.
-[CTGAN] Augmented set: n_pos=2300, total=5000
-FFNN Using device: cpu
-[CTGAN] ERM trained on augmented features.
-FFNN Using device: cpu
-[CTGAN] Alpha (ERM on original biased data) trained.
-FFNN Using device: cpu
-[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_2/ctgan_model.pt
-
-[TEST] Alpha -> F1(min)=0.2190 | F1(maj)=0.8823 | F1(weighted)=0.7356 | F1(macro)=0.5507 | Brier=0.1567
-[TEST] Beta  -> F1(min)=0.1856 | F1(maj)=0.8613 | F1(weighted)=0.7119 | F1(macro)=0.5234 | Brier=0.1741
-[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_2/final_test_metrics.csv
-[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/final_test_metrics.csv
-[CTGAN] Done. seed=2 | time=183.2s
-[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_2
-
-[run_baseline] ---- seed=3 ----
-/home/epigou/cs_9170_project/dataset.py:669: FutureWarning:
-
-errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
-
-Label distribution: {0: 23364, 1: 6636}
-[TRAIN] size=3000, minority=300 (10.00%)
-[VAL] size=5192, minority=519 (10.00%)
-[TEST] size=6000, minority=1327 (22.12%)
-[CTGAN] exp_group=BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545  seed=3
-[CTGAN] dataset=credit_card  feature_dim=33
-[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__'}
-[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_3
-[CTGAN] Training set: n_pos=300, n_neg=2700, total=3000
-[CTGAN] Fitting CTGAN for 300 epochs …
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
-
-The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
-
-/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
-
-We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
-
-[CTGAN] CTGAN fitted in 88.9s
-[CTGAN] Sampling 2000 synthetic minority samples …
-  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   7%|6         | 137/2000 [00:00<00:06, 276.99it/s]Sampling conditions:  89%|########8 | 1778/2000 [00:03<00:00, 572.84it/s]Sampling conditions:  99%|#########9| 1980/2000 [00:03<00:00, 506.98it/s]Sampling conditions: 100%|##########| 2000/2000 [00:04<00:00, 460.86it/s]
-[CTGAN] Got 2000 synthetic minority samples.
-[CTGAN] Augmented set: n_pos=2300, total=5000
-FFNN Using device: cpu
-[CTGAN] ERM trained on augmented features.
-FFNN Using device: cpu
-[CTGAN] Alpha (ERM on original biased data) trained.
-FFNN Using device: cpu
-[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_3/ctgan_model.pt
-
-[TEST] Alpha -> F1(min)=0.2249 | F1(maj)=0.8830 | F1(weighted)=0.7374 | F1(macro)=0.5539 | Brier=0.1620
-[TEST] Beta  -> F1(min)=0.3308 | F1(maj)=0.8661 | F1(weighted)=0.7477 | F1(macro)=0.5985 | Brier=0.1680
-[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_3/final_test_metrics.csv
-[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/final_test_metrics.csv
-[CTGAN] Done. seed=3 | time=185.8s
-[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_p1_credit_bias010_ctgan_5s_ep20_49701d91__G202603211545/seed_3

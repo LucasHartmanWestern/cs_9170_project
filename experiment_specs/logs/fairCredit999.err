@@ -1,2 +1,0 @@
-/lustre09/project/6000743/epigou/cs_9170_project/dataset.py:603: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
-  df[c] = pd.to_numeric(df[c], errors="ignore")

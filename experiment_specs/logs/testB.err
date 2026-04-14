@@ -1,3 +1,0 @@
-/lustre09/project/6000743/epigou/cs_9170_project/dataset.py:321: FutureWarning: DataFrameGroupBy.apply operated on the grouping columns. This behavior is deprecated, and in a future version of pandas the grouping columns will be excluded from the operation. Either pass `include_groups=False` to exclude the groupings or explicitly select the grouping columns after groupby to silence this warning.
-  df = df.sort_values(["subject_id", "timestamp"]).groupby("subject_id", group_keys=False).apply(
-slurmstepd: error: *** STEP 4834175.1 ON rg31703 CANCELLED AT 2026-01-07T15:18:26 DUE TO TIME LIMIT ***

@@ -5,6 +5,8 @@ data/Optional/*
 data/Protocol/*
 .idea/*
 training_runs*/
+archive_runs*/
+archive*/
 datasets/
 paper_results*/
 paper_figures/

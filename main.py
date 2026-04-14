@@ -38,7 +38,7 @@ def build_exp_group(spec_path: str, spec: dict) -> str:
     return f"SPEC_{_spec_id(spec_path, spec)}__G{ts}"
 
 _KNOWN_TOP_LEVEL_FIELDS = {
-    "dataset_name", "multiclass", "bias_pct", "dp_protected_col",
+    "dataset_name", "multiclass", "bias_pct", "da_pct", "dp_protected_col",
     "reward_mode", "lambda_schedule", "minority_id", "majority_id", "third_id",
     "use_pca", "pca_components", "traj_length", "real_data_size",
     "total_episodes", "phase2_episodes", "curriculum_learning",
@@ -166,6 +166,7 @@ def run_spec_all_seeds(spec_path: str, device: str, output_dir: str = "training_
             third_id=spec.get("third_id"),
 
             bias_pct=spec.get("bias_pct"),
+            da_pct=spec.get("da_pct"),
             pca_components=spec["pca_components"],
             traj_length=spec["traj_length"],
             real_data_size=spec["real_data_size"],

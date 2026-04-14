@@ -99,7 +99,7 @@ class Dataset:
         X_train_theta = pca.fit_transform(X_train_all)
         X_val_theta   = pca.transform(X_val_all)
         X_test_theta  = pca.transform(X_test_all)
-        
+        self.pca_transform = pca  # stored for post-hoc analysis (check_run.py)
         return X_train_theta, X_val_theta, X_test_theta, pca
 
     def _make_pca(self, n_components: int) -> PCA:
@@ -114,6 +114,7 @@ class Dataset:
             self,
             train_size=None,
             bias_pct=None,
+            da_pct=None,
             val_frac=0.20,
             test_frac=0.20,
             pca_components=2,
@@ -215,25 +216,66 @@ class Dataset:
             X_out = df_biased.drop(columns=["__y__", "__a__"])
             return X_out, y_out, a_out
 
-        # 4) Apply bias: always train (if bias_pct set), conditionally val, never test
-        if bias_pct is not None:
+        # Helper: group-specific DA+ targeting (replaces apply_bias when da_pct is set).
+        # Targets exactly round(da_pct * train_size) disadvantaged-group (female, a=0)
+        # positives. Keeps all advantaged-group positives and all negatives. Fills the
+        # remainder of train_size from the non-disadvantaged-positive pool.
+        def apply_da_pct_bias(df_split, y_split, a_split_df, da_pct, n_total):
+            df = df_split.copy()
+            df["__y__"] = y_split
+            df["__a__"] = _map_protected_census(a_split_df[dp_protected_col])
+
+            target_da_plus = max(1, round(da_pct * n_total))
+
+            disadv_pos_mask = (df["__a__"] == 0) & (df["__y__"] == 1)  # female positive
+            disadv_pos = df[disadv_pos_mask]
+            rest       = df[~disadv_pos_mask]  # adv positives + all negatives
+
+            keep_n = min(len(disadv_pos), target_da_plus)
+            if keep_n < target_da_plus:
+                print(f"  [da_pct WARNING] Only {len(disadv_pos)} disadvantaged positives "
+                      f"available; target was {target_da_plus}.")
+            disadv_pos_kept = disadv_pos.sample(n=keep_n, random_state=self.seed, replace=False)
+
+            n_rest_needed = n_total - keep_n
+            if len(rest) >= n_rest_needed:
+                rest_kept = rest.sample(n=n_rest_needed, random_state=self.seed, replace=False)
+            else:
+                rest_kept = rest
+
+            result = (pd.concat([disadv_pos_kept, rest_kept], axis=0)
+                      .sample(frac=1.0, random_state=self.seed)
+                      .reset_index(drop=True))
+
+            y_out = result["__y__"].to_numpy(dtype=int)
+            a_out = result["__a__"].to_numpy()
+            X_out = result.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        # 4) Apply bias to train (da_pct takes priority over bias_pct); val/test unbiased.
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(X_train_df)
+            X_train_biased_df, y_train_biased, a_train = apply_da_pct_bias(
+                X_train_df, y_train, A_train_df, da_pct, n_total)
+        elif bias_pct is not None:
             target_minority_pct = bias_pct
             X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, target_minority_pct)
             if bias_val:
                 X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, target_minority_pct)
-            else:
-                X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
-                a_val = _map_protected_census(A_val_df[dp_protected_col])
         else:
             X_train_biased_df, y_train_biased = X_train_df.copy().reset_index(drop=True), y_train.copy()
             a_train = _map_protected_census(A_train_df[dp_protected_col])
+
+        # Val is always unbiased (da_pct mode) or conditionally biased (bias_pct mode)
+        if da_pct is not None or (bias_pct is not None and not bias_val) or bias_pct is None:
             X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
             a_val = _map_protected_census(A_val_df[dp_protected_col])
+
         X_test_biased_df, y_test_biased = X_test_df.copy().reset_index(drop=True), y_test.copy()
         a_test = _map_protected_census(A_test_df[dp_protected_col])
 
-        # Optional: subsample θ_train to fixed size after biasing
-        if train_size is not None and train_size < len(X_train_biased_df):
+        # Subsample train to train_size (only needed for bias_pct mode; da_pct integrates this)
+        if da_pct is None and train_size is not None and train_size < len(X_train_biased_df):
             X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
                 X_train_biased_df, y_train_biased, a_train,
                 train_size=train_size, random_state=self.seed, stratify=y_train_biased
@@ -932,6 +974,7 @@ class Dataset:
         self,
         train_size=None,
         bias_pct=None,
+        da_pct=None,
         val_frac=0.20,
         test_frac=0.20,
         pca_components=2,
@@ -1081,7 +1124,41 @@ class Dataset:
             X_out = out.drop(columns=["__y__", "__a__"])
             return X_out, y_out, a_out
 
-        if bias_pct is not None:
+        # Group-specific DA+ targeting (da_pct takes priority over bias_pct).
+        # Targets exactly round(da_pct * n_total) disadvantaged-group positives,
+        # keeping the full train set at n_total examples.
+        def apply_da_pct_bias_compas(df_split, y_split, a_split_df, da_pct, n_total):
+            df = df_split.copy()
+            df["__y__"] = y_split
+            df["__a__"] = _map_protected(a_split_df[dp_protected_col])
+            target_da_plus = max(1, round(da_pct * n_total))
+            disadv_pos_mask = (df["__a__"] == self.MINORITY_ID) & (df["__y__"] == 1)
+            disadv_pos = df[disadv_pos_mask]
+            rest = df[~disadv_pos_mask]
+            keep_n = min(len(disadv_pos), target_da_plus)
+            if keep_n < target_da_plus:
+                print(f"  [da_pct WARNING] Only {len(disadv_pos)} disadvantaged positives "
+                      f"available; target was {target_da_plus}")
+            disadv_pos_kept = disadv_pos.sample(n=keep_n, random_state=self.seed, replace=False)
+            n_rest_needed = n_total - keep_n
+            rest_kept = rest.sample(n=n_rest_needed, random_state=self.seed, replace=False) \
+                if len(rest) >= n_rest_needed else rest
+            result = pd.concat([disadv_pos_kept, rest_kept]).sample(
+                frac=1.0, random_state=self.seed).reset_index(drop=True)
+            y_out = result["__y__"].to_numpy(dtype=int)
+            a_out = result["__a__"].to_numpy(dtype=np.int64)
+            X_out = result.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(X_train_df)
+            X_train_biased_df, y_train_biased, a_train = apply_da_pct_bias_compas(
+                X_train_df, y_train, A_train_df, da_pct, n_total)
+            # Val always unbiased in da_pct mode
+            X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+            y_val_biased = y_val.copy()
+            a_val = _map_protected(A_val_df[dp_protected_col])
+        elif bias_pct is not None:
             X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, float(bias_pct))
             if bias_val:
                 X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, float(bias_pct))
@@ -1101,8 +1178,8 @@ class Dataset:
         y_test_biased = y_test.copy()
         a_test = _map_protected(A_test_df[dp_protected_col])
 
-        # ---- Optional train subsample ----
-        if train_size is not None and train_size < len(X_train_biased_df):
+        # ---- Optional train subsample (skip when da_pct integrates sizing) ----
+        if da_pct is None and train_size is not None and train_size < len(X_train_biased_df):
             X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
                 X_train_biased_df, y_train_biased, a_train,
                 train_size=train_size,
@@ -1947,6 +2024,7 @@ class Dataset:
         train_size=None,
         val_size=None,
         bias_pct=None,
+        da_pct=None,
         val_frac=0.20,
         test_frac=0.20,
         pca_components=10,
@@ -2063,7 +2141,50 @@ class Dataset:
             X_out = out.drop(columns=["__y__", "__a__"])
             return X_out, y_out, a_out
 
-        if bias_pct is not None:
+        # Helper: group-specific DA+ targeting for capture24.
+        # Targets exactly round(da_pct * n_total) female (a=1) positives.
+        # Keeps all male positives and all negatives. Fills remainder from non-disadv-pos pool.
+        def apply_da_pct_bias_c24(df_split, y_split, a_split, da_pct, n_total):
+            df = df_split.copy()
+            df["__y__"] = y_split
+            df["__a__"] = a_split.to_numpy(dtype=np.int64) if hasattr(a_split, "to_numpy") else np.array(a_split, dtype=np.int64)
+
+            target_da_plus = max(1, round(da_pct * n_total))
+
+            disadv_pos_mask = (df["__a__"] == 1) & (df["__y__"] == 1)  # female MVPA
+            disadv_pos = df[disadv_pos_mask]
+            rest       = df[~disadv_pos_mask]
+
+            keep_n = min(len(disadv_pos), target_da_plus)
+            if keep_n < target_da_plus:
+                print(f"  [da_pct WARNING] Only {len(disadv_pos)} disadvantaged positives "
+                      f"available; target was {target_da_plus}.")
+            disadv_pos_kept = disadv_pos.sample(n=keep_n, random_state=self.seed, replace=False)
+
+            n_rest_needed = n_total - keep_n
+            if len(rest) >= n_rest_needed:
+                rest_kept = rest.sample(n=n_rest_needed, random_state=self.seed, replace=False)
+            else:
+                rest_kept = rest
+
+            result = (pd.concat([disadv_pos_kept, rest_kept], axis=0)
+                      .sample(frac=1.0, random_state=self.seed)
+                      .reset_index(drop=True))
+
+            y_out = result["__y__"].to_numpy(dtype=int)
+            a_out = result["__a__"].to_numpy(dtype=np.int64)
+            X_out = result.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(X_train_df)
+            X_train_b, y_train_b, a_train = apply_da_pct_bias_c24(
+                X_train_df, y_train, A_train, da_pct, n_total)
+            # Val always unbiased in da_pct mode
+            X_val_b = X_val_df.copy().reset_index(drop=True)
+            y_val_b = y_val.copy()
+            a_val   = A_val.to_numpy(dtype=np.int64)
+        elif bias_pct is not None:
             X_train_b, y_train_b, a_train = apply_bias(X_train_df, y_train, A_train, bias_pct)
             if bias_val:
                 X_val_b, y_val_b, a_val = apply_bias(X_val_df, y_val, A_val, bias_pct)
@@ -2083,8 +2204,8 @@ class Dataset:
         y_test_b = y_test.copy()
         a_test   = A_test.to_numpy(dtype=np.int64)
 
-        # ---- Optional: subsample train --------------------------------------
-        if train_size is not None and train_size < len(X_train_b):
+        # Subsample train to train_size (only for bias_pct mode; da_pct integrates this)
+        if da_pct is None and train_size is not None and train_size < len(X_train_b):
             X_train_b, _, y_train_b, _, a_train, _ = train_test_split(
                 X_train_b, y_train_b, a_train,
                 train_size=train_size, random_state=self.seed, stratify=y_train_b,

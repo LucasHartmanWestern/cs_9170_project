@@ -292,18 +292,17 @@ class EpisodeTracker:
         # so we store the compare metric value later from flat row anyway.
         self.episode_rewards.append(float(csv_row.get("meta.avg_reward", np.nan)))
 
-        # console one-liner (updated to lean keys)
-        avg_r   = csv_row.get("meta.avg_reward", np.nan)
+        # console one-liner
+        ep_ret  = csv_row.get("meta.episode_return", np.nan)
         g_obj   = csv_row.get("global.global_obj", np.nan)
         l_mean  = csv_row.get("global.local_reward", np.nan)
         f1m     = csv_row.get("utility.f1_macro_beta", np.nan)
         worst   = csv_row.get("fairness.worst_loss_beta", np.nan)
 
-        # print a reasonable line even if avg_reward wasn't provided
-        if np.isnan(avg_r):
+        if np.isnan(ep_ret):
             print(f"[Tracker] Ep {episode_num:4d} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
         else:
-            print(f"[Tracker] Ep {episode_num:4d} | AvgR {avg_r:.4f} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
+            print(f"[Tracker] Ep {episode_num:4d} | Return {ep_ret:.2f} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
 
         pd.DataFrame([csv_row]).to_csv(self.csv_path, mode="a", header=False, index=False)
 

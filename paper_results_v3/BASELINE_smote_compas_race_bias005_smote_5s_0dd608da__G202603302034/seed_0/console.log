@@ -1,4 +1,0 @@
-[SMOTE] exp_group=BASELINE_smote_compas_race_bias005_smote_5s_0dd608da__G202603302034  seed=0
-[SMOTE] dataset=compas  feature_dim=10
-[SMOTE] smote_config={'n_synthetic': 2000, 'two_phase': True, 'epochs': 100, 'lr': 0.001, 'batch_size': 64}
-[SMOTE] seed_dir=/lustre09/project/6000743/epigou/cs_9170_project/training_runs/BASELINE_smote_compas_race_bias005_smote_5s_0dd608da__G202603302034/seed_0

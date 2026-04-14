@@ -2,184 +2,209 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+---
 
-## Paper Goal
+## 1. Paper Goal
 
 **Target venue:** Neurocomputing (Elsevier journal)
 
-**Core contribution:** A generative augmentation framework for improving classifier fairness under *positive-class outcome scarcity* — a regime where standard reweighting methods (GroupDRO, OT Repair) degrade because there are too few minority-group positive examples to reweight from. The framework uses an optimization loop (currently REINFORCE; evolutionary search under investigation) to generate synthetic minority-positive training samples in PCA space, guided by a worst-group-loss reward signal.
+**Core contribution:** A generative augmentation framework for improving classifier fairness under *positive-class outcome scarcity* — a regime where standard reweighting methods (GroupDRO, OT Repair) degrade because there are too few minority-group positive examples to reweight from. The framework uses REINFORCE to generate synthetic minority-positive training samples in PCA space, guided by a worst-group-loss reward signal.
 
-**Three claims that must be supported by results:**
+### Claims
 
 1. **Motivation claim** — Reweighting baselines (GroupDRO) fail under severe positive-class scarcity (DA+ ≤ 43 training examples). We do not. Well-supported by v18 results on census.
 
 2. **Competitive performance claim** — Our method achieves comparable or better fairness-utility tradeoff vs all baselines including CTGAN. v18 at census (EO=0.063±0.059, F1w=0.811, AUC=0.877) is the current best. Beats GroupDRO and CTGAN on both axes; near-OT-Repair EO with much better utility.
 
-3. **Ablation / design validation claim** — Under active development. v17a (DVRL local reward) vs v18 (global-only) was the prior ablation. New ablation axis: sigmoid reward (v18) vs normalized reward (v19).
+3. **Ablation / design validation claim** — Under active development. v17a (DVRL local reward) vs v18 (global-only) was the prior ablation. Sigmoid (v18, k=10) confirmed better than nosigmoid (v19, k=0) on census: v18 β-EO=0.079±0.015 vs v19 β-EO=0.093±0.068, 3/3 vs 2/3 seeds improved.
 
-**Current best config — v18 (global-only, sigmoid reward):**
-```
-reward_mode: fairness
-global_sigmoid_k: 10.0               ← being tested against k=0 (normalized) in v19
-lambda_schedule: [1.0, 1.0]
-use_dvrl_local: false
-curriculum_learning: false
-gen_both_classes: true
-phase2_episodes: 200
-gamma: 1.0
-delta_scale: 0.1
-delta_clip: 0.2
-radius_clip: 3.0
-traj_length: 2000
-real_data_size: 3000
-total_episodes: 800
-ffnn: hidden=[32,16], lr=0.001, batch=64, epochs=20
-reinforce: hidden=[64,64], lr=0.0003, entropy_start=0.02, entropy_end=0.005
-pca_components: 10
-```
-**Do NOT change these unless a new experiment explicitly beats v18.**
+### Current Status
 
-**Current paper status:** Active framework improvement phase. Dataset selection complete (census_income, capture24 confirmed; Investigating 3rd dataset that meets structural criteria). 
+Dataset selection complete (census_income, capture24 confirmed; 3rd dataset paused pending capture24 stabilization).
 
-**Active experiments (paper_results_v4):**
-- v19: Normalized reward (`global_sigmoid_k=0`, reward=(wgl_alpha−wgl_beta)/wgl_alpha). 2-seed census diagnostic. Running locally.
+**Best confirmed results (census, 3 seeds, 3000 ep):**
+- v18 sigmoid k=10: β-EO=0.079±0.015, F1w=0.810, Deadzone=2.3%, 3/3 seeds improved
+- v19 nosigmoid k=0: β-EO=0.093±0.068, F1w=0.801, Deadzone=100%, 2/3 seeds improved → v18 wins
 
-**Framework improvement leads under investigation:**
-1. **Reward structure** — Replace sigmoid(10×Δwgl) with normalized relative improvement. Removes saturation, gives continuous gradient to REINFORCE. Testing as v19.
-2. **Evolutionary search** — The current REINFORCE loop is structurally a trajectory-level bandit (all 2000 steps get identical reward). True per-step credit assignment is not possible without per-step beta retraining. Evolutionary search (CMA-ES or NES) is theoretically better suited and under consideration as a replacement optimizer.
+**Capture24 status:** Unstable across seeds. α-EO ranges 0.06–0.33 across seeds at bias_pct=0.02, causing 1/5 seeds to improve with v18 k=3. Root cause under investigation.
 
-## Experiment Log
+**Active investigation leads:**
+1. **Capture24 stabilization** — α-EO instability across seeds is the primary blocker. Need to diagnose whether this is a data split issue or bias injection issue.
+2. **Evolutionary search** — REINFORCE is structurally a trajectory-level bandit (all 2000 steps get identical reward). CMA-ES or NES is theoretically better suited and under consideration.
 
-See **`EXPERIMENTS.md`** for the full chronological record of every experiment: configs run, results, what worked, what failed and why, and planned next steps. **Update EXPERIMENTS.md after every significant result.** It serves as the ground truth for paper claims — any number cited in the paper should be traceable to a specific entry there.
+### Datasets
 
-## Project Overview
+**Active (paper):** census_income, capture24.
 
-Fairness-aware synthetic data generation using reinforcement learning. An RL agent (REINFORCE) learns to generate synthetic minority-positive training samples that improve classifier fairness (Equal Opportunity gap) while preserving utility (F1-weighted, AUC).
+**DA+** = number of disadvantaged-group positive (y=1) training examples. Both datasets are configured so DA+ ≈ 43–45, the level at which reweighting methods demonstrably fail. `da_pct` is an internal implementation parameter (fraction of train set that should be disadvantaged-group positives) — do NOT use it in paper text. Always frame in terms of DA+ or positive-class rate percentages (e.g., "~11% for the disadvantaged group").
 
-**Problem setting:** *positive-class outcome scarcity* — the disadvantaged group has very few positive-class examples in the training data (DA+ ≤ ~50), making reweighting-based baselines ineffective. Each dataset is configured via `bias_pct` (an internal implementation parameter) to achieve a target DA+ count. Do NOT lead with `bias_pct` in paper text — always frame in terms of DA+.
-
-## Commands
-
-### Run an experiment
-```bash
-python main.py --spec experiment_specs/<spec>.json --device cuda:0
-```
-Falls back to CPU automatically if CUDA is unavailable.
-
-### Run on SLURM cluster
-```bash
-sbatch experiment_specs/<spec>.sh
-```
-Each spec has a corresponding `.sh` batch file in `experiment_specs/`. Requires `~/envs/rl` virtualenv.
-
-**Important workflow note:** `.sh` batch files are submitted manually by the user on the DRAC cluster. Claude Code does not submit jobs directly. When results are ready, the user downloads them locally and notifies Claude Code to begin analysis. Do not ask the user to run commands on DRAC — just prepare the spec and batch files.
-
-### Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### Run tests
-There is no automated test suite. `test_suite.py` is a post-training evaluation module (fairness/utility metrics), not a pytest test file.
-
-## Architecture
-
-### Three-Model System
-1. **Alpha model** (`FFNNAgent`): Trained on real data only. Used to identify disadvantaged groups and compute fairness baselines.
-2. **Beta model** (`FFNNAgent`): Trained on real + synthetic data. The target model whose fairness the RL agent tries to improve.
-3. **RL Agent** (`ReinforceAgent`): Generates synthetic samples by perturbing PCA-space coordinates via delta actions. PPO exists in the codebase but is not active.
-
-### Training Loop (training.py)
-Each episode: generate synthetic trajectory → train beta on real+synthetic → compute reward (fairness gap + local terms) → update RL agent via policy gradient → log diagnostics.
-
-### Reward Structure (current best config: v18 global-only)
-- **Global term**: `sigmoid(10 × (wgl_alpha − wgl_beta))` where wgl = worst-group BCE loss on validation. Range (0,1); above 0.5 means beta is better than alpha.
-- **Lambda schedule**: `λ * global + (1−λ) * local`. v18 uses `λ=1.0` (pure global, no local). Reward per step = global / T. Disabled for paper.
-- **Local term (DVRL)**: Disabled for paper.
-- **gamma=1.0**: All 2000 trajectory steps contribute equally to the policy gradient return. gamma=0.99 caused a ~50% deadzone and was abandoned.
-- **Curriculum**: Disabled for paper. Start directly in full 10D PCA space.
-- **gen_both_classes=true**: Agent generates synthetic samples for both minority and majority class (phase 1 = minority, phase 2 = majority recovery, 200 episodes).
-
-### Key Modules
-- **`training.py`**: Core `Training` class with full training loop
-- **`env.py`**: `Environment` class with delta actions, radius clipping, and curriculum learning (disabled in current best config — full 10D PCA from episode 1)
-- **`dataset.py`**: `Dataset` class handling census_income, compas, capture24, ptb_xl. Includes bias injection, PCA encoding, stratified splitting
-- **`reward_helpers.py`**: Loss functions, fairness metrics (EO gap, worst-group loss), local reward components
-- **`episode_tracker.py`**: `EpisodeTracker` context manager for CSV logging, checkpointing, console mirroring
-- **`test_suite.py`**: `TestSuite` class for post-training evaluation (DP, EO, EOd, F1, Brier)
-- **`agents/`**: `FFNNAgent` (classifier), `ReinforceAgent` (policy gradient), `PPOAgent` (actor-critic)
-
-### Notebooks
-- **`plot_results.ipynb`**: Main results comparison notebook. Loads `final_test_metrics.csv` from selected `training_runs/` directories, produces fairness (EO/DP/EOd) and utility (F1/AUC) bar charts per dataset, and a full tradeoff table with UAFI scores. Edit the `DATASETS` dict in cell 6 to add new runs.
-- **`dataset_visualizations.ipynb`**: PCA projections and class/group distribution plots for raw datasets.
-- **`diagnose_training.ipynb`**: Per-episode `metrics.csv` analysis — reward curves, deadzone fraction, local/global correlation. Use this to check if a new run is learning before waiting for full results.
-- **`analyze_datasets.ipynb`**: Dataset statistics, bias injection effects, group imbalance summaries.
-
-### Experiment Configuration
-JSON specs in `experiment_specs/` define all hyperparameters: dataset, reward mode, lambda schedule, PCA components, trajectory length, curriculum settings, network architectures, seeds. Multi-seed runs execute sequentially from a single spec.
-
-The `dp_protected_col` field in a spec selects which column is used as the protected attribute (passed through `training.py` and all baseline trainers to `get_data_splits`). Defaults to each dataset's natural default if omitted.
-
-### Output Structure
-Results go to `training_runs/SPEC_{name}_{hash}__G{timestamp}/seed_{N}/` containing:
-- `metrics.csv`: Per-episode metrics (50+ columns, flattened from nested dicts with prefixes: global, utility, fairness, local, extra, align)
-- `test_results.json`: Final fairness/utility evaluation
-- `best_synthetic.npz`: Best synthetic data checkpoint
-- `best_beta_state_dict.pt`, `alpha_state_dict.pt`: Model weights
-
-## Datasets
-
-**Active datasets (paper):** census_income, capture24. Credit card DROPPED. COMPAS DROPPED (see below).
-
-### Dataset Selection Criteria
-Four structural properties are required for stable framework performance (calibrated empirically against census):
-1. **val_disadv_pos ≥ 30** — enough disadvantaged-group positives in the validation split to produce a stable worst-group-loss reward signal. Below this threshold (e.g., COMPAS: 14, MEPS: 37) the reward signal is too noisy for reliable policy gradient learning.
-2. **test_disadv_pos ≥ 200** — enough test positives for reliable fairness evaluation.
-3. **alpha_EO ≥ 0.10** — a meaningful pre-intervention gap for the generative agent to close.
-4. **Feature-space distinctiveness of disadvantaged-group positives** — the disadvantaged group's positive-class feature distribution must be sufficiently distinct from the advantaged group's positive-class distribution in PCA space. If the two groups' positives overlap substantially, synthetic samples cannot carry group-specific signal and the classifier cannot use them to improve minority TPR. This is why COMPAS race fails: Caucasian and African-American positives are not clearly separable in feature space, so oversampling a Caucasian-like region does not help. Note: raw cosine similarity between group centroids was tested as a proxy for this property but was dropped — census has cosine=0.983 (high overlap overall) yet works well, because the *positive-class subsets* remain distinct even when the full group distributions overlap.
-
-Candidate datasets that failed: COMPAS (val_pos=14 and positive-class overlap), MEPS race (val_pos=37, marginal), PTB-XL (no framing reaches test_pos≥200), PAMAP2 (only 1 female subject, unstable group identification).
-
-### Scarcity Metric: DA+
-**DA+** = number of disadvantaged-group positive (y=1) training examples. This is the primary metric defining the scarcity regime. Both datasets are configured so DA+ ≈ 43--45, the level at which reweighting methods demonstrably fail. `bias_pct` is an internal implementation parameter used to achieve the target DA+; it is NOT a paper-level framing variable. Refer to DA+ as a % when possible.
+`da_pct` uses group-specific subsampling: only the disadvantaged group's positives are reduced; advantaged-group positives and all negatives are kept intact. This gives identical DA+ across all seeds. The old `bias_pct` parameter (which subsampled all positives and produced variable DA+ across seeds) is retained for backward compatibility with archived runs.
 
 **DA+ log — confirmed values (seed=42, mean across seeds similar):**
 
-| Dataset | bias_pct | real_data_size | DA+ | Protected attr | Disadv. group |
-|---------|----------|----------------|-----|----------------|---------------|
-| census_income | 0.10 | 3000 | **43** | sex | female (a=0) |
-| capture24 | 0.02 | 3000 | **45** | sex | female (a=1) |
+| Dataset | da_pct | real_data_size | DA+ | Protected attr | Disadv. group |
+|---------|--------|----------------|-----|----------------|---------------|
+| census_income | 0.01433 | 3000 | **43** | sex | female (a=0) |
+| capture24 | 0.015 | 3000 | **45** | sex | female (a=1) |
 
-Secondary scarcity level (census only, for motivation curve) ignore for now:
+**Dataset selection criteria** (all four must pass before committing to RL experiments):
+1. val_disadv_pos ≥ 30 — stable reward signal
+2. test_disadv_pos ≥ 200 — reliable fairness evaluation
+3. alpha_EO ≥ 0.10 — meaningful pre-intervention gap
+4. Feature-space distinctiveness — disadvantaged-group positives must be spatially distinct from advantaged-group positives in PCA space; otherwise synthetic samples cannot carry group-specific signal
 
-| Dataset | bias_pct | DA+ |
-|---------|----------|-----|
-| census_income | 0.05 | 17 |
+**Dropped datasets:**
+- **COMPAS** — val_pos=14 (below threshold), positive-class overlap in PCA space, RL results contradict motivation claim
+- **PAMAP2** — only 1 female subject, unstable group identification across seeds
+- **credit_card** — DA+ too high (~136), alpha-EO near-zero, not in scarcity regime
+- **PTB-XL** — no framing reaches test_pos≥200
+- **MEPS** — val_pos=37 marginal; ethnicity framing test_pos=111 fails evaluation threshold
 
-### Dataset Details
+### Paper-Writing Rules
 
-- **census_income**: Adult income (UCI). Protected attr: sex. Female (a=0) is disadvantaged — naturally low positive rate (~7%) creates scarcity at bias_pct=0.10. Primary dataset; most ablations here. Path: `datasets/census+income/adult.data`.
+- Do not use em-dashes in prose. Use commas, semicolons, or restructure.
+- Do not make model-agnostic claims — current results use a fixed FFNN classifier.
+- Do not introduce specific numeric thresholds without a citation. Use qualitative language.
+- Frame scarcity in terms of positive-class rate percentages, not raw DA+ counts.
+- Reviewer framing on DA+ realism: DA+≈43 is realistic (hospital rare-condition datasets, small-jurisdiction criminal justice records, internal HR data). Our bias injection simulates this condition, following standard practice in fairness ML.
+- Reviewer questions to anticipate: Why RL over simpler generative methods? Why PCA space? Does the agent actually learn vs random search? Have experiments or arguments ready for each.
 
-- **capture24**: Wearable accelerometer sleep/activity (Oxford). Protected attr: sex. Female (a=1) is disadvantaged. Requires windowing (win_seconds=1.0, step_seconds=0.5). Path: `datasets/capture24/`. bias_pct=0.02 (real_data_size=3000 cap drives DA+≈45).
+When assessing results, prioritise in this order:
+1. Does this strengthen or weaken a specific claim? Flag ambiguous results explicitly.
+2. Is it reproducible? 3 seeds is provisional; 5+ seeds required for final results table.
+3. Is the ablation clean? Note any confounds if multiple things changed between versions.
 
-- **COMPAS**: DROPPED — val_pos=14 (far below the ≥30 threshold), and RL results contradict the motivation claim (GroupDRO EO=0.197, FLB EO=0.075 substantially outperform RL EO=0.600). See EXPERIMENTS.md COMPAS Race Investigation.
-- **PAMAP2**: DROPPED — disadvantaged group identification unstable across seeds (only 1 female subject).
-- **credit_card**: DROPPED — DA+ too high (~136 at bias=0.10), alpha-EO near-zero, not in the scarcity regime.
-- **ptb_xl**: DROPPED — no framing reaches test_pos≥200 within the strat_fold structure.
-- **MEPS**: DROPPED — race framing val_pos=37 is structurally marginal; ethnicity framing test_pos=111 fails evaluation threshold.
+---
 
-## Paper-Writing Guidance
+## 2. Codebase
 
-**Style rules (apply to all paper text):**
-- Do not use emphasis dashes (em-dashes) in prose. Use commas, semicolons, or restructure the sentence instead.
-- Do not make model-agnostic claims unless directly supported by experiments (the current results use a fixed FFNN classifier; model-agnostic generality is not demonstrated).
-- Do not introduce specific numeric thresholds (e.g., "fewer than 15%") without a citation. Use qualitative language instead.
-- Frame scarcity in terms of positive-class rate percentages (e.g., "~11% for the disadvantaged group") rather than raw DA+ counts in paper text. DA+ is for internal tracking only.
+### Framework Overview
 
-When making decisions about experiments, code changes, or analysis, prioritise in this order:
-1. **Does this strengthen or weaken a specific paper claim?** If a result is ambiguous, flag it explicitly rather than presenting it optimistically.
-2. **Is it reproducible?** Always report seed count, mean ± std, and range. 3 seeds is provisional; 5+ seeds is required for the final results table.
-3. **Is the ablation clean?** Change one thing at a time between compared configs. If multiple things changed between versions, note the confounds.
-4. **Reviewer questions to anticipate:** Why RL over simpler generative methods? Why PCA space? Does the agent actually learn (vs random search)? Have answers or experiments ready for each.
+Three-model system: **alpha** (trained on real data only, fairness baseline), **beta** (trained on real + synthetic, the target model), **RL agent** (REINFORCE, generates synthetic minority-positive samples by perturbing PCA-space coordinates via delta actions).
 
-**On the DA+ scarcity framing:** Reviewers may ask whether DA+≈43 is realistic. It is — hospital datasets for rare conditions, small-jurisdiction criminal justice records, and internal HR datasets routinely produce comparable minority-positive counts. The key point is that DA+≈43 is the regime where reweighting methods empirically fail (shown in our census baseline degradation curve); the specific mechanism creating that scarcity (historical underrecording, small group size, rare outcome) does not affect the algorithmic behavior we study. Framing: "we study the regime where DA+ is severely limited; our bias injection *simulates* this condition, following standard practice in fairness ML."
+Each training episode: generate synthetic trajectory → train beta on real+synthetic → compute reward (worst-group-loss improvement) → update RL agent via policy gradient → log diagnostics.
+
+### Reward Structure (current best: v18 global-only)
+
+- **Global term**: `sigmoid(k × (wgl_alpha − wgl_beta))` where wgl = worst-group BCE loss on validation. k=10 (vanilla). Range (0,1); above 0.5 means beta is better than alpha. k=0 gives normalized reward: (wgl_alpha − wgl_beta) / wgl_alpha.
+- **Lambda schedule**: `λ * global + (1−λ) * local`. Vanilla uses λ=1.0 (pure global, no local).
+- **gamma=1.0**: All 2000 trajectory steps contribute equally. gamma=0.99 caused ~50% deadzone and was abandoned.
+- **Local term (DVRL)**: Disabled. `use_dvrl_local=false` in vanilla.
+- **Curriculum**: Disabled. Start directly in full 10D PCA space.
+- **gen_both_classes**: Disabled in vanilla. When enabled: phase 1 = minority augmentation, phase 2 = majority recovery.
+
+### Core Modules
+
+| File | Purpose |
+|------|---------|
+| `training.py` | Core `Training` class with full training loop |
+| `env.py` | `Environment` class — delta actions, radius clipping, curriculum (disabled) |
+| `dataset.py` | `Dataset` class — census_income, capture24, compas, ptb_xl. Bias injection, PCA encoding, stratified splitting. Stores `self.pca_transform` after `get_data_splits`. |
+| `reward_helpers.py` | Loss functions, fairness metrics (EO gap, worst-group loss), local reward components |
+| `episode_tracker.py` | `EpisodeTracker` context manager — CSV logging, checkpointing, console mirroring |
+| `test_suite.py` | `TestSuite` class — post-training evaluation (DP, EO, EOd, F1, Brier). Not a pytest file. |
+| `agents/` | `FFNNAgent` (classifier), `ReinforceAgent` (policy gradient), `PPOAgent` (inactive) |
+
+### Analysis Scripts
+
+| File | Purpose |
+|------|---------|
+| `check_run.py` | Standard post-run analysis — summary table, learning curves, generalizability curves |
+| `dataset_viability.py` | Dataset structural viability checker — DA+ scan, alpha-EO baseline, feature separability |
+| `make_spec.py` | Generate experiment spec JSON + SLURM batch files from a base spec with `--patch` / `--sweep` |
+| `run_baseline.py` | Run GroupDRO, FLB, CTGAN, OT Repair, and other baselines |
+
+### Notebooks
+
+| File | Purpose |
+|------|---------|
+| `plot_results.ipynb` | Paper figures — fairness/utility bar charts and tradeoff table. Edit `DATASETS` dict in cell 6 to add new runs. |
+| `analyze_datasets.ipynb` | Dataset statistics, bias injection effects, group imbalance summaries |
+| `dataset_visualizations.ipynb` | PCA projections and class/group distribution plots |
+| `visualize_generation.ipynb` | Visualises where the RL agent places synthetic points in PCA space across training. Use to answer "does the agent actually learn?" |
+
+### Dataset Implementation Details
+
+- **census_income**: Adult income (UCI). Protected attr: sex. Female (a=0) disadvantaged. Path: `datasets/census+income/adult.data`.
+- **capture24**: Wearable accelerometer (Oxford). Protected attr: sex. Female (a=1) disadvantaged. Requires windowing: `win_seconds=1.0`, `step_seconds=0.5`. Path: `datasets/capture24/`.
+
+### Output Structure
+
+Results go to `training_runs/SPEC_{name}_{hash}__G{timestamp}/seed_{N}/`:
+
+| File | Contents |
+|------|----------|
+| `metrics.csv` | Per-episode metrics (50+ columns, prefixes: global, utility, fairness, local, extra, align) |
+| `final_test_metrics.csv` | Final test-set fairness/utility evaluation |
+| `meta.json` | Run config: dataset, seed, bias_pct, episodes, global_sigmoid_k, win_seconds, etc. |
+| `best_beta_meta_phase1_class1.json` | Best checkpoint episode + metric value for phase 1 |
+| `synthetic_snapshots/synthetic_ep{N:04d}_phase1_class1.npz` | Synthetic data snapshots every 5 episodes |
+| `best_beta_state_dict_phase1_class1.pt`, `alpha_state_dict.pt` | Model weights |
+| `analysis/` | Created by `check_run.py` — `summary.txt`, `fig_learning.png`, `fig_gen_curve.png` |
+
+**Directory layout:**
+- `training_runs/` — active runs from current experiments
+- `archive_runs/` — all runs prior to April 2026 cleanup
+
+---
+
+## 3. Research Process
+
+### Experiment Log
+
+See **`EXPERIMENTS.md`** for the full record of every experiment: config delta from vanilla, results, takeaway, next steps. **Update EXPERIMENTS.md after every significant result.** Every number cited in the paper must be traceable to a specific entry there.
+
+### Vanilla Config
+
+`vanilla_config.json` (project root) is the canonical base for all experiments. All specs are deltas from this. Do NOT modify it unless a new result explicitly establishes a better default across both datasets.
+
+### Workflow: Designing a New Experiment
+
+1. Identify the question being asked and which paper claim it bears on.
+2. Write an EXPERIMENTS.md entry (PLANNED status) with the config delta from vanilla and purpose.
+3. Generate the spec: `python make_spec.py --base vanilla_config.json --name <name> --patch key=value ...`
+4. For new datasets: first run `python dataset_viability.py ...` and confirm all four criteria pass.
+
+### Workflow: Running Experiments
+
+```bash
+# Local
+python main.py --spec experiment_specs/<spec>.json --device cuda:0
+
+# SLURM (user submits manually on DRAC — Claude Code does not submit jobs)
+sbatch experiment_specs/<spec>.sh
+```
+
+DRAC workflow: prepare spec and `.sh` batch files locally, user submits on DRAC, user downloads results and notifies Claude Code to begin analysis. Do not ask the user to run commands on DRAC.
+
+### Workflow: Analysing Results
+
+Run after every completed experiment:
+```bash
+python check_run.py training_runs/<run_dir> [--interval 150] [--device cpu] [--no-gen-curve]
+```
+
+Outputs go to `<run_dir>/analysis/`:
+- `summary.txt` — per-seed and mean α/β EO, F1w, AUC, EO-Δ, deadzone %, best checkpoint episode
+- `fig_learning.png` — episode return + val EO per seed + mean band (phase 1 only)
+- `fig_gen_curve.png` — test-set EO/F1w/AUC vs episode at `--interval` snapshot intervals
+
+Key diagnostics to check:
+- **Seeds improved** — how many seeds show β-EO < α-EO. Below 3/5 warrants investigation before claiming the config works.
+- **Deadzone %** — fraction of phase-1 episodes where global_obj < 0.5 (applies only to sigmoid reward; nosigmoid will always show ~100%). Above ~20% indicates the reward signal is too weak.
+- **Best checkpoint episode** — if consistently near episode 0 or episode max, the agent is not converging cleanly.
+- **α-EO variance** — high variance across seeds means the data split is unstable, not the RL config.
+
+### Workflow: Recording Results
+
+Update the EXPERIMENTS.md entry (change status to COMPLETE, fill in Result, Takeaway, Next steps). Any number that will appear in the paper should be in EXPERIMENTS.md first.
+
+### Spec Naming and Organisation
+
+- Specs live in `experiment_specs/`. Each has a `.json` and a `.sh` SLURM batch file.
+- Use `make_spec.py` to generate; only specify fields that differ from vanilla.
+- `dp_protected_col` selects the protected attribute column. Omit to use each dataset's natural default.
+
+### SLURM Defaults (DRAC rorqual)
+
+1 CPU, 3 GB RAM, 1 thread per library. See existing `.sh` files for the template.

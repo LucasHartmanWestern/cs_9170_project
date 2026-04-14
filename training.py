@@ -1,3 +1,4 @@
+import gc
 import os
 import sys
 import time
@@ -47,6 +48,7 @@ class Training:
         majority_id=None,
         third_id=None,
         bias_pct=None,
+        da_pct=None,
 
         #PCA / trajectory
         pca_components=2,
@@ -55,7 +57,7 @@ class Training:
         total_episodes=1,
 
         #reward
-        reward_mode="fairness",
+        reward_mode="wgl",
         lambda_schedule=(0.5, 0.5),
         local_squash_k=4.0,          # sigmoid sharpness; 0 = clamp (old behavior)
         local_squash_center=0.5,     # centering point for sigmoid squashing
@@ -157,6 +159,7 @@ class Training:
 
         self.gen_both_classes = gen_both_classes
         self.bias_pct = bias_pct
+        self.da_pct   = da_pct
         self.pca_components = pca_components
         self.reward_mode = reward_mode
         self.lambda_schedule = lambda_schedule
@@ -420,7 +423,7 @@ class Training:
         """
 
         mode = self.reward_mode
-        valid = {"local_gauss", "local_gauss_penalty", "fairness", "roc_eo"}
+        valid = {"local_gauss", "local_gauss_penalty", "wgl", "fairness", "roc_eo"}
         if mode not in valid:
             raise ValueError(f"reward_mode must be one of {valid}, got {self.reward_mode!r}")
 
@@ -467,7 +470,7 @@ class Training:
         ep_eod_avg_diff = float("nan")
         ep_soft_eo_beta = float("nan")
 
-        if mode in ("fairness", "roc_eo"):
+        if mode in ("wgl", "fairness", "roc_eo"):
             a_theta_val = self.dataset.a_val
             assert len(a_theta_val) == x_theta_val.shape[0], "a_val misaligned with x_theta_val"
 
@@ -646,7 +649,7 @@ class Training:
         # Global: sigmoid(k * (worst_loss_alpha - worst_loss_beta)) ∈ (0, 1)
         # 0.5 = no change vs alpha, >0.5 = beta has lower worst-group loss (better), <0.5 = worse
         # Uses 4-group (group × class) worst-case loss: directly aligned with DRO objective.
-        if mode == "fairness":
+        if mode in ("wgl", "fairness"):
             wgl_alpha = getattr(self, "disadv_worst_loss_alpha", float("nan"))
             wgl_beta  = worst_loss_beta
             if wgl_alpha == wgl_alpha and wgl_beta == wgl_beta:
@@ -933,7 +936,7 @@ class Training:
             f = diagnostics.get("fairness", {})
 
             local_mean = float(g.get("local_reward", float("nan")))
-            if self.reward_mode == "fairness":
+            if self.reward_mode in ("wgl", "fairness"):
                 delta_val = float(-f.get("worst_loss_beta", float("nan")))
             else:
                 delta_val = float("nan")
@@ -983,8 +986,10 @@ class Training:
                 best_y_syn = y_phi_t.detach().clone()
 
             del states, actions, next_states, dones, rewards, x_syn_tensor, y_syn_tensor, log_probs, x_phi_t, y_phi_t
-            if torch.cuda.is_available() and episode % 100 == 0:
-                torch.cuda.empty_cache()
+            if episode % 100 == 0:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                gc.collect()
 
         print(f"[Phase] Finished {phase_label} | best global_obj={best_phase_reward:.4f}")
         return (best_x_syn, best_y_syn)
@@ -1162,8 +1167,10 @@ class Training:
                 best_y_syn = y_phi_t.detach().clone()
 
             del x_phi_t, y_phi_t
-            if torch.cuda.is_available() and episode % 100 == 0:
-                torch.cuda.empty_cache()
+            if episode % 100 == 0:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                gc.collect()
 
         print(f"[CMA-ES Phase] Finished {phase_label} | best global_obj={best_phase_reward:.4f}")
         return (best_x_syn, best_y_syn)
@@ -1186,6 +1193,7 @@ class Training:
             "TRAJ_LENGTH": self.traj_length,
             "REAL_DATA_SIZE": self.real_data_size,
             "BIAS_PCT": self.bias_pct,
+            "DA_PCT": self.da_pct,
 
             "reward_mode": self.reward_mode,
             "lambda_schedule": self.lambda_schedule,
@@ -1203,10 +1211,22 @@ class Training:
 
             "seed": self.seed,
             "gen_both_classes": self.gen_both_classes,
+
+            # reward shaping
+            "global_sigmoid_k": self.global_sigmoid_k,
+
+            # dataset-specific windowing (capture24); needed to reconstruct PCA post-hoc
+            "win_seconds": self.win_seconds,
+            "step_seconds": self.step_seconds,
         }
 
         # create beta factory once (so tracker can rehydrate best-beta for final test)
         beta_factory = lambda: FFNNAgent(**self.ffnn_config)
+
+        # Snapshot every N episodes — auto-scaled so long runs don't create thousands of files.
+        # Target ~100 snapshots per run regardless of episode count.
+        # Gen-curve (check_run.py) picks the nearest available snapshot, so coarser is fine.
+        _ckpt_every = max(5, self.total_episodes // 100)
 
         with EpisodeTracker(
             run_stats,
@@ -1215,6 +1235,7 @@ class Training:
             compare_metric="global.global_obj",
             beta_factory=beta_factory,
             seed=self.seed,
+            ckpt_every=_ckpt_every,
         ) as tracker:
             self.tracker = tracker
 
@@ -1223,6 +1244,7 @@ class Training:
                 self.dataset.get_data_splits(
                     train_size=self.real_data_size,
                     bias_pct=self.bias_pct,
+                    da_pct=self.da_pct,
                     pca_components=self.pca_components,
                     drop_protected=False,
                     protected_cols=self.dataset.protected_attributes,
