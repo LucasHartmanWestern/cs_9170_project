@@ -1,0 +1,27 @@
+{
+  "baseline": "fairness_loss_balancing",
+  "dataset_name": "census_income",
+  "multiclass": false,
+  "bias_pct": null,
+  "da_pct": 0.014,
+  "minority_id": 0,
+  "majority_id": 1,
+  "third_id": null,
+  "real_data_size": 3000,
+  "seeds": [42, 0, 1],
+  "use_pca": true,
+  "pca_components": 10,
+  "ffnn": {
+    "hidden_sizes": [32, 16],
+    "learning_rate": 0.001,
+    "batch_size": 64,
+    "epochs": 20
+  },
+  "flb": {
+    "lr": 0.001,
+    "epochs": 200,
+    "batch_size": 64,
+    "eta": 0.01,
+    "n_groups": 4
+  }
+}

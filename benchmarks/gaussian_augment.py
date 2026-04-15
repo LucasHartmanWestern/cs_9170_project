@@ -79,6 +79,7 @@ class GaussianAugmentTrainer:
         majority_id=None,
         third_id=None,
         bias_pct=None,
+        da_pct=None,
         real_data_size: int = 3000,
         ffnn: dict = None,
         n_synthetic: int = 2000,
@@ -98,6 +99,7 @@ class GaussianAugmentTrainer:
         self.majority_id    = majority_id
         self.third_id       = third_id
         self.bias_pct       = bias_pct
+        self.da_pct         = da_pct
         self.real_data_size = real_data_size
         self.n_synthetic    = int(n_synthetic)
         self.multiclass     = multiclass
@@ -132,6 +134,7 @@ class GaussianAugmentTrainer:
         x_train, x_val, x_test, y_train, y_val, y_test = self.dataset.get_data_splits(
             train_size=self.real_data_size,
             bias_pct=self.bias_pct,
+            da_pct=self.da_pct,
             pca_components=self.pca_components,
             drop_protected=False,
             protected_cols=self.dataset.protected_attributes,

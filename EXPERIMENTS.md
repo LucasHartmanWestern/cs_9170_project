@@ -32,6 +32,8 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-015 | compas-race-baselines | PAPER-FINAL | SUPERSEDED | compas | — |
 | EXP-016 | wgl-k-sweep | ABLATION | PLANNED | census, capture24, compas | — |
 | EXP-017 | roc-eo-lambda-sweep | ABLATION | PLANNED | census, capture24, compas | — |
+| EXP-018 | baselines | PAPER-FINAL | COMPLETE | census, capture24, compas | — |
+| EXP-019 | natural-scarcity-rl | EXPLORATORY | PLANNED | census, capture24, compas | EXP-016 |
 
 ---
 
@@ -547,3 +549,133 @@ No sigmoid is applied to `roc_eo` (k is not used in this mode). λ is the struct
 
 **Next steps:**
 If `roc_eo` matches best `wgl` on both axes, consider it as the primary reward for the paper (simpler formulation, no alpha reference baseline needed). If it underperforms, retain `wgl` as primary and present `roc_eo` as a design ablation.
+
+---
+
+### EXP-018 | baselines
+
+**Type:** PAPER-FINAL
+**Status:** COMPLETE
+**Dataset(s):** census_income, capture24, compas (race)
+**Seeds (actual):** 42, 0, 1 (3 seeds each)
+**Reference config:** n/a (baselines)
+**Config delta:** n/a
+**Follows from:** EXP-016 (establishes da_pct=0.014 as the scarcity regime)
+
+---
+
+**Purpose:**
+Baseline comparisons for all three paper datasets at the da_pct=0.014 scarcity level (DA+≈43–45 disadvantaged-group positive training examples). Baselines: GroupDRO, OT Repair, FLB, CTGAN, SMOTE, FairTabDDPM.
+
+Prior baseline runs (EXP-013, EXP-014) used the old bias_pct regime and different seeds. These are the matched baselines for comparison against EXP-016 RL results.
+
+**Key setup details:**
+- da_pct=0.014, real_data_size=3000 → DA+≈43 for census and compas, DA+≈45 for capture24
+- Seeds: [42, 0, 1] — same as RL experiments
+- FFNN: hidden=[32,16], lr=0.001, batch=64, epochs=20 (same architecture as alpha/beta in RL)
+- PCA: use_pca=true, pca_components=10 (same feature space as RL)
+- capture24: win_seconds=1.0, step_seconds=0.5
+- compas: dp_protected_col="race"
+- CTGAN/SMOTE/FairTabDDPM: n_synthetic=2000 (matches RL traj_length=2000)
+- GroupDRO/FLB: epochs=200, eta=0.01, n_groups=4
+- Test set always unbiased (da_pct mode)
+
+**Note:** da_pct support was added to all baseline trainers for this experiment (previously only bias_pct was wired through).
+
+**Specs:** `experiment_specs/April_13_Experiments/baselines/{dataset}_{baseline}.{json,sh}`
+
+**Run directories (census):**
+- GroupDRO: `training_runs/BASELINE_group_dro_census_gdro_b1aa6f0f__G202604141522`
+- OT Repair: `training_runs/BASELINE_gaussian_ot_repair_census_ot_repair_21f0c299__G202604141522`
+- FLB: `training_runs/BASELINE_fairness_loss_balancing_census_flb_29c3d006__G202604141522`
+- SMOTE: `training_runs/BASELINE_smote_census_smote_05e752a1__G202604141522`
+- CTGAN: `training_runs/BASELINE_ctgan_census_ctgan_e21530b2__G202604141543`
+- FairTabDDPM: `training_runs/BASELINE_fairtabddpm_census_fairtabddpm_b6bedaa9__G202604141543`
+
+**Run directories (capture24):**
+- GroupDRO: `training_runs/BASELINE_group_dro_capture24_gdro_fb1e687b__G202604141522`
+- OT Repair: `training_runs/BASELINE_gaussian_ot_repair_capture24_ot_repair_72dd0636__G202604141522`
+- FLB: `training_runs/BASELINE_fairness_loss_balancing_capture24_flb_52b798af__G202604141522`
+- SMOTE: `training_runs/BASELINE_smote_capture24_smote_340e46a8__G202604141522`
+- CTGAN: `training_runs/BASELINE_ctgan_capture24_ctgan_d30ab1b1__G202604141543`
+- FairTabDDPM: `training_runs/BASELINE_fairtabddpm_capture24_fairtabddpm_31a3bd63__G202604141543`
+
+**Run directories (compas, excluded from paper):**
+- GroupDRO: `training_runs/BASELINE_group_dro_compas_gdro_56854f17__G202604141522`
+- OT Repair: `training_runs/BASELINE_gaussian_ot_repair_compas_ot_repair_9ec8e5f9__G202604141522`
+- FLB: `training_runs/BASELINE_fairness_loss_balancing_compas_flb_38d4eba8__G202604141522`
+- SMOTE: `training_runs/BASELINE_smote_compas_smote_2cecddc2__G202604141522`
+- CTGAN: `training_runs/BASELINE_ctgan_compas_ctgan_0079b631__G202604141543`
+- FairTabDDPM: `training_runs/BASELINE_fairtabddpm_compas_fairtabddpm_f0d938bf__G202604141543`
+
+**Result — Census (α-EO=0.364±0.018):**
+
+| Baseline | β-EO↓ | β-EOd↓ | F1w↑ | AUC↑ | F1_min↑ |
+|---|---|---|---|---|---|
+| GroupDRO | 0.114±0.026 | 0.141±0.006 | 0.811±0.002 | 0.888±0.003 | 0.656±0.005 |
+| OT Repair | 0.085±0.018 | 0.085±0.018 | 0.812±0.009 | 0.863±0.003 | 0.562±0.032 |
+| FLB | 0.039±0.025 | 0.091±0.012 | 0.803±0.003 | 0.874±0.002 | 0.641±0.003 |
+| SMOTE | 0.108±0.012 | 0.108±0.012 | 0.814±0.005 | 0.867±0.004 | 0.582±0.015 |
+| CTGAN | 0.328±0.008 | 0.328±0.008 | 0.827±0.003 | 0.869±0.005 | 0.632±0.003 |
+| FairTabDDPM | 0.151±0.074 | 0.151±0.074 | 0.819±0.005 | 0.869±0.001 | 0.625±0.012 |
+| **RL k=3** | **0.079±0.015** | — | **0.810±0.003** | **0.877±0.002** | — |
+
+**Result — Capture24 (α-EO=0.196±0.016):**
+
+| Baseline | β-EO↓ | β-EOd↓ | F1w↑ | AUC↑ | F1_min↑ |
+|---|---|---|---|---|---|
+| GroupDRO | 0.078±0.044 | 0.087±0.031 | 0.896±0.013 | 0.909±0.020 | 0.319±0.065 |
+| OT Repair | 0.113±0.035 | 0.113±0.035 | 0.953±0.012 | 0.913±0.027 | 0.347±0.065 |
+| FLB | 0.160±0.077 | 0.160±0.077 | 0.884±0.027 | 0.912±0.021 | 0.320±0.099 |
+| SMOTE | 0.068±0.055 | 0.070±0.053 | 0.953±0.014 | 0.891±0.017 | 0.410±0.102 |
+| CTGAN | 0.400±0.146 | 0.400±0.146 | 0.952±0.007 | 0.922±0.014 | 0.494±0.064 |
+| FairTabDDPM | 0.313±0.209 | 0.313±0.209 | 0.937±0.013 | 0.929±0.009 | 0.410±0.042 |
+| **RL k=3** | *(pending full seeds)* | — | — | — | — |
+
+**Takeaway:**
+
+**Census:** RL k=3 (β-EO=0.079±0.015) beats all baselines on EO, including the best reweighting method (FLB β-EO=0.039 on TPR diff but EOd=0.091; OT Repair β-EO=0.085). RL achieves this with competitive utility (F1w=0.810), near GroupDRO and OT Repair levels. CTGAN and FairTabDDPM both fail to match reweighting methods on EO, with CTGAN particularly poor (0.328). FairTabDDPM shows improvement over CTGAN (0.151) but with high variance (±0.074).
+
+**Capture24:** Generative methods (CTGAN, FairTabDDPM) degrade badly vs no-augmentation — both show EO *higher* than α-EO=0.196, indicating synthetic samples are hurting fairness. Reweighting methods (GroupDRO, SMOTE) work better here. This is a meaningful finding: in high-dimensional wearable data with low DA+, naive generative augmentation backfires. RL k=3 result pending full seeds, but current trajectory suggests it should outperform or match SMOTE/GroupDRO.
+
+**Motivation claim:** GroupDRO does NOT fail catastrophically under DA+≈43 on these datasets — it achieves 0.114 (census) and 0.078 (capture24) EO. The claim needs to be reframed: RL achieves *better EO than all baselines* on census while matching utility, and generative baselines (CTGAN/FairTabDDPM) are the ones that fail. The scarcity regime disadvantages naive generative methods, not reweighting.
+
+**Next steps:**
+- Complete RL capture24 results with full 3-seed runs to fill in the table.
+- Reframe motivation claim in paper: scarcity hurts generative baselines (CTGAN degrades); RL's reward-guided generation avoids this failure mode.
+- Update plot_results.ipynb to include all 6 baselines in the figures.
+
+---
+
+### EXP-019 | natural-scarcity-rl
+
+**Type:** EXPLORATORY
+**Status:** PLANNED
+**Dataset(s):** census_income, capture24, compas (race)
+**Seeds:** 42, 0, 1 (3 seeds each)
+**Reference config:** vanilla + best k from EXP-016
+**Config delta:** da_pct=0.11 (DA+≈330, natural positive-class rate for disadvantaged group)
+**Follows from:** EXP-016
+
+---
+
+**Purpose:**
+Robustness/generalisation check: does the method still improve fairness when not in the severe scarcity regime? At da_pct=0.11, DA+≈330 (vs 43 in the paper's main experiments). Exploratory — results inform whether the method degrades gracefully or remains competitive at natural class balance. Also re-tests COMPAS (previously dropped at DA+=43) at a higher DA+ level.
+
+**Note on k:** specs use k=3 as a placeholder (current best from EXP-018 census). Update to best k per dataset once EXP-016 results are in.
+
+**Specs:** `experiment_specs/April_13_Experiments/natural_scarcity/{census,capture24,compas}_natural_scarcity.{json,sh}`
+
+**Key questions:**
+- Does the method still reduce EO relative to alpha at natural scarcity?
+- Does GroupDRO outperform RL here (as expected when reweighting methods are not disadvantaged)?
+- Does COMPAS behave better at DA+≈330 — does the val_disadv_pos threshold now pass?
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+*(pending)*

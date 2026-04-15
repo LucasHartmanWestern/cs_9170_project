@@ -100,6 +100,7 @@ class SMOTEBaselineTrainer:
         majority_id=None,
         third_id=None,
         bias_pct=None,
+        da_pct=None,
         real_data_size: int = 3000,
         ffnn: dict = None,
         smote: dict = None,
@@ -119,6 +120,7 @@ class SMOTEBaselineTrainer:
         self.majority_id  = majority_id
         self.third_id     = third_id
         self.bias_pct     = bias_pct
+        self.da_pct       = da_pct
         self.real_data_size = real_data_size
         self.multiclass   = multiclass
         self.win_seconds  = win_seconds
@@ -163,6 +165,7 @@ class SMOTEBaselineTrainer:
         x_train, x_val, x_test, y_train, y_val, y_test = self.dataset.get_data_splits(
             train_size=self.real_data_size,
             bias_pct=self.bias_pct,
+            da_pct=self.da_pct,
             pca_components=self.pca_components,
             drop_protected=False,
             protected_cols=self.dataset.protected_attributes,
