@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=com_nat_scar
 #SBATCH --account=def-mcapretz
-#SBATCH --time=12:00:00
+#SBATCH --time=14:00:00
 #SBATCH --mem=6G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1

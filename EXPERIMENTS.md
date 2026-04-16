@@ -515,6 +515,8 @@ Episode convergence is read from gen-curves (`check_run.py --interval 250`) — 
 **Next steps:**
 Use best k per dataset as the reference config for final paper results.
 
+**Note (2026-04-16):** Seeds 42 and 0 complete for all configs/datasets. Seed 1 for census and compas wgl_k{0,3,5,10} was running on DRAC but too slow to queue; re-running locally on cuda:0/1 via `run_seed1_gpu0.sh` / `run_seed1_gpu1.sh`. Will be consolidated into existing run dirs on completion. capture24 seed 1 already complete.
+
 ---
 
 ### EXP-017 | roc-eo-lambda-sweep
@@ -549,6 +551,8 @@ No sigmoid is applied to `roc_eo` (k is not used in this mode). λ is the struct
 
 **Next steps:**
 If `roc_eo` matches best `wgl` on both axes, consider it as the primary reward for the paper (simpler formulation, no alpha reference baseline needed). If it underperforms, retain `wgl` as primary and present `roc_eo` as a design ablation.
+
+**Note (2026-04-16):** Seeds 42 and 0 complete for all configs/datasets. Seed 1 for census roc_eo_lam{05,07} and compas roc_eo_lam{03,05,07} was running on DRAC but too slow to queue; re-running locally on cuda:0/1 via `run_seed1_gpu0.sh` / `run_seed1_gpu1.sh`. Will be consolidated into existing run dirs on completion. capture24 seed 1 and census lam03 seed 1 already complete.
 
 ---
 
