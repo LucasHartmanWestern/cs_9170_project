@@ -276,6 +276,7 @@ class Training:
             "learning_rate": 1e-3,
             "batch_size": 64,
             "epochs": 10,
+            "optimizer": "adam",
             "type": "classification",
             "classes": [0, 1, 2] if self.multiclass else [0, 1],
             "device": self.device,
@@ -300,6 +301,7 @@ class Training:
             "gamma": 0.99,
             "entropy_start": 1e-2,
             "entropy_end": 0.0,
+            "optimizer": "adam",
             "seed": self.seed,
             "device": self.device,
         }

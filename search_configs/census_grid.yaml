@@ -1,0 +1,27 @@
+name: census_grid
+base: vanilla_config.json
+
+base_patches:
+  dataset_name: census_income
+  da_pct: 0.01433
+  minority_id: 0
+  majority_id: 1
+  seeds: [0, 1, 42]
+  total_episodes: 5000
+  reward_mode: wgl
+  dp_protected_col: sex
+
+grid:
+  reward_shaping.global_sigmoid_k: [1, 3, 5, 10]
+  pca_components: [5, 10, 15]
+  ffnn.epochs: [10, 20, 40]
+  zip:
+    traj_length:    [1000, 2000, 3000, 4000]  # synthetic: 20/40/60/80% of 5000 total
+    real_data_size: [4000, 3000, 2000, 1000]  # real:      80/60/40/20% of 5000 total
+
+slurm:
+  account: rrg-kgroling
+  time: "17:00:00"
+  mem: "3G"
+  cpus: 2
+  gpu: 1

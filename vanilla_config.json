@@ -44,7 +44,8 @@
     "hidden_sizes": [32, 16],
     "learning_rate": 0.001,
     "batch_size": 64,
-    "epochs": 20
+    "epochs": 20,
+    "optimizer": "adam"
   },
 
   "reinforce": {
@@ -52,7 +53,8 @@
     "lr": 0.0003,
     "gamma": 1.0,
     "entropy_start": 0.02,
-    "entropy_end": 0.005
+    "entropy_end": 0.005,
+    "optimizer": "adam"
   },
 
   "curriculum": {

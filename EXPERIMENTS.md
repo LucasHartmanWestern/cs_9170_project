@@ -33,7 +33,10 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-016 | wgl-k-sweep | ABLATION | PLANNED | census, capture24, compas | — |
 | EXP-017 | roc-eo-lambda-sweep | ABLATION | PLANNED | census, capture24, compas | — |
 | EXP-018 | baselines | PAPER-FINAL | COMPLETE | census, capture24, compas | — |
-| EXP-019 | natural-scarcity-rl | EXPLORATORY | PLANNED | census, capture24, compas | EXP-016 |
+| EXP-019 | natural-scarcity-rl | EXPLORATORY | IN PROGRESS | census, capture24, compas | EXP-016 |
+| EXP-020 | natural-scarcity-baselines | EXPLORATORY | PLANNED | census, capture24, compas | EXP-019 |
+| EXP-021 | census-hparam-grid | PARAM-TUNING | PLANNED | census | EXP-001 |
+| EXP-022 | census-hparam-random | PARAM-TUNING | PLANNED | census | EXP-021 |
 
 ---
 
@@ -515,7 +518,10 @@ Episode convergence is read from gen-curves (`check_run.py --interval 250`) — 
 **Next steps:**
 Use best k per dataset as the reference config for final paper results.
 
-**Note (2026-04-16):** Seeds 42 and 0 complete for all configs/datasets. Seed 1 for census and compas wgl_k{0,3,5,10} was running on DRAC but too slow to queue; re-running locally on cuda:0/1 via `run_seed1_gpu0.sh` / `run_seed1_gpu1.sh`. Will be consolidated into existing run dirs on completion. capture24 seed 1 already complete.
+**Seed 1 status (updated 2026-04-18):**
+- census wgl_k{0,3,5,10}: all complete. k3 seed_1 was in orphaned directory after consolidation script bug; manually moved into correct run dir.
+- capture24 wgl_k{0,3,5,10}: all complete.
+- compas wgl_k0, k10: complete. compas wgl_k3 seed_1: moved from orphaned dir (same consolidation bug). compas wgl_k5 seed_1: **RUNNING** on cuda:1 via `run_missing_seed1_gpu1.sh`.
 
 ---
 
@@ -552,7 +558,10 @@ No sigmoid is applied to `roc_eo` (k is not used in this mode). λ is the struct
 **Next steps:**
 If `roc_eo` matches best `wgl` on both axes, consider it as the primary reward for the paper (simpler formulation, no alpha reference baseline needed). If it underperforms, retain `wgl` as primary and present `roc_eo` as a design ablation.
 
-**Note (2026-04-16):** Seeds 42 and 0 complete for all configs/datasets. Seed 1 for census roc_eo_lam{05,07} and compas roc_eo_lam{03,05,07} was running on DRAC but too slow to queue; re-running locally on cuda:0/1 via `run_seed1_gpu0.sh` / `run_seed1_gpu1.sh`. Will be consolidated into existing run dirs on completion. capture24 seed 1 and census lam03 seed 1 already complete.
+**Seed 1 status (updated 2026-04-18):**
+- census roc_eo_lam{03,05}: complete. census roc_eo_lam07 seed_1: **RUNNING** on cuda:0 via `run_missing_seed1_gpu0.sh`.
+- capture24 roc_eo_lam{03,05,07}: all complete.
+- compas roc_eo_lam{03,05,07}: seed_1 runs were found incomplete (stopped at ep 1193, 2000, 3984 respectively). Fresh runs launched: lam03 and lam07 **RUNNING** on cuda:0, lam05 **RUNNING** on cuda:1 via `run_missing_seed1_gpu0/1.sh`. Old partial seed_1 directories remain in place until new runs complete and are swapped in.
 
 ---
 
@@ -675,6 +684,62 @@ Robustness/generalisation check: does the method still improve fairness when not
 - Does GroupDRO outperform RL here (as expected when reweighting methods are not disadvantaged)?
 - Does COMPAS behave better at DA+≈330 — does the val_disadv_pos threshold now pass?
 
+**Result (census, partial — seed_1 incomplete):**
+
+| Seed | α-EO | β-EO | EO-Δ | α-F1w | β-F1w | F1w-Δ | Deadzone | Best Ep |
+|------|-------|-------|-------|-------|-------|-------|----------|---------|
+| 0 | 0.056 | 0.013 | -0.043 | 0.837 | 0.827 | -0.009 | 4.7% | 1460 |
+| 42 | 0.120 | 0.034 | -0.086 | 0.834 | 0.825 | -0.009 | 0.2% | 1015 |
+| 1 | — | — | — | — | — | — | 11.7% | 2355 |
+
+Mean over 2 complete seeds: α-EO=0.088±0.045, β-EO=0.023±0.015, F1w-Δ=−0.009.
+
+Run directory: `training_runs/SPECcensus_natural_scarcity_EP5000_PCA10_REWwgl_minID0_majID1_TRJ2000_REAL3000_GG202604151710_12170614`
+
+Seed 1 stopped at ep 3788 with no test metrics — needs re-run. Not currently queued.
+
+**Takeaway:**
+*(partial — census only, 2 seeds)* Method still reduces EO substantially at natural scarcity (β-EO=0.023 from α-EO=0.088 mean). Low deadzone on both seeds indicates healthy reward signal with more minority data. F1w drops by ~0.009 consistently — a modest utility cost. α-EO variance across seeds (0.056 vs 0.120) is notable; the data split at da_pct=0.11 is less constrained than at da_pct=0.014 so this is expected.
+
+**Next steps:**
+- Re-run census seed_1 (stopped at ep 3788).
+- Run capture24 and compas natural scarcity RL once EXP-016 best-k is confirmed.
+- Compare against EXP-020 baselines once those are run.
+
+---
+
+### EXP-020 | natural-scarcity-baselines
+
+**Type:** EXPLORATORY
+**Status:** PLANNED
+**Dataset(s):** census_income, capture24, compas (race)
+**Seeds:** 42, 0, 1 (3 seeds each)
+**Reference config:** n/a (baselines)
+**Config delta:** n/a
+**Follows from:** EXP-019
+
+---
+
+**Purpose:**
+Baseline comparisons at the natural scarcity regime (da_pct=0.11, DA+≈330 for census). Mirrors EXP-018 but at the higher positive-class rate to assess whether the advantage of RL over generative baselines persists outside severe scarcity, or whether methods converge as more minority data becomes available.
+
+Same baseline set as EXP-018: GroupDRO, OT Repair, FLB, CTGAN, SMOTE, FairTabDDPM. Same FFNN architecture and PCA config for comparability.
+
+**Key setup details:**
+- da_pct=0.11, real_data_size=3000 → DA+≈330 for census
+- Seeds: [42, 0, 1] — same as RL experiments
+- All other config identical to EXP-018 (FFNN hidden=[32,16], lr=0.001, batch=64, epochs=20, PCA=10, n_synthetic=2000, GroupDRO/FLB epochs=200)
+- capture24: win_seconds=1.0, step_seconds=0.5
+- compas: dp_protected_col="race"
+
+**Key questions:**
+- Do CTGAN/FairTabDDPM still degrade at natural scarcity, or does more minority data make naive generation viable?
+- Does GroupDRO now outperform RL (as expected when reweighting methods are not constrained by scarcity)?
+- Is the RL EO advantage (EXP-019) meaningful relative to the best baselines here?
+
+**Specs:**
+*(to be generated — use `make_spec.py` mirroring EXP-018 specs but with da_pct=0.11)*
+
 **Result:**
 *(pending)*
 
@@ -682,4 +747,96 @@ Robustness/generalisation check: does the method still improve fairness when not
 *(pending)*
 
 **Next steps:**
+Generate specs and run baselines for census first; extend to capture24 and compas once EXP-019 RL results are in for those datasets.
+
+---
+
+### EXP-021 | census-hparam-grid
+
+**Type:** PARAM-TUNING
+**Status:** PLANNED
+**Dataset(s):** census_income (da_pct=0.01433, DA+=43)
+**Seeds:** 0, 1, 42
+**Reference config:** vanilla_config.json
+**Config delta:** Full cartesian grid — see below
+**Follows from:** EXP-001
+
+---
+
+**Purpose:**
+Systematic grid search over four principal hyperparameters to identify the best configuration for census. Replaces the ad-hoc per-parameter tuning in EXP-003/005/009/011 with a single joint sweep.
+
+**Parameters swept:**
+
+| Parameter | Values | Rationale |
+|---|---|---|
+| `reward_shaping.global_sigmoid_k` | [1, 3, 5, 10] | Controls reward sensitivity; k=10 is current vanilla |
+| `pca_components` | [5, 10, 15] | Feature compression; 10 is current vanilla |
+| `traj_length` + `real_data_size` | (1000,4000) / (2000,3000) / (3000,2000) / (4000,1000) | Synthetic at 20/40/60/80% of total training data (total fixed at 5000) |
+| `ffnn.epochs` | [10, 20, 40] | Classifier training intensity; 20 is current vanilla |
+
+Total: 4k × 3pca × 3epochs × 4synth-ratios = **144 specs × 3 seeds = 432 runs**
+
+**Fixed base patches:** dataset_name=census_income, da_pct=0.01433, minority_id=0, majority_id=1, seeds=[0,1,42], total_episodes=5000, reward_mode=wgl, dp_protected_col=sex. Total training data fixed at 5000 across all synth-ratio conditions.
+
+**Spec generation:**
+```
+python make_search_specs.py search_configs/census_grid.yaml
+# → experiment_specs/census_grid/ (144 specs)
+```
+
+**Selection criterion:** Best config = lowest mean β-EO across 3 seeds, with β-F1w ≥ α-F1w − 0.02 (utility guard).
+
+**Result:**
 *(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+Feed best principal params into EXP-022 base_patches before running random search.
+
+---
+
+### EXP-022 | census-hparam-random
+
+**Type:** PARAM-TUNING
+**Status:** PLANNED
+**Dataset(s):** census_income (da_pct=0.01433, DA+=43)
+**Seeds:** 0, 1, 42
+**Reference config:** vanilla_config.json + best params from EXP-021
+**Config delta:** Random search over secondary hyperparameters — see below
+**Follows from:** EXP-021
+
+---
+
+**Purpose:**
+Random search over secondary (optimisation) hyperparameters, conditioned on the best principal config found in EXP-021. Covers learning rates, delta scale, and optimisers for both the classifier and RL agent.
+
+**Parameters swept:**
+
+| Parameter | Distribution | Range |
+|---|---|---|
+| `ffnn.learning_rate` | log-uniform | [1e-4, 1e-2] |
+| `reinforce.lr` | log-uniform | [1e-5, 1e-3] |
+| `delta_scale` | uniform | [0.05, 0.30] |
+| `ffnn.optimizer` | choice | adam, adamw, sgd |
+| `reinforce.optimizer` | choice | adam, adamw |
+
+20 samples × 3 seeds = **60 runs**. RNG seed=0 for reproducibility.
+
+**Spec generation:**
+```
+# First update search_configs/census_random.yaml base_patches with best params from EXP-021
+python make_search_specs.py search_configs/census_random.yaml
+# → experiment_specs/census_random/ (20 specs)
+```
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+Use best combined config (EXP-021 + EXP-022) as the new census vanilla for final paper runs.

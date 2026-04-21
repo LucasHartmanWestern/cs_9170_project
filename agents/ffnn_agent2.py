@@ -2,6 +2,19 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+_OPTIMIZERS = {
+    "adam":    optim.Adam,
+    "adamw":   optim.AdamW,
+    "sgd":     optim.SGD,
+    "rmsprop": optim.RMSprop,
+}
+
+def _build_optimizer(name: str, params, lr: float):
+    cls = _OPTIMIZERS.get(name.lower(), optim.Adam)
+    if cls is optim.SGD:
+        return cls(params, lr=lr, momentum=0.9)
+    return cls(params, lr=lr)
+
 # torch.backends.cudnn.deterministic = True
 # torch.backends.cudnn.benchmark = False
 # torch.use_deterministic_algorithms(True) 
@@ -40,9 +53,9 @@ class FFNNModel(nn.Module):
 
 
 class FFNNAgent:
-    def __init__(self, input_size, hidden_sizes=[64, 64], output_size=1, 
-                 learning_rate=0.001, batch_size=32, epochs=100, type="regression", 
-                 classes=None, device='cpu', seed=42):
+    def __init__(self, input_size, hidden_sizes=[64, 64], output_size=1,
+                 learning_rate=0.001, batch_size=32, epochs=100, type="regression",
+                 classes=None, device='cpu', seed=42, optimizer="adam"):
         super(FFNNAgent, self).__init__()
         self.device = device 
         self.seed   = seed
@@ -51,11 +64,12 @@ class FFNNAgent:
         print(f"FFNN Using device: {self.device}")
         self.dl_generator = torch.Generator().manual_seed(self.seed)
 
-        self.input_size   = input_size
-        self.hidden_sizes = hidden_sizes
-        self.batch_size   = batch_size
-        self.epochs       = epochs
+        self.input_size    = input_size
+        self.hidden_sizes  = hidden_sizes
+        self.batch_size    = batch_size
+        self.epochs        = epochs
         self.learning_rate = learning_rate
+        self.optimizer_name = optimizer.lower()
         self.type = type
 
 
@@ -75,25 +89,15 @@ class FFNNAgent:
         
 
         # Initialize model
-        self.model = FFNNModel(input_size, hidden_sizes, self.output_size).to(self.device) 
-        # Initialize optimizer
-        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.model = FFNNModel(input_size, hidden_sizes, self.output_size).to(self.device)
+        self.optimizer = _build_optimizer(self.optimizer_name, self.model.parameters(), learning_rate)
         self.criterion = (
             nn.MSELoss()
             if self.type == "regression"
             else nn.CrossEntropyLoss()
         )
         with torch.no_grad():
-            # Keep snapshot on the same device;
             self._init_state = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
-        # Keep optimizer settings to build fresh optimizer each reset
-        self._optim_cfg = dict(
-            lr=self.learning_rate,
-            betas=self.optimizer.defaults.get('betas', (0.9, 0.999)),
-            eps=self.optimizer.defaults.get('eps', 1e-8),
-            weight_decay=self.optimizer.defaults.get('weight_decay', 0.0),
-            amsgrad=self.optimizer.defaults.get('amsgrad', False),
-        )
     
     def reset(self):
         """
@@ -103,8 +107,7 @@ class FFNNAgent:
         with torch.no_grad():
             self.model.load_state_dict(self._init_state, strict=True)
 
-        # Fresh optimizer so Adam/SGD momentum/EMA buffers are reset too
-        self.optimizer = optim.Adam(self.model.parameters(), **self._optim_cfg)
+        self.optimizer = _build_optimizer(self.optimizer_name, self.model.parameters(), self.learning_rate)
 
         # Criterion doesn’t need re-instantiation unless you actually change task type,
         # but keep it if you prefer explicitness:
@@ -205,6 +208,7 @@ class FFNNAgent:
             'hidden_sizes':         self.hidden_sizes,
             'output_size':          self.output_size,
             'learning_rate':        self.learning_rate,
+            'optimizer_name':       self.optimizer_name,
             'batch_size':           self.batch_size,
             'epochs':               self.epochs,
             'type':                 self.type,
@@ -248,7 +252,8 @@ class FFNNAgent:
         ).to(self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        self.optimizer_name = checkpoint.get('optimizer_name', 'adam')
+        self.optimizer = _build_optimizer(self.optimizer_name, self.model.parameters(), self.learning_rate)
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
         # Make sure optimizer tensors are on the right device

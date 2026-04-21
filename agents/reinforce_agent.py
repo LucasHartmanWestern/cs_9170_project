@@ -2,7 +2,21 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 from torch.distributions import Normal
+
+_OPTIMIZERS = {
+    "adam":    optim.Adam,
+    "adamw":   optim.AdamW,
+    "sgd":     optim.SGD,
+    "rmsprop": optim.RMSprop,
+}
+
+def _build_optimizer(name: str, params, lr: float):
+    cls = _OPTIMIZERS.get(name.lower(), optim.Adam)
+    if cls is optim.SGD:
+        return cls(params, lr=lr, momentum=0.9)
+    return cls(params, lr=lr)
 
 LOG_STD_MIN, LOG_STD_MAX = -5.0, 2.0
 
@@ -33,7 +47,7 @@ class PolicyNetwork(nn.Module):  # Policy network for continuous actions
         return mean, log_std
 
 class ReinforceAgent():
-    def __init__(self, state_size, action_size, hidden_sizes, total_episodes, lr, gamma, entropy_start=1e-2, entropy_end=0.0, seed=42, device='cpu'):
+    def __init__(self, state_size, action_size, hidden_sizes, total_episodes, lr, gamma, entropy_start=1e-2, entropy_end=0.0, seed=42, device='cpu', optimizer="adam"):
         self.seed = seed
         torch.manual_seed(self.seed)
         if torch.cuda.is_available():
@@ -51,7 +65,7 @@ class ReinforceAgent():
         self.gamma = gamma
         self.entropy_start = entropy_start
         self.entropy_end = entropy_end
-        self.optimizer = torch.optim.Adam(self.policy_network.parameters(), lr=lr)
+        self.optimizer = _build_optimizer(optimizer, self.policy_network.parameters(), lr)
 
         # Cross-episode running baseline (EMA of mean per-step reward)
         self._baseline_ema = 0.0

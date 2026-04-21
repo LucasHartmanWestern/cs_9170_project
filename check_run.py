@@ -357,18 +357,15 @@ def plot_learning_curves(seed_dfs: list[tuple[int, pd.DataFrame]], out_path: Pat
             phase1 = df[phase_col.astype(str).str.startswith("phase1")]
             x = phase1["global_ep"].values
             y = phase1[col].values
-            ax.plot(x, y, alpha=0.3, linewidth=0.8, label=f"seed {seed}")
             all_curves.append((x, y))
 
         if all_curves:
-            # interpolate to common x grid for mean/std band
             min_len = min(len(c[1]) for c in all_curves)
             ys = np.array([c[1][:min_len] for c in all_curves])
             xs = all_curves[0][0][:min_len]
             mean = ys.mean(axis=0)
-            std  = ys.std(axis=0)
-            ax.plot(xs, mean, color="black", linewidth=1.8, label="mean")
-            ax.fill_between(xs, mean - std, mean + std, alpha=0.15, color="black")
+            ax.fill_between(xs, ys.min(axis=0), ys.max(axis=0), alpha=0.2, color="steelblue", label="seed range")
+            ax.plot(xs, mean, color="steelblue", linewidth=1.8, label="mean")
 
         ax.set_xlabel("Episode")
         ax.set_ylabel(ylabel)
@@ -377,7 +374,7 @@ def plot_learning_curves(seed_dfs: list[tuple[int, pd.DataFrame]], out_path: Pat
         ax.spines["right"].set_visible(False)
         ax.legend(fontsize=7, loc="best")
 
-    fig.suptitle("Learning Curves (Phase 1, Validation)", fontsize=11, fontweight="bold")
+    fig.suptitle("Learning Curves (Validation)", fontsize=11, fontweight="bold")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -396,17 +393,15 @@ def plot_gen_curves(seed_curves: list[tuple[int, pd.DataFrame]], out_path: Path)
                 continue
             x = df["episode"].values
             y = df[col].values
-            ax.plot(x, y, alpha=0.4, linewidth=0.9, marker="o", markersize=3, label=f"seed {seed}")
             all_curves.append((x, y))
 
-        if len(all_curves) > 1:
+        if all_curves:
             min_len = min(len(c[1]) for c in all_curves)
             ys = np.array([c[1][:min_len] for c in all_curves])
             xs = all_curves[0][0][:min_len]
             mean = ys.mean(axis=0)
-            std  = ys.std(axis=0)
-            ax.plot(xs, mean, color="black", linewidth=2.0, label="mean", marker="o", markersize=4)
-            ax.fill_between(xs, mean - std, mean + std, alpha=0.15, color="black")
+            ax.fill_between(xs, ys.min(axis=0), ys.max(axis=0), alpha=0.2, color="steelblue", label="seed range")
+            ax.plot(xs, mean, color="steelblue", linewidth=2.0, marker="o", markersize=4, label="mean")
 
         ax.set_xlabel("Episode")
         ax.set_ylabel(ylabel)
@@ -415,7 +410,7 @@ def plot_gen_curves(seed_curves: list[tuple[int, pd.DataFrame]], out_path: Path)
         ax.spines["right"].set_visible(False)
         ax.legend(fontsize=7)
 
-    fig.suptitle("Generalizability Curve (Test Set, Phase 1 Synthetic Only)", fontsize=11, fontweight="bold")
+    fig.suptitle("Generalizability Curve (Test Set)", fontsize=11, fontweight="bold")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
