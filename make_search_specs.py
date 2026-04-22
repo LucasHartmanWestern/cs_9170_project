@@ -146,6 +146,59 @@ python -u main.py --spec {spec_path} --device cuda:0
 """
 
 
+def make_bundle_slurm(spec_paths: list, bundle_name: str, out_dir: str, slurm: dict) -> str:
+    """Generate a SLURM script that runs multiple specs in parallel on one GPU."""
+    account     = slurm.get("account",     "def-mcapretz")
+    time        = slurm.get("time",        "16:00:00")
+    bundle_size = len(spec_paths)
+    # Each spec needs ~1 CPU (OMP_NUM_THREADS=1); memory scales with bundle size
+    base_mem_gb = int(slurm.get("mem", "6G").rstrip("G"))
+    total_mem   = f"{base_mem_gb * bundle_size}G"
+    total_cpus  = bundle_size
+    gpu         = slurm.get("gpu", 1)
+    log_dir     = f"{out_dir}/logs"
+    job_name    = bundle_name[:16]
+
+    # Build the parallel launch block: each spec backgrounded, piped to its own log
+    launch_lines = []
+    for i, sp in enumerate(spec_paths):
+        spec_stem = os.path.splitext(os.path.basename(sp))[0]
+        launch_lines.append(
+            f"python -u main.py --spec {sp} --device cuda:0 "
+            f"> {log_dir}/{spec_stem}.out 2> {log_dir}/{spec_stem}.err &"
+        )
+    launch_block = "\n".join(launch_lines)
+
+    return f"""#!/bin/bash
+#SBATCH --job-name={job_name}
+#SBATCH --account={account}
+#SBATCH --time={time}
+#SBATCH --mem={total_mem}
+#SBATCH --cpus-per-task={total_cpus}
+#SBATCH --gres=gpu:{gpu}
+#SBATCH --output={log_dir}/{bundle_name}.out
+#SBATCH --error={log_dir}/{bundle_name}.err
+
+set -euo pipefail
+
+export TORCH_COMPILE_DISABLE=1
+export TORCHDYNAMO_DISABLE=1
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
+module purge
+module load python/3.12.4 cuda cudnn
+source ~/envs/rl/bin/activate
+mkdir -p {log_dir}
+
+{launch_block}
+wait
+echo "Bundle {bundle_name} complete."
+"""
+
+
 # ─── sampling ───────────────────────────────────────────────────────────────
 
 def sample_param(cfg: dict, rng: random.Random) -> object:
@@ -184,7 +237,8 @@ def main():
     os.makedirs(out_dir)
     os.makedirs(os.path.join(out_dir, "logs"))
 
-    generated = []
+    bundle_size = int(slurm.get("bundle_size", 1))
+    generated = []   # list of (spec_name, spec_path)
 
     # ── grid search ───────────────────────────────────────────────────────
     if "grid" in cfg:
@@ -223,13 +277,9 @@ def main():
                 label = "_".join(short_label(k, v) for k, v in patches.items())
                 spec_name = f"grid_{label}"
                 spec_path = os.path.join(out_dir, f"{spec_name}.json")
-                sh_path   = os.path.join(out_dir, f"{spec_name}.sh")
 
                 save_json(spec, spec_path)
-                with open(sh_path, "w") as f:
-                    f.write(make_slurm(spec_path, spec_name, out_dir, slurm))
-
-                generated.append(spec_name)
+                generated.append((spec_name, spec_path))
 
     # ── random search ─────────────────────────────────────────────────────
     if "random" in cfg:
@@ -247,25 +297,58 @@ def main():
             label = f"{i:04d}_" + "_".join(short_label(k, v) for k, v in patches.items())
             spec_name = f"rand_{label}"
             spec_path = os.path.join(out_dir, f"{spec_name}.json")
-            sh_path   = os.path.join(out_dir, f"{spec_name}.sh")
 
             save_json(spec, spec_path)
+            generated.append((spec_name, spec_path))
+
+    # ── generate SLURM scripts ────────────────────────────────────────────
+    sh_files = []
+    if bundle_size <= 1:
+        # One .sh per spec
+        for spec_name, spec_path in generated:
+            sh_path = os.path.join(out_dir, f"{spec_name}.sh")
             with open(sh_path, "w") as f:
                 f.write(make_slurm(spec_path, spec_name, out_dir, slurm))
+            sh_files.append(sh_path)
+    else:
+        # Group specs into bundles of bundle_size; one .sh per bundle
+        spec_list = [(sn, sp) for sn, sp in generated]
+        n_bundles = math.ceil(len(spec_list) / bundle_size)
+        digits = len(str(n_bundles))
+        for b_idx in range(n_bundles):
+            chunk = spec_list[b_idx * bundle_size : (b_idx + 1) * bundle_size]
+            bundle_name = f"bundle_{b_idx:0{digits}d}"
+            paths_in_bundle = [sp for _, sp in chunk]
+            sh_path = os.path.join(out_dir, f"{bundle_name}.sh")
+            with open(sh_path, "w") as f:
+                f.write(make_bundle_slurm(paths_in_bundle, bundle_name, out_dir, slurm))
+            sh_files.append(sh_path)
+        print(f"  Bundled {len(generated)} specs into {n_bundles} jobs (bundle_size={bundle_size})")
 
-            generated.append(spec_name)
+    # ── submit_all.sh ─────────────────────────────────────────────────────
+    submit_path = os.path.join(out_dir, "submit_all.sh")
+    with open(submit_path, "w") as f:
+        f.write("#!/bin/bash\n")
+        f.write("# Submit all SLURM jobs for this search\n")
+        f.write(f"cd \"$(dirname \"$0\")/../..\"\n")  # cd to project root
+        for sh in sh_files:
+            f.write(f"sbatch {sh}\n")
+    os.chmod(submit_path, 0o755)
 
     print(f"Generated {len(generated)} specs in {out_dir}/")
-    print(f"  {sum(1 for s in generated if s.startswith('grid_'))} grid specs")
-    print(f"  {sum(1 for s in generated if s.startswith('rand_'))} random specs")
+    print(f"  {sum(1 for s, _ in generated if s.startswith('grid_'))} grid specs")
+    print(f"  {sum(1 for s, _ in generated if s.startswith('rand_'))} random specs")
+    print(f"  {len(sh_files)} SLURM job scripts")
+    print(f"  submit_all.sh: {submit_path}")
 
     # Write a manifest for easy reference
     manifest_path = os.path.join(out_dir, "manifest.txt")
     with open(manifest_path, "w") as f:
         f.write(f"Search: {name}\n")
         f.write(f"Base:   {base_path}\n")
-        f.write(f"Count:  {len(generated)}\n\n")
-        for s in generated:
+        f.write(f"Count:  {len(generated)}\n")
+        f.write(f"Bundle size: {bundle_size}\n\n")
+        for s, _ in generated:
             f.write(s + "\n")
     print(f"  Manifest: {manifest_path}")
 

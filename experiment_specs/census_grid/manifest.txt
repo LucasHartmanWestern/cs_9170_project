@@ -1,6 +1,7 @@
 Search: census_grid
 Base:   vanilla_config.json
 Count:  144
+Bundle size: 4
 
 grid_global_sigmoid_k1_pca_components5_epochs10_traj_length1000_real_data_size4000
 grid_global_sigmoid_k1_pca_components5_epochs20_traj_length1000_real_data_size4000

@@ -113,6 +113,7 @@ class EpisodeTracker:
     def __init__(self, run_stats: dict, dataset, save_dir: str = "runs",
                  capture_console: bool = True,
                  ckpt_every: int = 5,
+                 beta_ckpt_every: int = 20,
                  compare_metric: str = "reward.avg_reward",
                  flush_every_episodes: int = 10,
                  snapshot_csv: bool = False,
@@ -127,6 +128,7 @@ class EpisodeTracker:
         self.t0 = time.time()
         self.compare_metric = compare_metric
         self.ckpt_every = max(1, int(ckpt_every))
+        self.beta_ckpt_every = max(1, int(beta_ckpt_every))
         self.snapshot_csv = bool(snapshot_csv)
         self.beta_factory = beta_factory
 
@@ -365,6 +367,7 @@ class EpisodeTracker:
         When phase_label is None: existing behavior (backward compatible).
         """
         save_snap = (episode_num % self.ckpt_every == 0)
+        save_beta_snap = (episode_num % self.beta_ckpt_every == 0)
 
         if metrics_flat_override is not None:
             flat_row = dict(metrics_flat_override)
@@ -390,7 +393,7 @@ class EpisodeTracker:
             beta_path = self.best_beta_path
             beta_meta = self.best_beta_meta
 
-        if not (save_snap or is_best):
+        if not (save_snap or save_beta_snap or is_best):
             return
 
         # Convert to numpy once
@@ -412,6 +415,12 @@ class EpisodeTracker:
                 snap_csv = self.snap_dir / f"synthetic_ep{episode_num:04d}{suffix}.csv"
                 df.to_csv(snap_csv, index=False)
             print(f"[Tracker] Saved snapshot: ep{episode_num:04d}{suffix}")
+
+        # Periodic beta checkpoint
+        if save_beta_snap and beta_model is not None:
+            suffix = f"_{phase_label}" if phase_label else ""
+            snap_beta = self.snap_dir / f"beta_ep{episode_num:04d}{suffix}.pt"
+            torch.save(beta_model.model.state_dict(), snap_beta)
 
         # Best-so-far
         if is_best:

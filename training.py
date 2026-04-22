@@ -1228,7 +1228,7 @@ class Training:
         # Snapshot every N episodes — auto-scaled so long runs don't create thousands of files.
         # Target ~100 snapshots per run regardless of episode count.
         # Gen-curve (check_run.py) picks the nearest available snapshot, so coarser is fine.
-        _ckpt_every = max(5, self.episodes // 100)
+        _ckpt_every = 150
 
         with EpisodeTracker(
             run_stats,
