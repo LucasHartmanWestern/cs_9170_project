@@ -16,12 +16,12 @@ grid:
   pca_components: [5, 10, 15]
   ffnn.epochs: [10, 20, 40]
   zip:
-    traj_length:    [1000, 2000, 3000, 4000]  # synthetic: 20/40/60/80% of 5000 total
-    real_data_size: [4000, 3000, 2000, 1000]  # real:      80/60/40/20% of 5000 total
+    traj_length:    [1000, 2000, 3000]  # synthetic: 20/40/60% of 5000 total
+    real_data_size: [4000, 3000, 2000]  # real:      80/60/40% of 5000 total
 
 slurm:
   account: rrg-kgroling
-  time: "17:00:00"
+  time: "48:00:00"
   mem: "3G"
   cpus: 1
   gpu: 1

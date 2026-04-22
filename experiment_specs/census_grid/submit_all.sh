@@ -28,12 +28,3 @@ sbatch experiment_specs/census_grid/bundle_23.sh
 sbatch experiment_specs/census_grid/bundle_24.sh
 sbatch experiment_specs/census_grid/bundle_25.sh
 sbatch experiment_specs/census_grid/bundle_26.sh
-sbatch experiment_specs/census_grid/bundle_27.sh
-sbatch experiment_specs/census_grid/bundle_28.sh
-sbatch experiment_specs/census_grid/bundle_29.sh
-sbatch experiment_specs/census_grid/bundle_30.sh
-sbatch experiment_specs/census_grid/bundle_31.sh
-sbatch experiment_specs/census_grid/bundle_32.sh
-sbatch experiment_specs/census_grid/bundle_33.sh
-sbatch experiment_specs/census_grid/bundle_34.sh
-sbatch experiment_specs/census_grid/bundle_35.sh
