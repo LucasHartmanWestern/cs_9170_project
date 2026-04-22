@@ -507,13 +507,18 @@ class EpisodeTracker:
         seed: int | None = None,
         a_test: torch.Tensor | None = None,   # <--- NEW
     ):
+        # Prefer phase-labelled best checkpoint (phase1_class1) if it exists,
+        # since maybe_save_synthetic always writes the phase-labelled path.
+        _phase1_path = self.seed_dir / "best_beta_state_dict_phase1_class1.pt"
+        _best_beta_path = _phase1_path if _phase1_path.exists() else self.best_beta_path
+
         tests = TestSuite(
             seed_dir=self.seed_dir,
             experiment_dir=self.experiment_dir,
             seed=self.seed,
             run_id=self.run_id,
             beta_factory=self.beta_factory,
-            best_beta_path=self.best_beta_path,
+            best_beta_path=_best_beta_path,
             alpha_factory=self.alpha_factory if hasattr(self, "alpha_factory") else self.beta_factory,
             dataset=self.dataset
         )
