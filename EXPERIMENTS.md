@@ -35,7 +35,7 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-018 | baselines | PAPER-FINAL | COMPLETE | census, capture24, compas | — |
 | EXP-019 | natural-scarcity-rl | EXPLORATORY | IN PROGRESS | census, capture24, compas | EXP-016 |
 | EXP-020 | natural-scarcity-baselines | EXPLORATORY | PLANNED | census, capture24, compas | EXP-019 |
-| EXP-021 | census-hparam-grid | PARAM-TUNING | PLANNED | census | EXP-001 |
+| EXP-021 | census-hparam-grid | PARAM-TUNING | IN PROGRESS | census | EXP-001 |
 | EXP-022 | census-hparam-random | PARAM-TUNING | PLANNED | census | EXP-021 |
 
 ---
@@ -754,7 +754,7 @@ Generate specs and run baselines for census first; extend to capture24 and compa
 ### EXP-021 | census-hparam-grid
 
 **Type:** PARAM-TUNING
-**Status:** PLANNED
+**Status:** IN PROGRESS
 **Dataset(s):** census_income (da_pct=0.01433, DA+=43)
 **Seeds:** 0, 1, 42
 **Reference config:** vanilla_config.json
@@ -786,6 +786,27 @@ python make_search_specs.py search_configs/census_grid.yaml
 ```
 
 **Selection criterion:** Best config = lowest mean β-EO across 3 seeds, with β-F1w ≥ α-F1w − 0.02 (utility guard).
+
+---
+
+**Submission Tracker — census grid (144 specs)**
+
+Division: DRAC runs all k=10 (36 specs, SLURM). Huron runs k=1, Lambda runs k=3, Aulavik runs k=5 (36 specs each, split 18/18 across the two GPUs). Local servers run sequentially per GPU: `python main.py --spec <spec>.json --device cuda:N`.
+
+| Resource | k | Specs | Status | Command |
+|---|---|---|---|---|
+| DRAC | k=10 | 1–30 | **RUNNING** | `for f in $(ls experiment_specs/census_grid/*.sh \| head -30); do sbatch "$f"; done` |
+| DRAC | k=10 | 31–36 | PENDING | `for f in $(ls experiment_specs/census_grid/*.sh \| head -36 \| tail -6); do sbatch "$f"; done` |
+| Huron GPU 0 | k=1 | 37–54 | PENDING | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k1_" \| head -18); do python main.py --spec "$f" --device cuda:0; done` |
+| Huron GPU 1 | k=1 | 55–72 | PENDING | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k1_" \| tail -18); do python main.py --spec "$f" --device cuda:1; done` |
+| Lambda GPU 0 | k=3 | 73–90 | PENDING | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k3_" \| head -18); do python main.py --spec "$f" --device cuda:0; done` |
+| Lambda GPU 1 | k=3 | 91–108 | PENDING | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k3_" \| tail -18); do python main.py --spec "$f" --device cuda:1; done` |
+| Aulavik GPU 0 | k=5 | 109–126 | PENDING | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k5_" \| head -18); do python main.py --spec "$f" --device cuda:0; done` |
+| Aulavik GPU 1 | k=5 | 127–144 | PENDING | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k5_" \| tail -18); do python main.py --spec "$f" --device cuda:1; done` |
+
+**Completed specs:** *(none yet — update as results arrive)*
+
+---
 
 **Result:**
 *(pending)*
