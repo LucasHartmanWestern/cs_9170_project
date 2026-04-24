@@ -157,6 +157,7 @@ class Dataset:
             skipinitialspace=True
         )
 
+        X_df_raw = X_df_raw.dropna()
         y_raw = np.where(X_df_raw["income"].isin([">50K", ">50K."]), 1, 0).astype(int)
         X_df_raw = X_df_raw.drop(columns=["income"])
 
