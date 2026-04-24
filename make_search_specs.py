@@ -310,19 +310,64 @@ def main():
                 f.write(make_slurm(spec_path, spec_name, out_dir, slurm))
             sh_files.append(sh_path)
     else:
-        # Group specs into bundles of bundle_size; one .sh per bundle
-        spec_list = [(sn, sp) for sn, sp in generated]
-        n_bundles = math.ceil(len(spec_list) / bundle_size)
-        digits = len(str(n_bundles))
-        for b_idx in range(n_bundles):
-            chunk = spec_list[b_idx * bundle_size : (b_idx + 1) * bundle_size]
-            bundle_name = f"bundle_{b_idx:0{digits}d}"
-            paths_in_bundle = [sp for _, sp in chunk]
-            sh_path = os.path.join(out_dir, f"{bundle_name}.sh")
-            with open(sh_path, "w") as f:
-                f.write(make_bundle_slurm(paths_in_bundle, bundle_name, out_dir, slurm))
-            sh_files.append(sh_path)
-        print(f"  Bundled {len(generated)} specs into {n_bundles} jobs (bundle_size={bundle_size})")
+        # Group specs into bundles of bundle_size; one .sh per bundle.
+        # If bundle_group_by is set, specs are partitioned by that parameter value
+        # before bundling — bundles never cross group boundaries and are named
+        # {short_key}{value}_bundle_{idx:02d} (e.g. k0_bundle_01).
+        group_by = slurm.get("bundle_group_by")
+
+        def _get_nested(d, dotted_key):
+            for part in dotted_key.split("."):
+                d = d.get(part, "")
+            return d
+
+        def _group_label(dotted_key):
+            # e.g. "reward_shaping.global_sigmoid_k" -> "k"
+            return dotted_key.split(".")[-1].replace("global_sigmoid_", "")
+
+        if group_by:
+            from collections import defaultdict
+            groups = defaultdict(list)
+            for spec_name, spec_path in generated:
+                spec_dict = load_yaml(spec_path)
+                gval = str(_get_nested(spec_dict, group_by))
+                groups[gval].append((spec_name, spec_path))
+
+            prefix_key = _group_label(group_by)
+            total_bundles = 0
+            try:
+                sorted_gvals = sorted(groups.keys(), key=float)
+            except ValueError:
+                sorted_gvals = sorted(groups.keys())
+
+            for gval in sorted_gvals:
+                group_specs = groups[gval]
+                n_group = math.ceil(len(group_specs) / bundle_size)
+                digits = len(str(n_group))
+                for b_idx in range(n_group):
+                    chunk = group_specs[b_idx * bundle_size : (b_idx + 1) * bundle_size]
+                    bundle_name = f"{prefix_key}{gval}_bundle_{b_idx+1:0{digits}d}"
+                    paths_in_bundle = [sp for _, sp in chunk]
+                    sh_path = os.path.join(out_dir, f"{bundle_name}.sh")
+                    with open(sh_path, "w") as f:
+                        f.write(make_bundle_slurm(paths_in_bundle, bundle_name, out_dir, slurm))
+                    sh_files.append(sh_path)
+                    total_bundles += 1
+            print(f"  Bundled {len(generated)} specs into {total_bundles} jobs "
+                  f"(bundle_size={bundle_size}, group_by={group_by})")
+        else:
+            spec_list = [(sn, sp) for sn, sp in generated]
+            n_bundles = math.ceil(len(spec_list) / bundle_size)
+            digits = len(str(n_bundles))
+            for b_idx in range(n_bundles):
+                chunk = spec_list[b_idx * bundle_size : (b_idx + 1) * bundle_size]
+                bundle_name = f"bundle_{b_idx:0{digits}d}"
+                paths_in_bundle = [sp for _, sp in chunk]
+                sh_path = os.path.join(out_dir, f"{bundle_name}.sh")
+                with open(sh_path, "w") as f:
+                    f.write(make_bundle_slurm(paths_in_bundle, bundle_name, out_dir, slurm))
+                sh_files.append(sh_path)
+            print(f"  Bundled {len(generated)} specs into {n_bundles} jobs (bundle_size={bundle_size})")
 
     # ── submit_all.sh ─────────────────────────────────────────────────────
     submit_path = os.path.join(out_dir, "submit_all.sh")

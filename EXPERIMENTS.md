@@ -789,22 +789,21 @@ python make_search_specs.py search_configs/census_grid.yaml
 
 ---
 
-**Submission Tracker — census grid (144 specs)**
+**Submission Tracker — census grid (108 specs, 28 bundles)**
 
-Division: DRAC runs all k=10 (36 specs, SLURM). Huron runs k=1, Lambda runs k=3, Aulavik runs k=5 (36 specs each, split 18/18 across the two GPUs). Local servers run sequentially per GPU: `python main.py --spec <spec>.json --device cuda:N`.
+Grid updated: k=1 replaced by k=0 (no-sigmoid baseline); ffnn.epochs restored as principal axis; specs regenerated as YAML bundles. All prior runs cancelled. Division: DRAC runs k=10 (7 bundles, SLURM). Huron runs k=0, Lambda runs k=3, Aulavik runs k=5 (7 bundles each, split 4/3 across two GPUs). Local servers run bundle scripts directly; cuda:1 bundles use sed device override.
 
-| Resource | k | Specs | Status | Command |
+| Resource | k | Bundles | Status | Command |
 |---|---|---|---|---|
-| DRAC | k=10 | 1–30 | **RUNNING** | `for f in $(ls experiment_specs/census_grid/*.sh \| head -30); do sbatch "$f"; done` |
-| DRAC | k=10 | 31–36 | PENDING | `for f in $(ls experiment_specs/census_grid/*.sh \| head -36 \| tail -6); do sbatch "$f"; done` |
-| Huron GPU 0 | k=1 | 37–54 | **RUNNING** | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k1_" \| head -18); do python3 main.py --spec "$f" --device cuda:0; done` |
-| Huron GPU 1 | k=1 | 55–72 | **RUNNING** | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k1_" \| tail -18); do python3 main.py --spec "$f" --device cuda:1; done` |
-| Lambda GPU 0 | k=3 | 73–90 | **RUNNING** | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k3_" \| head -18); do python3 main.py --spec "$f" --device cuda:0; done` |
-| Lambda GPU 1 | k=3 | 91–108 | **RUNNING** | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k3_" \| tail -18); do python3 main.py --spec "$f" --device cuda:1; done` |
-| Aulavik GPU 0 | k=5 | 109–126 | **RUNNING** | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k5_" \| head -18); do python3 main.py --spec "$f" --device cuda:0; done` |
-| Aulavik GPU 1 | k=5 | 127–144 | **RUNNING** | `for f in $(ls experiment_specs/census_grid/*.json \| grep "_k5_" \| tail -18); do python3 main.py --spec "$f" --device cuda:1; done` |
+| DRAC | k=10 | k10_bundle_1–7 | PENDING | `for f in experiment_specs/census_grid/k10_bundle_*.sh; do sbatch "$f"; done` |
+| Huron GPU 0 | k=0 | k0_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k0_bundle_{1,3,5,7}.sh; do bash "$f"; done` |
+| Huron GPU 1 | k=0 | k0_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k0_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| bash; done` |
+| Lambda GPU 0 | k=3 | k3_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k3_bundle_{1,3,5,7}.sh; do bash "$f"; done` |
+| Lambda GPU 1 | k=3 | k3_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k3_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| bash; done` |
+| Aulavik GPU 0 | k=5 | k5_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k5_bundle_{1,3,5,7}.sh; do bash "$f"; done` |
+| Aulavik GPU 1 | k=5 | k5_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k5_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| bash; done` |
 
-**Completed specs:** *(none yet — update as results arrive)*
+**Completed bundles:** *(none yet — update as results arrive)*
 
 ---
 

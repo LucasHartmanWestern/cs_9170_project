@@ -15,7 +15,6 @@ base_patches:
   pca_components: 10                    # <- fill in best from grid
   traj_length: 2000                     # <- fill in best from grid
   ffnn.epochs: 20                       # <- fill in best from grid
-
 random:
   n_samples: 20
   seed: 0
