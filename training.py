@@ -40,25 +40,30 @@ class Training:
         spec_name,
         spec,
         output_dir,
-        seed=42,
+        seed=42,    
+        process_label="Training process -0",
         device='cpu'
         ):
         self.exp_group = exp_group
         self.spec_name = spec_name
         #misc
         self.seed = seed
+        self.process_label = process_label
         self.device = torch.device(device)
         self.save_dir = output_dir
 
-        self.get_specs(spec)
+        self._get_specs(spec)
 
-        #starting seeding
+        #Seeding procces
         torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
         if self.device.type == "cuda":
             torch.cuda.manual_seed_all(self.seed)
             # torch.backends.cudnn.benchmark = False
             # torch.backends.cudnn.deterministic = True
             torch.set_float32_matmul_precision("highest")
+        print(f"[{self.process_label}] ---- running seed={self.seed} ----")
+            
 
         # state_dim and agent configs are finalized in __call__ after data loading
         # (feature_dim may differ from pca_components when use_pca=False)
@@ -195,7 +200,7 @@ class Training:
         self._local_buf = deque(maxlen=self._corr_window)
         self._delta_buf = deque(maxlen=self._corr_window)
 
-    def get_specs(self, spec):
+    def _get_specs(self, spec):
         """
         Get the specs from the spec dictionary
         """
@@ -296,10 +301,7 @@ class Training:
         self.use_ppo=bool(spec.get("use_ppo", False))
         self.ppo=spec.get("ppo", None)
 
-
-
-        #EO guard and beta warm-start   
-        self.eo_guard_threshold = spec.get("eo_guard_threshold", 0.0)
+        #beta warm-start   
         self.beta_reset_interval=int(spec.get("beta_reset_interval", 1))
         self.beta_warmstart_from_alpha=bool(spec.get("beta_warmstart_from_alpha", False))
 
@@ -1285,9 +1287,6 @@ class Training:
 
             print(f"[disadv] group={disadv} per_g={per_g} worst_4g={self.disadv_worst_loss_alpha:.4f} soft_eo_alpha={self.eo_alpha_baseline:.4f}")
 
-            if self.eo_guard_threshold > 0.0 and self.eo_alpha_baseline < self.eo_guard_threshold:
-                print(f"[EO guard] alpha-EO={self.eo_alpha_baseline:.4f} < threshold={self.eo_guard_threshold:.4f} — skipping seed {self.seed}")
-                return "eo_guard_skip"
 
             # Build anchor set: real TRAIN points that are (y=1) AND (a=disadvantaged group)
             a_train = self.dataset.a_train
@@ -1642,3 +1641,4 @@ class Training:
 
         print(f"Total time {time.time() - start_time:.2f}s")
         print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
+        return True

@@ -1,12 +1,11 @@
 # Main v2 script including parallelization for multiple runs on one GPU. Intended to be used on DRAC.
 
 import os
-import numpy as np
 import torch
 import gc
 import argparse
 from training import Training
-from helpers_main import _load_spec, build_exp_group, _seed_everything
+from helpers_main import _load_spec, build_exp_group
 
 def run_specs(args):
     if not torch.cuda.is_available():
@@ -20,13 +19,6 @@ def run_specs(args):
     if not isinstance(seeds, list) or len(seeds) == 0:
         raise ValueError(f"spec['seeds'] must be a non-empty list. Got: {seeds}")
 
-    eo_guard_threshold = float(spec.get("eo_guard_threshold", 0.0))
-    n_seeds_needed = len(seeds)
-
-    # Build fallback pool: first 20 non-primary seeds (used when EO guard skips a seed)
-    primary_set = set(int(s) for s in seeds)
-    fallback_pool = [s for s in range(200) if s not in primary_set][:20]
-    seed_queue = [int(s) for s in seeds] + fallback_pool
 
     # One exp_group for all seeds
     exp_group = build_exp_group(args.spec, spec)
@@ -36,39 +28,28 @@ def run_specs(args):
     print(f"[main] spec={spec_base} device={device}")
     print(f"[main] exp_group={exp_group}")
     print(f"[main] seeds={seeds}")
-    if eo_guard_threshold > 0.0:
-        print(f"[main] eo_guard_threshold={eo_guard_threshold} (fallback pool: {fallback_pool[:5]}...)")
-
+   
+    done_flags = [False] * len(seeds)
     #Parallelization or sequential execution
     if args.parallel:
         run_parallel_specs(args)
     else:
         # Run seeds sequentially; skip via EO guard and pull from fallback pool as needed
-        completed = 0
-        for seed in seed_queue:
-            if completed >= n_seeds_needed:
-                break
-            # seed = int(seed) # already an int
-            print(f"[main] ---- running seed={seed} ----")
-            _seed_everything(seed)
-
+        for process_count,seed in enumerate(seeds):
+            process_label = f"Training process {process_count}"
 
             trainer = Training(
                 exp_group=exp_group,
                 spec_name=spec_name,
                 spec=spec,
                 output_dir=args.output_dir,
+                process_label=process_label,
                 seed=seed,
                 device=device
             )
 
-            result = trainer()
+            done_flags[process_count] = trainer()
 
-            if result == "eo_guard_skip":
-                print(f"[main] seed={seed} skipped by EO guard — pulling from fallback pool")
-                continue
-
-            completed += 1
 
             #Clean up
             del trainer
@@ -77,15 +58,9 @@ def run_specs(args):
                 torch.cuda.synchronize(torch.device(device))
                 torch.cuda.empty_cache()
 
-    if completed < n_seeds_needed:
-        print(f"[main] WARNING: only {completed}/{n_seeds_needed} seeds completed — fallback pool exhausted")
+    if done_flags.count(False) > 0:
+        print(f"[main] WARNING: only {done_flags.count(True)}/{len(seeds)} seeds completed")
 
-    # def clean_up(trainer, device):
-    #     del trainer
-    #     if torch.cuda.is_available() and "cuda" in device:
-    #         gc.collect()
-    #         torch.cuda.synchronize(torch.device(device))
-    #         torch.cuda.empty_cache()
 
 def main():
     p = argparse.ArgumentParser()

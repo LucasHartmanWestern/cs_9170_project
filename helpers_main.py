@@ -1,18 +1,8 @@
 import os
 import json
 import hashlib
-import random
 from datetime import datetime
-import numpy as np
-import torch
 
-def _seed_everything(seed: int) -> None:
-    """Seed all global RNGs before any training objects are created."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
 
 def _slug(s: str) -> str:
     import re
