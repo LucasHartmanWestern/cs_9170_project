@@ -1,4 +1,6 @@
-/__pycache__
+__pycache__/
+*.py[cod]
+*.cpython-*
 *.csv
 .DS_Store
 data/Optional/*
