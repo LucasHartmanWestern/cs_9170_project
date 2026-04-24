@@ -22,4 +22,4 @@ module load python/3.12.4 cuda cudnn
 source ~/envs/rl/bin/activate
 mkdir -p experiment_specs/April_13_Experiments/logs
 
-python -u main.py --spec experiment_specs/April_13_Experiments/compas_wgl_k3_5000ep_seed1.json --device cuda:0
+python -u main.py --spec experiment_specs/April_13_Experiments/compas_wgl_k3_5000ep_seed1.yaml\1 --device cuda:0

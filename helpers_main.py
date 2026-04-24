@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 from datetime import datetime
+import yaml
 
 
 def _slug(s: str) -> str:
@@ -10,7 +11,7 @@ def _slug(s: str) -> str:
 
 def _load_spec(path: str) -> dict:
     with open(path, "r") as f:
-        spec = json.load(f)
+        spec = yaml.safe_load(f)
     validate_spec(spec, path)
     return spec
 

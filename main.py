@@ -14,7 +14,7 @@ def run_specs(args):
         device = args.device
     spec = _load_spec(args.spec) #loads and validates spec
 
-    # Seeds come from JSON
+    # Seeds come from spec
     seeds = spec["seeds"]
     if not isinstance(seeds, list) or len(seeds) == 0:
         raise ValueError(f"spec['seeds'] must be a non-empty list. Got: {seeds}")
@@ -47,8 +47,8 @@ def run_specs(args):
                 seed=seed,
                 device=device
             )
-
-            done_flags[process_count] = trainer()
+            done = trainer()
+            done_flags[process_count] = done
 
 
             #Clean up
@@ -64,7 +64,7 @@ def run_specs(args):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--spec", required=True, help="Path to a JSON experiment spec file")
+    p.add_argument("--spec", required=True, help="Path to a YAML experiment spec file")
     p.add_argument("--device", default="cuda:0", help="cuda:0 or cpu (auto-falls back to cpu if no CUDA)")
     p.add_argument("--output_dir", default="training_runs", help="Directory to save results")
     p.add_argument("--parallel", default=False, action="store_true", help="Run in parallel mode")

@@ -3,7 +3,7 @@
 Entry point for standalone baselines (Group DRO, etc.).
 
 Usage:
-    python run_baseline.py --spec experiment_specs/baseline_gdro_credit.json --device cuda:0
+    python run_baseline.py --spec experiment_specs/baseline_gdro_credit.yaml --device cuda:0
 """
 
 import hashlib
@@ -11,6 +11,7 @@ import json
 import os
 import random
 from datetime import datetime
+import yaml
 
 import numpy as np
 import torch
@@ -26,7 +27,7 @@ def _seed_everything(seed: int) -> None:
 
 def _load_spec(path: str) -> dict:
     with open(path, "r") as f:
-        return json.load(f)
+        return yaml.safe_load(f)
 
 
 def _build_exp_group(baseline: str, spec_name: str, spec: dict) -> str:
@@ -316,7 +317,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
 def main():
     import argparse
     p = argparse.ArgumentParser(description="Run a standalone fairness baseline.")
-    p.add_argument("--spec",   required=True, help="Path to a JSON baseline spec file")
+    p.add_argument("--spec",   required=True, help="Path to a YAML baseline spec file")
     p.add_argument("--device", default="cuda:0", help="cuda:0 or cpu (auto-falls back to cpu)")
     args = p.parse_args()
 

@@ -22,4 +22,4 @@ module load python/3.12.4 cuda cudnn
 source ~/envs/rl/bin/activate
 mkdir -p experiment_specs/April_13_Experiments/logs
 
-python -u main.py --spec experiment_specs/April_13_Experiments/compas_roc_eo_lam07_5000ep.json --device cuda:0
+python -u main.py --spec experiment_specs/April_13_Experiments/compas_roc_eo_lam07_5000ep.yaml\1 --device cuda:0

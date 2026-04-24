@@ -13,7 +13,7 @@ Usage:
     python make_spec.py --base v7_census_hard_anchors --sweep radius_clip 2.0 3.0 5.0
 
 Flags:
-    --base      Base spec name (in experiment_specs/) or path to JSON
+    --base      Base spec name (in experiment_specs/) or path to YAML
     --name      Output name (default: base + patch summary)
     --patch     key=value pairs (dot-notation for nested keys)
     --smoke     Set total_episodes=500, seeds=[42], SLURM time=1:00:00
@@ -29,6 +29,7 @@ import json
 import re
 import sys
 from pathlib import Path
+import yaml
 
 SPEC_DIR = Path("experiment_specs")
 SLURM_ACCOUNT = "def-mcapretz"
@@ -40,11 +41,11 @@ def load_base_spec(name_or_path: str) -> tuple[dict, str]:
     if not p.exists():
         p = SPEC_DIR / name_or_path
         if not p.exists():
-            p = SPEC_DIR / (name_or_path + ".json")
+            p = SPEC_DIR / (name_or_path + ".yaml")
     if not p.exists():
         print(f"ERROR: base spec not found: {name_or_path}")
         sys.exit(1)
-    spec = json.loads(p.read_text())
+    spec = yaml.safe_load(p.read_text())
     base_name = p.stem
     return spec, base_name
 
@@ -170,7 +171,7 @@ source ~/envs/rl/bin/activate
 
 mkdir -p experiment_specs/logs
 
-python -u main.py --spec experiment_specs/{name}.json --device cuda:0
+python -u main.py --spec experiment_specs/{name}.yaml --device cuda:0
 """
     if not dry_run:
         sh_path.write_text(content)
@@ -178,20 +179,20 @@ python -u main.py --spec experiment_specs/{name}.json --device cuda:0
 
 
 def create_spec(name: str, spec: dict, slurm_time: str, dry_run: bool) -> None:
-    json_path = SPEC_DIR / f"{name}.json"
+    yaml_path = SPEC_DIR / f"{name}.yaml"
     sh_path   = SPEC_DIR / f"{name}.sh"
 
     if not dry_run:
-        json_path.write_text(json.dumps(spec, indent=2) + "\n")
+        yaml_path.write_text(yaml.safe_dump(spec, sort_keys=False))
         write_sh(name, slurm_time, dry_run=False)
-        print(f"  Created: {json_path}")
+        print(f"  Created: {yaml_path}")
         print(f"  Created: {sh_path}")
         print(f"  Submit:  sbatch {sh_path}")
     else:
-        print(f"  [dry-run] Would create: {json_path}")
+        print(f"  [dry-run] Would create: {yaml_path}")
         print(f"  [dry-run] Would create: {sh_path}")
         print(f"  [dry-run] Spec preview:")
-        print(json.dumps(spec, indent=2))
+        print(yaml.safe_dump(spec, sort_keys=False))
 
 
 def main():
