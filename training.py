@@ -5,7 +5,6 @@ import sys
 import time
 import uuid
 import subprocess
-import json
 import multiprocessing as mp
 from datetime import datetime
 

@@ -36,6 +36,12 @@ local_weights:
   w_anchor: 0.0
   w_hard: 0.0
   w_div: 0.0
+
+permutations:
+  global_sigmoid_k: [1, 3, 10]
+  pca_components: [5, 10, 15]
+  ratio_trajectory: [0.2, 0.4, 0.6]
+
 ffnn:
   hidden_sizes:
   - 32
@@ -61,3 +67,5 @@ curriculum:
 benchmarks:
   run_ctgan: false
   run_ctabgan: false
+
+
