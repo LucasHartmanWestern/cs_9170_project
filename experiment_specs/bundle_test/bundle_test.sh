@@ -23,15 +23,15 @@ source ~/envs/rl/bin/activate
 mkdir -p experiment_specs/bundle_test/logs
 
 SPECS=(
-  experiment_specs/bundle_test/test_k1.json
-  experiment_specs/bundle_test/test_k3.json
-  experiment_specs/bundle_test/test_k5.json
-  experiment_specs/bundle_test/test_k10.json
+  experiment_specs/bundle_test/test_k1.yaml\1
+  experiment_specs/bundle_test/test_k3.yaml\1
+  experiment_specs/bundle_test/test_k5.yaml\1
+  experiment_specs/bundle_test/test_k10.yaml\1
 )
 
 PIDS=()
 for spec in "${SPECS[@]}"; do
-  name=$(basename "$spec" .json)
+  name=$(basename "$spec" .yaml\1)
   python -u main.py --spec "$spec" --device cuda:0 \
     > experiment_specs/bundle_test/logs/${name}.out \
     2> experiment_specs/bundle_test/logs/${name}.err &
@@ -45,7 +45,7 @@ FAIL=0
 for i in "${!PIDS[@]}"; do
   wait "${PIDS[$i]}"
   code=$?
-  name=$(basename "${SPECS[$i]}" .json)
+  name=$(basename "${SPECS[$i]}" .yaml\1)
   if [ $code -eq 0 ]; then
     echo "[bundle_test] PASS: $name (exit 0)"
     PASS=$((PASS + 1))

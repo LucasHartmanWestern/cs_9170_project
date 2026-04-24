@@ -22,4 +22,4 @@ module load python/3.12.4 cuda cudnn
 source ~/envs/rl/bin/activate
 mkdir -p experiment_specs/census_random/logs
 
-python -u main.py --spec experiment_specs/census_random/rand_0013_learning_rate0p008465977149720158_lr0p00016083155314132244_delta_scale0p19690426604385908_optimizeradamw_optimizeradam.json --device cuda:0
+python -u main.py --spec experiment_specs/census_random/rand_0013_learning_rate0p008465977149720158_lr0p00016083155314132244_delta_scale0p19690426604385908_optimizeradamw_optimizeradam.yaml\1 --device cuda:0

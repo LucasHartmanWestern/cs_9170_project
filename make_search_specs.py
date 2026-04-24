@@ -60,7 +60,6 @@ Supported distributions:
 import argparse
 import copy
 import itertools
-import json
 import math
 import os
 import random
@@ -71,13 +70,13 @@ import yaml
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
-def load_json(path: str) -> dict:
+def load_yaml(path: str) -> dict:
     with open(path) as f:
-        return json.load(f)
+        return yaml.safe_load(f)
 
-def save_json(obj: dict, path: str):
+def save_yaml(obj: dict, path: str):
     with open(path, "w") as f:
-        json.dump(obj, f, indent=2)
+        yaml.safe_dump(obj, f, sort_keys=False)
 
 def set_nested(d: dict, dotkey: str, value):
     """Set a value using dot-notation key, coercing strings to int/float/bool where possible."""
@@ -226,7 +225,7 @@ def main():
 
     name      = cfg["name"]
     base_path = cfg["base"]
-    base_spec = load_json(base_path)
+    base_spec = load_yaml(base_path)
     base_patches = cfg.get("base_patches", {})
     slurm     = cfg.get("slurm", {})
 
@@ -276,9 +275,9 @@ def main():
 
                 label = "_".join(short_label(k, v) for k, v in patches.items())
                 spec_name = f"grid_{label}"
-                spec_path = os.path.join(out_dir, f"{spec_name}.json")
+                spec_path = os.path.join(out_dir, f"{spec_name}.yaml")
 
-                save_json(spec, spec_path)
+                save_yaml(spec, spec_path)
                 generated.append((spec_name, spec_path))
 
     # ── random search ─────────────────────────────────────────────────────
@@ -296,9 +295,9 @@ def main():
 
             label = f"{i:04d}_" + "_".join(short_label(k, v) for k, v in patches.items())
             spec_name = f"rand_{label}"
-            spec_path = os.path.join(out_dir, f"{spec_name}.json")
+            spec_path = os.path.join(out_dir, f"{spec_name}.yaml")
 
-            save_json(spec, spec_path)
+            save_yaml(spec, spec_path)
             generated.append((spec_name, spec_path))
 
     # ── generate SLURM scripts ────────────────────────────────────────────

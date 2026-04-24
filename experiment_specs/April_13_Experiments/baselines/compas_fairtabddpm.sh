@@ -22,4 +22,4 @@ module load python/3.12.4 cuda cudnn
 source ~/envs/rl/bin/activate
 mkdir -p experiment_specs/April_13_Experiments/baselines/logs
 
-python -u run_baseline.py --spec experiment_specs/April_13_Experiments/baselines/compas_fairtabddpm.json --device cuda:0
+python -u run_baseline.py --spec experiment_specs/April_13_Experiments/baselines/compas_fairtabddpm.yaml\1 --device cuda:0

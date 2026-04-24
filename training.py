@@ -1,10 +1,10 @@
+# Training v2 enhancing code for main v2
 import gc
 import os
 import sys
 import time
 import uuid
 import subprocess
-import json
 import multiprocessing as mp
 from datetime import datetime
 
@@ -35,205 +35,50 @@ import reward_helpers as rh
 class Training:
     def __init__(
         self,
-        exp_group=None,
-        spec_name=None,
-
-        #flags
-        curriculum_learning=True,
-        multiclass=False,
-        dataset_name="census_income",
-
-        #class / bias
-        minority_id=None,
-        majority_id=None,
-        third_id=None,
-        bias_pct=None,
-        da_pct=None,
-
-        #PCA / trajectory
-        pca_components=2,
-        traj_length=500,
-        real_data_size=1500,
-        total_episodes=1,
-
-        #reward
-        reward_mode="wgl",
-        lambda_schedule=(0.5, 0.5),
-        local_squash_k=4.0,          # sigmoid sharpness; 0 = clamp (old behavior)
-        local_squash_center=0.5,     # centering point for sigmoid squashing
-        hard_from_beta=False,         # use beta for hardness; False = alpha (stable)
-
-        #ENV hyperparams
-        use_delta_actions=True,
-        delta_scale=0.10,
-        delta_clip=0.20,
-        pca_clip=None,
-        radius_clip=None,
-
-        #Config dictionaries
-        ffnn=None,         
-        reinforce=None,    
-        curriculum=None,   
-        benchmarks=None,   
-
-        #feature space
-        use_pca=True,
-        whiten_pca=False,
-        bias_val=True,
-
-        #PAMAP2 windowing
-        win_seconds=5.0,
-        step_seconds=2.5,
-
-        #dataset protected attribute column (passed to get_data_splits)
-        dp_protected_col: str | None = None,
-
-        #FairJob: target positive fraction for neg-undersampling of train+val
-        pool_pos_fraction: float | None = None,
-
-        #two-phase generation
-        gen_both_classes=False,
-
-        #local reward weights
-        w_anchor: float = 0.60,
-        w_hard: float = 0.30,
-        w_div: float = 0.05,
-        sigma_anchor: float = 0.85,
-        rho_div: float = 0.60,
-        hard_margin: float = 0.65,
-        use_uncertainty_anchors: bool = False,
-        uncertainty_warmup_episodes: int = 0,
-        sigma_calibration_factor: float | None = None,
-        anchor_refresh_interval: int = 0,
-        anchor_refresh_top_k: int = 500,
-        anchor_selection_mode: str = "all",  # "all" | "hard_positive" (lowest p_alpha)
-        anchor_selection_top_k: int = 200,   # max anchors to keep in hard_positive mode
-
-        #DVRL-inspired local reward (v10)
-        use_dvrl_local: bool = False,        # replace anchor/hard/div with beta-loss local reward
-        dvrl_max_bce: float = 0.693,         # normalization ceiling: ln(2) = random-chance BCE
-        dvrl_scale: float = 1.0,             # multiplicative scale applied after [0,1] clamp to match global reward magnitude
-
-        #asymmetric phase episodes (gen_both_classes only)
-        phase2_episodes: int | None = None,  # None = use total_episodes for both phases
-
-        #reward shaping
-        global_sigmoid_k: float = 10.0,
-        utility_guard_min_factor: float = 1.0,  # 1.0 = disabled; <1.0 enables multiplicative utility guard
-        roc_eo_lambda: float = 0.5,             # for reward_mode="roc_eo": weight on AUC vs EO penalty
-
-        #beta warm-start
-        beta_reset_interval: int = 1,       # 1 = reset every episode (default); N>1 = warm-start
-        beta_warmstart_from_alpha: bool = False,  # if True, reset beta to alpha weights instead of random init
-
-        #EO guard
-        eo_guard_threshold: float = 0.0,  # 0.0 = disabled; 0.10 = skip seeds with alpha-EO < 0.10
-
-        #OT-inspired local reward
-        w_ot: float = 0.0,   # >0 enables OT local reward (replaces anchor/DVRL as the full local term)
-
-        #CMA-ES optimizer (replaces REINFORCE when use_cmaes=True)
-        use_cmaes: bool = False,
-        cmaes: dict | None = None,
-
-        #PPO optimizer (replaces REINFORCE when use_ppo=True)
-        use_ppo: bool = False,
-        ppo: dict | None = None,
-
-        #misc
-        seed=42,
-        device='cpu',
-    ):
+        exp_group,
+        spec_name,
+        spec,
+        output_dir,
+        seed=42,    
+        process_label="Training process -0",
+        device='cpu'
+        ):
         self.exp_group = exp_group
         self.spec_name = spec_name
+        #misc
         self.seed = seed
-        self.eo_guard_threshold = eo_guard_threshold
+        self.process_label = process_label
         self.device = torch.device(device)
+        self.save_dir = output_dir
 
+        self._get_specs(spec)
+
+        #Seeding procces
         torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
         if self.device.type == "cuda":
             torch.cuda.manual_seed_all(self.seed)
-            torch.backends.cudnn.benchmark = False
-            torch.backends.cudnn.deterministic = True
+            # torch.backends.cudnn.benchmark = False
+            # torch.backends.cudnn.deterministic = True
             torch.set_float32_matmul_precision("highest")
-
-        self.gen_both_classes = gen_both_classes
-        self.bias_pct = bias_pct
-        self.da_pct   = da_pct
-        self.pca_components = pca_components
-        self.reward_mode = reward_mode
-        self.lambda_schedule = lambda_schedule
-        self.local_squash_k = local_squash_k
-        self.local_squash_center = local_squash_center
-        self.hard_from_beta = hard_from_beta
-        self.w_anchor = w_anchor
-        self.w_hard = w_hard
-        self.w_div = w_div
-        self.sigma_anchor = sigma_anchor
-        self.rho_div = rho_div
-        self.use_uncertainty_anchors = use_uncertainty_anchors
-        self.uncertainty_warmup_episodes = int(uncertainty_warmup_episodes)
-        self.sigma_calibration_factor = sigma_calibration_factor
-        self.anchor_refresh_interval = int(anchor_refresh_interval)
-        self.anchor_refresh_top_k = int(anchor_refresh_top_k)
-        self.anchor_selection_mode = anchor_selection_mode
-        self.anchor_selection_top_k = int(anchor_selection_top_k)
-        self.use_dvrl_local = bool(use_dvrl_local)
-        self.dvrl_max_bce = float(dvrl_max_bce)
-        self.dvrl_scale = float(dvrl_scale)
-        self.w_ot = float(w_ot)
-        self._ot_mean = None
-        self._ot_log_var = None
-        self._ot_ref_log_prob = None
-        self.phase2_episodes = int(phase2_episodes) if phase2_episodes is not None else None
-        self.global_sigmoid_k = float(global_sigmoid_k)
-        self.utility_guard_min_factor = float(utility_guard_min_factor)
-        self.roc_eo_lambda = float(roc_eo_lambda)
-        self.hard_margin = hard_margin
-        self.beta_reset_interval = max(1, int(beta_reset_interval))
-        self.beta_warmstart_from_alpha = bool(beta_warmstart_from_alpha)
-        self.curriculum_learning = curriculum_learning
-        self.multiclass = multiclass
-        self.dataset_name = dataset_name
-
-        self.use_pca = use_pca
-        self.whiten_pca = whiten_pca
-        self.bias_val = bias_val
-        self.win_seconds = win_seconds
-        self.step_seconds = step_seconds
-        self.dp_protected_col = dp_protected_col
-        self.pool_pos_fraction = pool_pos_fraction
-
-        self.minority_id = minority_id
-        self.majority_id = majority_id
-        self.third_id = third_id
-
-        self.traj_length = traj_length
-        self.real_data_size = real_data_size
-        self.episodes = total_episodes
+        print(f"[{self.process_label}] ---- running seed={self.seed} ----")
+            
 
         # state_dim and agent configs are finalized in __call__ after data loading
         # (feature_dim may differ from pca_components when use_pca=False)
         self.state_dim = 1 + 2 * self.pca_components
 
-        # ENV hyperparams
-        self.use_delta_actions = use_delta_actions
-        self.delta_scale = delta_scale
-        self.delta_clip = delta_clip
-        self.pca_clip = pca_clip
-        self.radius_clip = radius_clip
-
 
         self.project_root = Path(__file__).resolve().parent
 
-        self.ffnn_overrides = ffnn or {}
-        self.reinforce_overrides = reinforce or {}
-        self.curriculum_overrides = curriculum or {}
-        self.benchmarks_overrides = benchmarks or {}
+        self.ffnn_overrides = self.ffnn or {}
+        self.reinforce_overrides = self.reinforce or {}
+        self.curriculum_overrides = self.curriculum or {}
+        self.benchmarks_overrides = self.benchmarks or {}
 
         # dataset
         self.dataset = Dataset(
-            dataset_name,
+            self.dataset_name,
             multiclass=self.multiclass,
             minority_id=self.minority_id,
             majority_id=self.majority_id,
@@ -317,11 +162,9 @@ class Training:
 
         self.dl_generator = torch.Generator(device="cpu").manual_seed(self.seed)
 
-        self.use_cmaes = bool(use_cmaes)
         DEFAULT_CMAES = {"sigma0": 1.0, "popsize": None, "cmaes_opts": {}}
-        self.cmaes_config = {**DEFAULT_CMAES, **(cmaes or {})}
+        self.cmaes_config = {**DEFAULT_CMAES, **(self.cmaes or {})}
 
-        self.use_ppo = bool(use_ppo)
         DEFAULT_PPO = {
             "state_size": self.state_dim,
             "action_size": self.pca_components,
@@ -336,7 +179,7 @@ class Training:
             "device": self.device,
             "seed": self.seed,
         }
-        ppo_config = {**DEFAULT_PPO, **(ppo or {})}
+        ppo_config = {**DEFAULT_PPO, **(self.ppo or {})}
         ppo_config["state_size"] = self.state_dim
         ppo_config["action_size"] = self.pca_components
         ppo_config["device"] = self.device
@@ -356,6 +199,113 @@ class Training:
         self._local_buf = deque(maxlen=self._corr_window)
         self._delta_buf = deque(maxlen=self._corr_window)
 
+    def _get_specs(self, spec):
+        """
+        Get the specs from the spec dictionary
+        """
+        lw = spec.get("local_weights", {})
+        rs = spec.get("reward_shaping", {})
+            
+        #flags
+        self.curriculum_learning=spec.get("curriculum_learning", True)
+        self.multiclass=spec.get("multiclass", False)
+
+        #dataset
+        self.dataset_name=spec["dataset_name"]
+            
+        #class / bias
+        self.minority_id=spec.get("minority_id")
+        self.majority_id=spec.get("majority_id")
+        self.third_id=spec.get("third_id")
+        self.bias_pct=spec.get("bias_pct")
+        self.da_pct=spec.get("da_pct")
+
+        #PCA / trajectory
+        self.pca_components=spec["pca_components"]
+        self.traj_length=spec["traj_length"]
+        self.real_data_size=spec["real_data_size"]
+        self.episodes=spec["total_episodes"]
+
+        #reward
+        self.reward_mode=spec["reward_mode"]
+        self.lambda_schedule=tuple(spec["lambda_schedule"])
+        self.local_squash_k=float(rs.get("local_squash_k", 4.0))
+        self.local_squash_center=float(rs.get("local_squash_center", 0.5))
+        self.hard_from_beta=bool(rs.get("hard_from_beta", False))
+        
+        #ENV hyperparams
+        self.use_delta_actions=spec.get("use_delta_actions", True)
+        self.delta_scale=spec.get("delta_scale", 0.10)
+        self.delta_clip=spec.get("delta_clip", 0.20)
+        self.pca_clip=spec.get("pca_clip", None)
+        self.radius_clip=spec.get("radius_clip", None)
+
+        #feature space
+        self.use_pca=spec.get("use_pca", True)
+        self.whiten_pca=spec.get("whiten_pca", False)
+        self.bias_val=spec.get("bias_val", True)
+
+        #PAMAP2 windowing
+        self.win_seconds=spec.get("win_seconds", 5.0)
+        self.step_seconds=spec.get("step_seconds", 2.5)
+        
+        #Config dictionaries
+        self.ffnn=spec["ffnn"]         
+        self.reinforce=spec["reinforce"]    
+        self.curriculum=spec["curriculum"]   
+        self.benchmarks=spec["benchmarks"]   
+
+        #dataset protected attribute column (passed to get_data_splits)
+        self.dp_protected_col=spec.get("dp_protected_col", None)
+
+        #FairJob: target positive fraction for neg-undersampling of train+val
+        self.pool_pos_fraction=spec.get("pool_pos_fraction", None)
+
+        #two-phase generation
+        self.gen_both_classes=spec.get("gen_both_classes", False)
+
+        #local reward weights
+        self.w_anchor=float(lw.get("w_anchor", 0.60))
+        self.w_hard=float(lw.get("w_hard", 0.30))
+        self.w_div=float(lw.get("w_div", 0.05))
+        self.sigma_anchor=float(lw.get("sigma_anchor", 0.85))
+        self.rho_div=float(lw.get("rho_div", 0.60))
+        self.hard_margin=float(lw.get("hard_margin", 0.65))
+        self.use_uncertainty_anchors=bool(lw.get("use_uncertainty_anchors", False))
+        self.uncertainty_warmup_episodes=int(lw.get("uncertainty_warmup_episodes", 0))
+        self.sigma_calibration_factor=float(lw["sigma_calibration_factor"]) if lw.get("sigma_calibration_factor") is not None else None
+        self.anchor_refresh_interval=int(lw.get("anchor_refresh_interval", 0))
+        self.anchor_refresh_top_k=int(lw.get("anchor_refresh_top_k", 500))
+        self.anchor_selection_mode=str(lw.get("anchor_selection_mode", "all"))
+        self.anchor_selection_top_k=int(lw.get("anchor_selection_top_k", 200))
+        
+        #DVRL-inspired local reward (v10)
+        self.use_dvrl_local=bool(lw.get("use_dvrl_local", False))
+        self.dvrl_max_bce=float(lw.get("dvrl_max_bce", 0.693))
+        self.dvrl_scale=float(lw.get("dvrl_scale", 1.0))
+
+        #asymmetric phase episodes (gen_both_classes only)
+        self.phase2_episodes=spec.get("phase2_episodes", None)  # None = use total_episodes for both phases
+
+        #reward shaping
+        self.global_sigmoid_k=float(lw.get("global_sigmoid_k", 10.0))
+        self.utility_guard_min_factor=float(lw.get("utility_guard_min_factor", 1.0))
+        self.roc_eo_lambda=float(lw.get("roc_eo_lambda", 0.5))
+
+        #CMA-ES optimizer (replaces REINFORCE when use_cmaes=True)
+        self.use_cmaes=bool(spec.get("use_cmaes", False))
+        self.cmaes=spec.get("cmaes", None)
+
+        #PPO optimizer (replaces REINFORCE when use_ppo=True)
+        self.use_ppo=bool(spec.get("use_ppo", False))
+        self.ppo=spec.get("ppo", None)
+
+        #beta warm-start   
+        self.beta_reset_interval=int(spec.get("beta_reset_interval", 1))
+        self.beta_warmstart_from_alpha=bool(spec.get("beta_warmstart_from_alpha", False))
+
+        #OT-inspired local reward
+        self.w_ot=float(lw.get("w_ot", 0.0))
 
     def _corr_local_delta(self):
         # need a few points for a stable estimate
@@ -1336,9 +1286,6 @@ class Training:
 
             print(f"[disadv] group={disadv} per_g={per_g} worst_4g={self.disadv_worst_loss_alpha:.4f} soft_eo_alpha={self.eo_alpha_baseline:.4f}")
 
-            if self.eo_guard_threshold > 0.0 and self.eo_alpha_baseline < self.eo_guard_threshold:
-                print(f"[EO guard] alpha-EO={self.eo_alpha_baseline:.4f} < threshold={self.eo_guard_threshold:.4f} — skipping seed {self.seed}")
-                return "eo_guard_skip"
 
             # Build anchor set: real TRAIN points that are (y=1) AND (a=disadvantaged group)
             a_train = self.dataset.a_train
@@ -1693,3 +1640,4 @@ class Training:
 
         print(f"Total time {time.time() - start_time:.2f}s")
         print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
+        return True
