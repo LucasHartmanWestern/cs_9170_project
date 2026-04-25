@@ -39,6 +39,7 @@ _KNOWN_TOP_LEVEL_FIELDS = {
     "win_seconds", "step_seconds", "eo_guard_threshold",
     "whiten_pca", "beta_reset_interval", "beta_warmstart_from_alpha",
     "pool_pos_fraction", "permutations", "total_data_size",
+    "global_sigmoid_k", "epochs", "max_parallel",
     "use_ppo", "ppo",
 }
 _KNOWN_LOCAL_WEIGHTS = {
@@ -49,13 +50,21 @@ _KNOWN_LOCAL_WEIGHTS = {
     "anchor_selection_mode", "anchor_selection_top_k",
 }
 _KNOWN_REWARD_SHAPING = {
-    "utility_guard_min_factor",
+    "global_sigmoid_k", "utility_guard_min_factor",
     "local_squash_k", "local_squash_center", "hard_from_beta",
-    "roc_eo_lambda", #"global_sigmoid_k",
+    "roc_eo_lambda",
 }
+# Fields required regardless of format
 _REQUIRED_TOP_LEVEL = {
-    "permutations", "total_data_size", "dataset_name", "reward_mode", "lambda_schedule",
-    "total_episodes",#"pca_components", "traj_length", "real_data_size",
+    "dataset_name", "reward_mode", "lambda_schedule", "total_episodes",
+}
+# Additional fields required for old flat format (no permutations block)
+_REQUIRED_FLAT_FORMAT = {
+    "pca_components", "traj_length", "real_data_size",
+}
+# Additional fields required for new permutations format
+_REQUIRED_PERMUTATIONS_FORMAT = {
+    "permutations", "total_data_size",
 }
 
 def validate_spec(spec: dict, spec_path: str) -> None:
@@ -73,10 +82,19 @@ def validate_spec(spec: dict, spec_path: str) -> None:
     for k in sorted(set(spec.get("reward_shaping", {}).keys()) - _KNOWN_REWARD_SHAPING):
         warnings.append(f"Unknown reward_shaping field: '{k}'")
 
-    # Required fields
+    # Required fields — base set always checked
     for k in sorted(_REQUIRED_TOP_LEVEL):
         if k not in spec:
             warnings.append(f"Missing required field: '{k}'")
+    # Format-specific required fields
+    if "permutations" in spec:
+        for k in sorted(_REQUIRED_PERMUTATIONS_FORMAT):
+            if k not in spec:
+                warnings.append(f"Missing required field: '{k}'")
+    else:
+        for k in sorted(_REQUIRED_FLAT_FORMAT):
+            if k not in spec:
+                warnings.append(f"Missing required field: '{k}'")
 
     # Suspicious combos
     if spec.get("use_cmaes") and spec.get("use_delta_actions"):

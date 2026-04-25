@@ -71,7 +71,10 @@ class Training:
 
         self.project_root = Path(__file__).resolve().parent
 
-        self.ffnn_overrides = self.ffnn or {}
+        self.ffnn_overrides = dict(self.ffnn or {})
+        # Top-level "epochs" overrides ffnn.epochs (set by permutation loop)
+        if spec.get("epochs") is not None:
+            self.ffnn_overrides["epochs"] = int(spec["epochs"])
         self.reinforce_overrides = self.reinforce or {}
         self.curriculum_overrides = self.curriculum or {}
         self.benchmarks_overrides = self.benchmarks or {}
@@ -253,7 +256,7 @@ class Training:
         #Config dictionaries
         self.ffnn=spec["ffnn"]         
         self.reinforce=spec["reinforce"]    
-        self.curriculum=spec["curriculum"]   
+        self.curriculum=spec.get("curriculum", {})
         self.benchmarks=spec["benchmarks"]   
 
         #dataset protected attribute column (passed to get_data_splits)
@@ -288,8 +291,9 @@ class Training:
         #asymmetric phase episodes (gen_both_classes only)
         self.phase2_episodes=spec.get("phase2_episodes", None)  # None = use total_episodes for both phases
 
-        #reward shaping
-        self.global_sigmoid_k=float(lw.get("global_sigmoid_k", 10.0))
+        #reward shaping — check top-level first (permutation format sets it there)
+        _k = spec.get("global_sigmoid_k")
+        self.global_sigmoid_k = float(_k if _k is not None else lw.get("global_sigmoid_k", 10.0))
         self.utility_guard_min_factor=float(lw.get("utility_guard_min_factor", 1.0))
         self.roc_eo_lambda=float(lw.get("roc_eo_lambda", 0.5))
 
@@ -1167,6 +1171,9 @@ class Training:
 
             # reward shaping
             "global_sigmoid_k": self.global_sigmoid_k,
+
+            # ffnn
+            "ffnn_epochs": self.ffnn_config.get("epochs"),
 
             # dataset-specific windowing (capture24); needed to reconstruct PCA post-hoc
             "win_seconds": self.win_seconds,
