@@ -23,6 +23,8 @@ class _TeeLogger:
     def flush(self):
         for s in self.streams:
             s.flush()
+    def isatty(self):
+        return False
 
 
 def _slug(s: str) -> str:

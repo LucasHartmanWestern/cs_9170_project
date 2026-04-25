@@ -791,17 +791,17 @@ python make_search_specs.py search_configs/census_grid.yaml
 
 **Submission Tracker — census grid (108 specs, 28 bundles)**
 
-Grid updated: k=1 replaced by k=0 (no-sigmoid baseline); ffnn.epochs restored as principal axis; specs regenerated as YAML bundles. All prior runs cancelled. Division: DRAC runs k=10 (7 bundles, SLURM). Huron runs k=0, Lambda runs k=3, Aulavik runs k=5 (7 bundles each, split 4/3 across two GPUs). Local servers run bundle scripts directly; cuda:1 bundles use sed device override.
+Grid updated: k=1 replaced by k=0 (no-sigmoid baseline); ffnn.epochs restored as principal axis; specs regenerated as YAML bundles. All prior runs cancelled. Division: DRAC runs k=10 (7 bundles, SLURM). Huron runs k=0, Lambda runs k=3, Aulavik runs k=5 (7 bundles each, split 4/3 across two GPUs). Local servers strip SLURM module lines with `grep -v "^module"` before running bundle scripts; cuda:1 bundles add a sed device override.
 
 | Resource | k | Bundles | Status | Command |
 |---|---|---|---|---|
 | DRAC | k=10 | k10_bundle_1–7 | PENDING | `for f in experiment_specs/census_grid/k10_bundle_*.sh; do sbatch "$f"; done` |
-| Huron GPU 0 | k=0 | k0_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k0_bundle_{1,3,5,7}.sh; do bash "$f"; done` |
-| Huron GPU 1 | k=0 | k0_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k0_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| bash; done` |
-| Lambda GPU 0 | k=3 | k3_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k3_bundle_{1,3,5,7}.sh; do bash "$f"; done` |
-| Lambda GPU 1 | k=3 | k3_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k3_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| bash; done` |
-| Aulavik GPU 0 | k=5 | k5_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k5_bundle_{1,3,5,7}.sh; do bash "$f"; done` |
-| Aulavik GPU 1 | k=5 | k5_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k5_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| bash; done` |
+| Huron GPU 0 | k=0 | k0_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k0_bundle_{1,3,5,7}.sh; do grep -v "^module" "$f" \| bash; done` |
+| Huron GPU 1 | k=0 | k0_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k0_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| grep -v "^module" \| bash; done` |
+| Lambda GPU 0 | k=3 | k3_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k3_bundle_{1,3,5,7}.sh; do grep -v "^module" "$f" \| bash; done` |
+| Lambda GPU 1 | k=3 | k3_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k3_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| grep -v "^module" \| bash; done` |
+| Aulavik GPU 0 | k=5 | k5_bundle_1,3,5,7 | **RUNNING** | `for f in experiment_specs/census_grid/k5_bundle_{1,3,5,7}.sh; do grep -v "^module" "$f" \| bash; done` |
+| Aulavik GPU 1 | k=5 | k5_bundle_2,4,6 | **RUNNING** | `for f in experiment_specs/census_grid/k5_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| grep -v "^module" \| bash; done` |
 
 **Completed bundles:** *(none yet — update as results arrive)*
 

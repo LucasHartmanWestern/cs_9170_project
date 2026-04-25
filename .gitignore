@@ -13,3 +13,5 @@ datasets/
 paper_results*/
 paper_figures/
 paper_figures_v2/
+*.out
+*.err
