@@ -38,7 +38,7 @@ _KNOWN_TOP_LEVEL_FIELDS = {
     "reward_shaping", "local_weights", "ffnn", "reinforce", "curriculum", "benchmarks",
     "win_seconds", "step_seconds", "eo_guard_threshold",
     "whiten_pca", "beta_reset_interval", "beta_warmstart_from_alpha",
-    "pool_pos_fraction",
+    "pool_pos_fraction", "permutations", "total_data_size",
     "use_ppo", "ppo",
 }
 _KNOWN_LOCAL_WEIGHTS = {
