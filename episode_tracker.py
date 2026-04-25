@@ -117,10 +117,11 @@ class EpisodeTracker:
                  compare_metric: str = "reward.avg_reward",
                  flush_every_episodes: int = 10,
                  snapshot_csv: bool = False,
-                 beta_factory=None, seed=42):
+                 beta_factory=None, process_label="Procces", seed=42):
 
         self.seed=seed
         self.dataset=dataset
+        self.process_label = process_label
         self.capture_console = capture_console
         self.flush_every_episodes = max(1, int(flush_every_episodes))
         self._since_last_flush = 0
@@ -195,11 +196,11 @@ class EpisodeTracker:
             self._orig_stdout, self._orig_stderr = sys.stdout, sys.stderr
             sys.stdout = _TeeLogger(sys.__stdout__, self._log_file)
             sys.stderr = _TeeLogger(sys.__stderr__, self._log_file)
-            print(f"[Tracker] Experiment: {self.experiment_id}")
-            print(f"[Tracker] Seed folder: {self.seed_dir}")
-            print(f"[Tracker] Run: {self.run_id}")
-            print(f"[Tracker] Metrics CSV: {self.csv_path}")
-            print(f"[Tracker] Mirroring console to: {self.seed_dir / 'console.log'}")
+            print(f"[Tracker {self.process_label}] Experiment: {self.experiment_id}")
+            print(f"[Tracker {self.process_label}] Seed folder: {self.seed_dir}")
+            print(f"[Tracker {self.process_label}] Run: {self.run_id}")
+            print(f"[Tracker {self.process_label}] Metrics CSV: {self.csv_path}")
+            print(f"[Tracker {self.process_label}] Mirroring console to: {self.seed_dir / 'console.log'}")
 
         # --- Per-seed synthetic checkpoint paths ---
         self.best_metric = -float("inf")
@@ -252,7 +253,7 @@ class EpisodeTracker:
         with open(self.seed_dir / "metrics_header.json", "w", encoding="utf-8") as f:
             json.dump({"columns": self._csv_columns}, f, indent=2)
 
-        print(f"[Tracker] CSV header written with {len(self._csv_columns)} columns.")
+        print(f"[Tracker {self.process_label}] CSV header written with {len(self._csv_columns)} columns.")
 
     def _row_for_csv(self, episode_num: int, flat_row: dict):
         wall_seconds = time.time() - self.t0
@@ -302,9 +303,9 @@ class EpisodeTracker:
         worst   = csv_row.get("fairness.worst_loss_beta", np.nan)
 
         if np.isnan(ep_ret):
-            print(f"[Tracker] Ep {episode_num:4d} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
+            print(f"[Tracker {self.process_label}] Ep {episode_num:4d} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
         else:
-            print(f"[Tracker] Ep {episode_num:4d} | Return {ep_ret:.2f} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
+            print(f"[Tracker {self.process_label}] Ep {episode_num:4d} | Return {ep_ret:.2f} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
 
         pd.DataFrame([csv_row]).to_csv(self.csv_path, mode="a", header=False, index=False)
 
@@ -414,7 +415,7 @@ class EpisodeTracker:
                 df["target"] = y_syn
                 snap_csv = self.snap_dir / f"synthetic_ep{episode_num:04d}{suffix}.csv"
                 df.to_csv(snap_csv, index=False)
-            print(f"[Tracker] Saved snapshot: ep{episode_num:04d}{suffix}")
+            print(f"[Tracker {self.process_label}] Saved snapshot: ep{episode_num:04d}{suffix}")
 
         # Periodic beta checkpoint
         if save_beta_snap and beta_model is not None:
@@ -445,7 +446,7 @@ class EpisodeTracker:
                     "updated_at": time.strftime("%Y-%m-%d_%H-%M-%S")
                 }, f, indent=2)
             label_str = f" [{phase_label}]" if phase_label else ""
-            print(f"[Tracker] New BEST synthetic{label_str} (by {self.compare_metric}: {metric_val:.6f}) saved.")
+            print(f"[Tracker {self.process_label}] New BEST synthetic{label_str} (by {self.compare_metric}: {metric_val:.6f}) saved.")
 
             if beta_model is not None:
                 torch.save(beta_model.model.state_dict(), beta_path)
@@ -458,7 +459,7 @@ class EpisodeTracker:
                         "updated_at": time.strftime("%Y-%m-%d_%H-%M-%S"),
                         "checkpoint": str(beta_path.name)
                     }, f, indent=2)
-                print(f"[Tracker] BEST β weights{label_str} saved -> {beta_path}")
+                print(f"[Tracker {self.process_label}] BEST β weights{label_str} saved -> {beta_path}")
 
     def summary_path(self): return str(self.seed_dir)
 
@@ -588,7 +589,7 @@ class EpisodeTracker:
             ) from e
 
         torch.save(state_dict, self.alpha_state_dict_path)
-        print(f"[Tracker] Alpha model state_dict saved to {self.alpha_state_dict_path}")
+        print(f"[Tracker {self.process_label}] Alpha model state_dict saved to {self.alpha_state_dict_path}")
 
         # --- optionally save JSON-safe config ---
         if (config is not None) and (n_pca_components is not None):
@@ -640,4 +641,4 @@ class EpisodeTracker:
             ffnn_meta_path = self.seed_dir / "ffnn_meta.json"
             with open(ffnn_meta_path, "w", encoding="utf-8") as f:
                 json.dump(safe_meta, f, indent=2)
-            print(f"[Tracker] Alpha model config saved to {ffnn_meta_path}")
+            print(f"[Tracker {self.process_label}] Alpha model config saved to {ffnn_meta_path}")

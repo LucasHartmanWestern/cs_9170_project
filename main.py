@@ -21,6 +21,11 @@ def worker(exp_group, spec_name, spec, output_dir, seed, process_label, device):
         device=device
     )
     done = trainer()
+    del trainer
+    if torch.cuda.is_available() and "cuda" in device:
+        gc.collect()
+        torch.cuda.synchronize(torch.device(device))
+        torch.cuda.empty_cache()
     return done
 
 def run_specs(args):
@@ -61,7 +66,7 @@ def run_specs(args):
         jobs = []
         for process_count, permutation in enumerate(principal_permutations):
             seed = permutation[0]
-            process_label = f"Training process {process_count}"
+            process_label = f"Process {process_count}"
             # For each principal variable, set spec[var] to the current value from the permutation
             process_spec = spec.copy()
             for idx, var in enumerate(principal_vars):
@@ -78,7 +83,7 @@ def run_specs(args):
         # Run permutations sequentially
         for process_count, permutation in enumerate(principal_permutations):
             seed = permutation[0]
-            process_label = f"Training process {process_count}"
+            process_label = f"Process {process_count}"
             # For each principal variable, set spec[var] to the current value from the permutation
             procces_spec = spec.copy()
             for idx, var in enumerate(principal_vars):
@@ -104,7 +109,8 @@ def run_specs(args):
                 torch.cuda.empty_cache()
 
         if done_flags.count(False) > 0:
-            print(f"[main] WARNING: only {done_flags.count(True)}/{len(seeds)} seeds completed")
+            seed_size = len(spec["permutations"]["principals"]["seed"])
+            print(f"[main] WARNING: only {done_flags.count(True)}/{seed_size} seeds completed")
 
 
 def main():
