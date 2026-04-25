@@ -49,13 +49,13 @@ _KNOWN_LOCAL_WEIGHTS = {
     "anchor_selection_mode", "anchor_selection_top_k",
 }
 _KNOWN_REWARD_SHAPING = {
-    "global_sigmoid_k", "utility_guard_min_factor",
+    "utility_guard_min_factor",
     "local_squash_k", "local_squash_center", "hard_from_beta",
-    "roc_eo_lambda",
+    "roc_eo_lambda", #"global_sigmoid_k",
 }
 _REQUIRED_TOP_LEVEL = {
-    "dataset_name", "reward_mode", "lambda_schedule",
-    "pca_components", "traj_length", "real_data_size", "total_episodes",
+    "permutations", "total_data_size", "dataset_name", "reward_mode", "lambda_schedule",
+    "total_episodes",#"pca_components", "traj_length", "real_data_size",
 }
 
 def validate_spec(spec: dict, spec_path: str) -> None:
