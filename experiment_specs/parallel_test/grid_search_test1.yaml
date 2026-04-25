@@ -18,7 +18,8 @@ use_pca: true
 # pca_components: 5
 # traj_length: 1000
 # real_data_size: 4000
-total_episodes: 5000
+total_data_size: 5000
+total_episodes: 5 #5000
 phase2_episodes: null
 gen_both_classes: false
 curriculum_learning: false
@@ -38,10 +39,17 @@ local_weights:
   w_div: 0.0
 
 permutations:
-  seeds: [0, 1, 42]
-  global_sigmoid_k: [1, 3, 10]
-  pca_components: [5, 10, 15]
-  ratio_trajectory: [0.2, 0.4, 0.6]
+  principals:
+    variables: [seed,global_sigmoid_k, pca_components, ratio_trajectory]
+    seed: [0, 1] # [0, 1, 42]
+    global_sigmoid_k: [1, 3] # [1, 3, 10]
+    pca_components: [5, 10] # [5, 10, 15]
+    ratio_trajectory: [0.2, 0.4] # [0.2, 0.4, 0.6]
+  secondaries:
+    variables: [learning_rate, batch_size, epochs] #Just an option but can be changed to the ones we want to vary
+    learning_rate: [0.0001, 0.001, 0.01]
+    batch_size: [32, 64, 128]
+    epochs: [10, 20, 40]
 
 ffnn:
   hidden_sizes:
