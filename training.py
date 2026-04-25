@@ -61,7 +61,7 @@ class Training:
             # torch.backends.cudnn.benchmark = False
             # torch.backends.cudnn.deterministic = True
             torch.set_float32_matmul_precision("highest")
-        print(f"[{self.process_label}] ---- running seed={self.seed} ----")
+        print(f"[Training {self.process_label}] ---- running seed={self.seed} ----")
             
 
         # state_dim and agent configs are finalized in __call__ after data loading
@@ -222,8 +222,9 @@ class Training:
 
         #PCA / trajectory
         self.pca_components=spec["pca_components"]
-        self.traj_length=spec["traj_length"]
-        self.real_data_size=spec["real_data_size"]
+        total_data_size=spec["total_data_size"]
+        self.traj_length=int(spec["ratio_trajectory"]*total_data_size)
+        self.real_data_size=int(total_data_size-self.traj_length)  
         self.episodes=spec["total_episodes"]
 
         #reward
@@ -733,7 +734,7 @@ class Training:
         best_y_syn = None
 
         print(f"\n{'='*60}")
-        print(f"[Phase] Starting {phase_label} | target_class={target_class} | episodes={n_episodes}")
+        print(f"[Phase {self.process_label}] Starting {phase_label} | target_class={target_class} | episodes={n_episodes}")
         print(f"{'='*60}")
 
         for episode in range(n_episodes):
@@ -943,7 +944,7 @@ class Training:
                     torch.cuda.empty_cache()
                 gc.collect()
 
-        print(f"[Phase] Finished {phase_label} | best global_obj={best_phase_reward:.4f}")
+        print(f"[Phase {self.process_label}] Finished {phase_label} | best global_obj={best_phase_reward:.4f}")
         return (best_x_syn, best_y_syn)
 
     # ---------------- CMA-ES episode loop ----------------
@@ -971,7 +972,7 @@ class Training:
         best_y_syn = None
 
         print(f"\n{'='*60}")
-        print(f"[CMA-ES Phase] {phase_label} | target_class={target_class} | "
+        print(f"[CMA-ES Phase {self.process_label}] {phase_label} | target_class={target_class} | "
               f"episodes={n_episodes} | popsize={agent.popsize}")
         print(f"{'='*60}")
 
@@ -1062,7 +1063,7 @@ class Training:
             if is_full_gen_done:
                 stop = agent.step_generation()
                 if stop:
-                    print(f"[CMA-ES] Converged at episode {episode+1}: {stop}")
+                    print(f"[CMA-ES {self.process_label}] Converged at episode {episode+1}: {stop}")
                     converged = True
 
             # Alignment metrics
@@ -1124,7 +1125,7 @@ class Training:
                     torch.cuda.empty_cache()
                 gc.collect()
 
-        print(f"[CMA-ES Phase] Finished {phase_label} | best global_obj={best_phase_reward:.4f}")
+        print(f"[CMA-ES Phase {self.process_label}] Finished {phase_label} | best global_obj={best_phase_reward:.4f}")
         return (best_x_syn, best_y_syn)
 
     # ---------------- Training loop ----------------
@@ -1183,6 +1184,7 @@ class Training:
         with EpisodeTracker(
             run_stats,
             dataset=self.dataset,
+            process_label=self.process_label,
             save_dir=getattr(self, "save_dir", "training_runs"),
             compare_metric="global.global_obj",
             beta_factory=beta_factory,
@@ -1284,7 +1286,7 @@ class Training:
                 _soft_eo_a = rh.soft_eo_gap(self.dataset.a_val, y_theta_val, _p1_a_eo)
             self.eo_alpha_baseline = float(_soft_eo_a.item()) if (_soft_eo_a == _soft_eo_a) else float("nan")
 
-            print(f"[disadv] group={disadv} per_g={per_g} worst_4g={self.disadv_worst_loss_alpha:.4f} soft_eo_alpha={self.eo_alpha_baseline:.4f}")
+            print(f"[disadv {self.process_label}] group={disadv} per_g={per_g} worst_4g={self.disadv_worst_loss_alpha:.4f} soft_eo_alpha={self.eo_alpha_baseline:.4f}")
 
 
             # Build anchor set: real TRAIN points that are (y=1) AND (a=disadvantaged group)
@@ -1336,11 +1338,11 @@ class Training:
                     self._ot_mean, self._ot_log_var, self._ot_ref_log_prob = rh.compute_ot_target(
                         real_minority_samples, adv_minority
                     )
-                    print(f"[OT] target fitted: adv_pos={adv_minority.shape[0]} "
+                    print(f"[OT {self.process_label}] target fitted: adv_pos={adv_minority.shape[0]} "
                           f"disadv_pos={real_minority_samples.shape[0]} "
                           f"ref_log_prob={self._ot_ref_log_prob:.3f}")
                 else:
-                    print(f"[OT] insufficient samples (adv={adv_minority.shape[0]}, "
+                    print(f"[OT {self.process_label}] insufficient samples (adv={adv_minority.shape[0]}, "
                           f"disadv={real_minority_samples.shape[0]}) — OT local reward disabled")
                     self.w_ot = 0.0
 
@@ -1567,7 +1569,7 @@ class Training:
                     combined_beta.model.state_dict(),
                     self.tracker.best_beta_path,
                 )
-                print(f"[Combined] Saved combined beta -> {self.tracker.best_beta_path}")
+                print(f"[Combined {self.process_label}] Saved combined beta -> {self.tracker.best_beta_path}")
 
                 # Save combined synthetic
                 combined_npz_path = self.tracker.seed_dir / "best_synthetic_combined.npz"
@@ -1578,7 +1580,7 @@ class Training:
                     x=x_all_syn.detach().cpu().numpy(),
                     y=y_all_syn.detach().cpu().numpy(),
                 )
-                print(f"[Combined] Saved combined synthetic -> {combined_npz_path}")
+                print(f"[Combined {self.process_label}] Saved combined synthetic -> {combined_npz_path}")
 
                 # Use combined beta for final test
                 final_beta = combined_beta
@@ -1639,5 +1641,5 @@ class Training:
             )
 
         print(f"Total time {time.time() - start_time:.2f}s")
-        print(f"[Tracker] Finished. Run folder: {self.tracker.summary_path()}")
+        print(f"[Tracker {self.process_label}] Finished. Run folder: {self.tracker.summary_path()}")
         return True
