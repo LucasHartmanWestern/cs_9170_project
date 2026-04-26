@@ -802,7 +802,9 @@ Supersedes old bundle system (census_grid/, 108 specs, 28 bundles). Parallelizat
 | DRAC GPU 0 | k=10 | census_k10_gpu0.sh | PENDING | — |
 | DRAC GPU 1 | k=10 | census_k10_gpu1.sh | PENDING | — |
 
-**Estimated completion:** ~10 days from start (GPU0 bottleneck on each server). First epochs=10 results available ~4.4 days in.
+**DRAC allocation test (2026-04-26):** Before submitting full k=10 runs, running 1-batch timing tests on DRAC to calibrate resource requests. Specs: `census_k10_test_gpu0.sh` (epochs=20, 4 perms, 200 episodes) and `census_k10_test_gpu1.sh` (epochs=30, 4 perms, 200 episodes). Time limit 2h. Wall-clock time will be used to set final `--time`, `--mem`, and `max_parallel` for the full runs. Full k=10 submission blocked until test completes.
+
+**Estimated completion:** ~10 days from start (GPU0 bottleneck on each server). First epochs=10 results available ~4.4 days in. (Estimates based on local servers; DRAC speed TBD from allocation test.)
 
 ---
 
