@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=census_k10_test_gpu0
 #SBATCH --account=rrg-kgroling
-#SBATCH --time=48:00:00
+#SBATCH --time=2:00:00
 #SBATCH --mem=12G
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1

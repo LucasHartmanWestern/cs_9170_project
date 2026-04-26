@@ -9,7 +9,7 @@ lambda_schedule:
 - 1.0
 - 1.0
 use_pca: true
-total_episodes: 5000
+total_episodes: 200
 phase2_episodes: null
 gen_both_classes: false
 curriculum_learning: false
