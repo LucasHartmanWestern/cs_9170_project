@@ -770,40 +770,39 @@ Systematic grid search over four principal hyperparameters to identify the best 
 
 | Parameter | Values | Rationale |
 |---|---|---|
-| `reward_shaping.global_sigmoid_k` | [1, 3, 5, 10] | Controls reward sensitivity; k=10 is current vanilla |
+| `global_sigmoid_k` | [0, 3, 5, 10] | k=0 = no-sigmoid baseline; k=10 = current vanilla |
 | `pca_components` | [5, 10, 15] | Feature compression; 10 is current vanilla |
-| `traj_length` + `real_data_size` | (1000,4000) / (2000,3000) / (3000,2000) / (4000,1000) | Synthetic at 20/40/60/80% of total training data (total fixed at 5000) |
-| `ffnn.epochs` | [10, 20, 40] | Classifier training intensity; 20 is current vanilla |
+| `ratio_trajectory` | [0.2, 0.4, 0.6] | Synthetic fraction of total 5000 training samples (ratio=0.4 is vanilla) |
+| `ffnn.epochs` | [10, 20, 30] | Classifier training intensity; 20 is current vanilla |
 
-Total: 4k × 3pca × 3epochs × 4synth-ratios = **144 specs × 3 seeds = 432 runs**
+Total: 4k × 3pca × 3ratio × 3epochs × 3seeds = **324 runs**
 
-**Fixed base patches:** dataset_name=census_income, da_pct=0.01433, minority_id=0, majority_id=1, seeds=[0,1,42], total_episodes=5000, reward_mode=wgl, dp_protected_col=sex. Total training data fixed at 5000 across all synth-ratio conditions.
+**Fixed base patches:** dataset_name=census_income, da_pct=0.01433, minority_id=0, majority_id=1, seeds=[0,1,42], total_episodes=5000, reward_mode=wgl, dp_protected_col=sex, total_data_size=5000.
 
-**Spec generation:**
-```
-python make_search_specs.py search_configs/census_grid.yaml
-# → experiment_specs/census_grid/ (144 specs)
-```
+**Spec format:** YAML permutations block (`experiment_specs/census_grid_v2/`). Variables ordered `[epochs, pca_components, seed, ratio_trajectory]` so each batch of 4 parallel processes shares the same epoch value (homogeneous batches, no slow run blocking fast ones).
+
+**GPU split per server:** GPU0 runs epochs=[10,20] (54 perms, 14 batches, ~10 days); GPU1 runs epochs=[30] (27 perms, 7 batches, ~7 days). All ratio values on both GPUs.
 
 **Selection criterion:** Best config = lowest mean β-EO across 3 seeds, with β-F1w ≥ α-F1w − 0.02 (utility guard).
 
 ---
 
-**Submission Tracker — census grid (108 specs, 28 bundles)**
+**Submission Tracker — census_grid_v2 (8 YAML specs)**
 
-Grid updated: k=1 replaced by k=0 (no-sigmoid baseline); ffnn.epochs restored as principal axis; specs regenerated as YAML bundles. All prior runs cancelled. Division: DRAC runs k=10 (7 bundles, SLURM). Huron runs k=0, Lambda runs k=3, Aulavik runs k=5 (7 bundles each, split 4/3 across two GPUs). Local servers strip SLURM module lines with `grep -v "^module"` before running bundle scripts; cuda:1 bundles add a sed device override.
+Supersedes old bundle system (census_grid/, 108 specs, 28 bundles). Parallelization via Santiago's `torch.multiprocessing` spawn approach with `max_parallel=4`. Bug fixed in `main.py`: seed extraction now uses `principal_vars.index('seed')` rather than `permutation[0]` to handle epochs-first variable ordering correctly.
 
-| Resource | k | Bundles | Status | Command |
+| Resource | k | Spec | Status | Started |
 |---|---|---|---|---|
-| DRAC | k=10 | k10_bundle_1–7 | PENDING | `for f in experiment_specs/census_grid/k10_bundle_*.sh; do sbatch "$f"; done` |
-| Huron GPU 0 | k=0 | k0_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k0_bundle_{1,3,5,7}.sh; do grep -v "^module" "$f" \| bash; done` |
-| Huron GPU 1 | k=0 | k0_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k0_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| grep -v "^module" \| bash; done` |
-| Lambda GPU 0 | k=3 | k3_bundle_1,3,5,7 | PENDING | `for f in experiment_specs/census_grid/k3_bundle_{1,3,5,7}.sh; do grep -v "^module" "$f" \| bash; done` |
-| Lambda GPU 1 | k=3 | k3_bundle_2,4,6 | PENDING | `for f in experiment_specs/census_grid/k3_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| grep -v "^module" \| bash; done` |
-| Aulavik GPU 0 | k=5 | k5_bundle_1,3,5,7 | **RUNNING** | `for f in experiment_specs/census_grid/k5_bundle_{1,3,5,7}.sh; do grep -v "^module" "$f" \| bash; done` |
-| Aulavik GPU 1 | k=5 | k5_bundle_2,4,6 | **RUNNING** | `for f in experiment_specs/census_grid/k5_bundle_{2,4,6}.sh; do sed 's/--device cuda:0/--device cuda:1/g' "$f" \| grep -v "^module" \| bash; done` |
+| Huron GPU 0 | k=0 | census_k0_gpu0.yaml | **RUNNING** | 2026-04-25 |
+| Huron GPU 1 | k=0 | census_k0_gpu1.yaml | **RUNNING** | 2026-04-25 |
+| Lambda GPU 0 | k=3 | census_k3_gpu0.yaml | **RUNNING** | 2026-04-25 |
+| Lambda GPU 1 | k=3 | census_k3_gpu1.yaml | **RUNNING** | 2026-04-25 |
+| Aulavik GPU 0 | k=5 | census_k5_gpu0.yaml | **RUNNING** | 2026-04-25 |
+| Aulavik GPU 1 | k=5 | census_k5_gpu1.yaml | **RUNNING** | 2026-04-25 |
+| DRAC GPU 0 | k=10 | census_k10_gpu0.sh | PENDING | — |
+| DRAC GPU 1 | k=10 | census_k10_gpu1.sh | PENDING | — |
 
-**Completed bundles:** *(none yet — update as results arrive)*
+**Estimated completion:** ~10 days from start (GPU0 bottleneck on each server). First epochs=10 results available ~4.4 days in.
 
 ---
 
