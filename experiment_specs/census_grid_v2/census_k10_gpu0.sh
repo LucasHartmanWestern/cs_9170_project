@@ -18,7 +18,8 @@ export OPENBLAS_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
 module purge
-module load python/3.10
-source $SLURM_TMPDIR/env/bin/activate
+module load python/3.12.4 cuda cudnn
+source ~/envs/rl/bin/activate
+mkdir -p experiment_specs/census_grid_v2/logs
 
 python main.py --spec experiment_specs/census_grid_v2/census_k10_gpu0.yaml --parallel --device cuda:0
