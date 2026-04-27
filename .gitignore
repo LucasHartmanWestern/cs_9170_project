@@ -7,6 +7,7 @@ data/Optional/*
 data/Protocol/*
 .idea/*
 training_runs*/
+test_experiment*/
 archive_runs*/
 archive*/
 datasets/
