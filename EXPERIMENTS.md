@@ -787,32 +787,25 @@ Total: 4k × 3pca × 3ratio × 3epochs × 3seeds = **324 runs**
 
 ---
 
-**Submission Tracker — census_grid_v2 (8 YAML specs)**
+**Submission Tracker — census_grid_v2 (revised 2026-04-28)**
 
-Supersedes old bundle system (census_grid/, 108 specs, 28 bundles). Parallelization via Santiago's `torch.multiprocessing` spawn approach with `max_parallel=4`. Bug fixed in `main.py`: seed extraction now uses `principal_vars.index('seed')` rather than `permutation[0]` to handle epochs-first variable ordering correctly.
+Supersedes old bundle system (census_grid/, 108 specs, 28 bundles). Parallelization via Santiago's `torch.multiprocessing` spawn approach. Bug fixed in `main.py`: seed extraction now uses `principal_vars.index('seed')` rather than `permutation[0]` to handle epochs-first variable ordering correctly. `output_dir` spec field added to `main.py` to allow redirecting output directly to storage (used by Huron restart specs).
 
-| Resource | k | Spec | Status | Started |
+**Architecture change (2026-04-28):** k=10 DRAC submission restructured from 2 monolithic specs (census_k10_gpu0/gpu1.yaml, 54+27 perms each) into 9 per-(ratio×epoch) specs (census_k10_r{02,04,06}_e{10,20,30}), each with 9 perms and max_parallel=9. Confirmed safe from parallelism scaling tests (max_parallel=9, 9 CPUs, ~17.5–21.7 s/ep, all jobs within 168h wall limit).
+
+| Resource | k | Spec(s) | Status | Started |
 |---|---|---|---|---|
-| Huron GPU 0 | k=0 | census_k0_gpu0.yaml | **RUNNING** | 2026-04-25 |
-| Huron GPU 1 | k=0 | census_k0_gpu1.yaml | **RUNNING** | 2026-04-25 |
+| Huron GPU 0 | k=0 | census_k0_gpu0_restart_pca15_e10.yaml → census_k0_gpu0_restart_e20.yaml | **RUNNING** → QUEUED | 2026-04-28 |
+| Huron GPU 1 | k=0 | census_k0_gpu1_restart_pca10_e30.yaml → census_k0_gpu1_restart_pca15_e30.yaml | **RUNNING** → QUEUED | 2026-04-28 |
 | Lambda GPU 0 | k=3 | census_k3_gpu0.yaml | **RUNNING** | 2026-04-25 |
 | Lambda GPU 1 | k=3 | census_k3_gpu1.yaml | **RUNNING** | 2026-04-25 |
 | Aulavik GPU 0 | k=5 | census_k5_gpu0.yaml | **RUNNING** | 2026-04-25 |
 | Aulavik GPU 1 | k=5 | census_k5_gpu1.yaml | **RUNNING** | 2026-04-25 |
-| DRAC GPU 0 | k=10 | census_k10_gpu0.sh | PENDING | — |
-| DRAC GPU 1 | k=10 | census_k10_gpu1.sh | PENDING | — |
+| DRAC (9 jobs) | k=10 | census_k10_r{02,04,06}_e{10,20,30}.sh | **QUEUED** | 2026-04-28 |
 
-**DRAC allocation test (2026-04-26):** Before submitting full k=10 runs, running 1-batch timing tests on DRAC to calibrate resource requests. Specs: `census_k10_test_gpu0.sh` (epochs=20, 4 perms, 200 episodes) and `census_k10_test_gpu1.sh` (epochs=30, 4 perms, 200 episodes). Time limit 2h. Wall-clock time will be used to set final `--time`, `--mem`, and `max_parallel` for the full runs. Full k=10 submission blocked until test completes.
+**Huron k=0 history:** Original gpu0/gpu1 runs (started 2026-04-25) completed epochs=10 for PCA5 and PCA10 (all seeds), PCA5 epochs=30, and PCA10 epochs=30 seed_0 before storage issues interrupted them. Completed runs moved to `/storage_1/epigou_storage/FORGE/training_runs/`. Restart specs cover all remaining permutations and write directly to storage via `output_dir` field.
 
-**Allocation test results (2026-04-27):** Test runs returned. Per-process wall time: epochs=20 → ~17.5 s/ep (3500s/200ep), epochs=30 → ~21.7 s/ep (4330s/200ep). CPU at 99.75% (3.99/4 cores) — workload is CPU-bound. GPU utilization was near-zero for the epochs=20 job (tiny FFNN, GPU finishes each batch in microseconds, Python overhead dominates). Full runs at max_parallel=4 would require ~300h (gpu0) and ~211h (gpu1), both exceeding the 168h SLURM limit. Solution: increase max_parallel to run all 27 perms per epoch value simultaneously.
-
-**DRAC parallelism scaling tests (2026-04-27):** To confirm per-process speed does not degrade under high parallelism, two further tests submitted:
-- `census_k10_test2.sh`: max_parallel=27, 27 CPUs, 50G, 27 perms (all epochs=20), 200 ep, 2h limit — **RUNNING**
-- `census_k10_test3.sh`: max_parallel=12, 12 CPUs, 24G, 27 perms (all epochs=20), 200 ep, 4h limit — **RUNNING**
-
-Key metric to check: `wall_seconds` at ep 200 per seed. If ~3500s (same as 4-process baseline), max_parallel=27 is confirmed. Full k=10 submission blocked until these return.
-
-**Estimated completion (revised, pending scaling test):** With max_parallel=27: gpu0 ~43h (2 batches), gpu1 ~30h (1 batch) — both within 168h limit.
+**DRAC k=10 timing:** epochs=10/20 → ~17.5 s/ep, epochs=30 → ~21.7 s/ep. Per-job wall time estimates: e10 jobs 50–68h, e20 jobs 52–74h, e30 jobs 64–84h. All within 168h limit.
 
 ---
 
