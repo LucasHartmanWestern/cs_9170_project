@@ -804,7 +804,15 @@ Supersedes old bundle system (census_grid/, 108 specs, 28 bundles). Parallelizat
 
 **DRAC allocation test (2026-04-26):** Before submitting full k=10 runs, running 1-batch timing tests on DRAC to calibrate resource requests. Specs: `census_k10_test_gpu0.sh` (epochs=20, 4 perms, 200 episodes) and `census_k10_test_gpu1.sh` (epochs=30, 4 perms, 200 episodes). Time limit 2h. Wall-clock time will be used to set final `--time`, `--mem`, and `max_parallel` for the full runs. Full k=10 submission blocked until test completes.
 
-**Estimated completion:** ~10 days from start (GPU0 bottleneck on each server). First epochs=10 results available ~4.4 days in. (Estimates based on local servers; DRAC speed TBD from allocation test.)
+**Allocation test results (2026-04-27):** Test runs returned. Per-process wall time: epochs=20 → ~17.5 s/ep (3500s/200ep), epochs=30 → ~21.7 s/ep (4330s/200ep). CPU at 99.75% (3.99/4 cores) — workload is CPU-bound. GPU utilization was near-zero for the epochs=20 job (tiny FFNN, GPU finishes each batch in microseconds, Python overhead dominates). Full runs at max_parallel=4 would require ~300h (gpu0) and ~211h (gpu1), both exceeding the 168h SLURM limit. Solution: increase max_parallel to run all 27 perms per epoch value simultaneously.
+
+**DRAC parallelism scaling tests (2026-04-27):** To confirm per-process speed does not degrade under high parallelism, two further tests submitted:
+- `census_k10_test2.sh`: max_parallel=27, 27 CPUs, 50G, 27 perms (all epochs=20), 200 ep, 2h limit — **RUNNING**
+- `census_k10_test3.sh`: max_parallel=12, 12 CPUs, 24G, 27 perms (all epochs=20), 200 ep, 4h limit — **RUNNING**
+
+Key metric to check: `wall_seconds` at ep 200 per seed. If ~3500s (same as 4-process baseline), max_parallel=27 is confirmed. Full k=10 submission blocked until these return.
+
+**Estimated completion (revised, pending scaling test):** With max_parallel=27: gpu0 ~43h (2 batches), gpu1 ~30h (1 batch) — both within 168h limit.
 
 ---
 

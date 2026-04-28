@@ -54,6 +54,8 @@ def run_specs(args):
     else:
         device = args.device
     spec = _load_spec(args.spec)
+    if args.output_dir is None:
+        args.output_dir = spec.get("output_dir", "training_runs")
 
     exp_group = build_exp_group(args.spec, spec)
     spec_base = os.path.basename(args.spec)
@@ -136,7 +138,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--spec", required=True, help="Path to a YAML experiment spec file")
     p.add_argument("--device", default="cuda:0", help="cuda:0 or cpu (auto-falls back to cpu if no CUDA)")
-    p.add_argument("--output_dir", default="training_runs", help="Directory to save results")
+    p.add_argument("--output_dir", default=None, help="Directory to save results (overrides spec output_dir if set)")
     p.add_argument("--parallel", action="store_true", help="Run in parallel mode")
     args = p.parse_args()
     run_specs(args)

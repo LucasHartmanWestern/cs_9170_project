@@ -41,6 +41,7 @@ _KNOWN_TOP_LEVEL_FIELDS = {
     "pool_pos_fraction", "permutations", "total_data_size",
     "global_sigmoid_k", "epochs", "max_parallel",
     "use_ppo", "ppo",
+    "output_dir",
 }
 _KNOWN_LOCAL_WEIGHTS = {
     "w_ot", "use_dvrl_local", "dvrl_max_bce", "dvrl_scale",
