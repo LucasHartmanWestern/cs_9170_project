@@ -22,8 +22,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-BASE_V3  = "/home/epigou/cs_9170_project/paper_results_v3/training_runs"
-OUT_DIR  = "/home/epigou/cs_9170_project/paper_figures_v3"
+BASE_V3  = "/home/epigou/cs_9170_project/archive_runs/paper_results_v3/training_runs"
+OUT_DIR  = "/home/epigou/cs_9170_project/figures"
 FIG_DIR  = "/home/epigou/cs_9170_project/paper/figures"
 
 SEEDS = {
