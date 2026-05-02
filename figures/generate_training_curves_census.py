@@ -73,7 +73,7 @@ def load_full(path, phase1_only=False):
 
 
 def make_fig(phase1_only=False):
-    fig, axes_col = plt.subplots(2, 1, figsize=(4.5, 6.75), sharey=False)
+    fig, axes_col = plt.subplots(1, 2, figsize=(9.0, 3.75), sharey=False)
 
     for panel_idx, (ax, (ds, ep_key, cfg_label, gen_both)) in enumerate(zip(axes_col, PANELS)):
         panel_label = ["a)", "b)"][panel_idx]

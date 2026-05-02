@@ -15,7 +15,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
-CSV_PATH = "/home/epigou/cs_9170_project/paper_figures_v3/main_table_metrics_per_seed.csv"
+CSV_PATH = "/home/epigou/cs_9170_project/figures/main_table_metrics_per_seed.csv"
 OUT_PATH = "/home/epigou/cs_9170_project/paper/figures/radar_top_down_AB.png"
 
 # (csv_column, axis_label, invert)
@@ -68,8 +68,8 @@ angles   = np.linspace(0, 2 * np.pi, n, endpoint=False).tolist()
 angles  += angles[:1]   # close the polygon
 
 fig, axes = plt.subplots(
-    nrows=2, ncols=1,
-    figsize=(4.5, 8),
+    nrows=1, ncols=2,
+    figsize=(9.0, 5.0),
     subplot_kw=dict(polar=True),
 )
 

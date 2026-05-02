@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-CSV_PATH = "/home/epigou/cs_9170_project/paper_figures_v3/main_table_metrics_per_seed.csv"
+CSV_PATH = "/home/epigou/cs_9170_project/figures/main_table_metrics_per_seed.csv"
 OUT_PATH = "/home/epigou/cs_9170_project/paper/figures/exp2_comparative_results.png"
 
 DATASETS = ["Census", "Capture-24"]
@@ -54,7 +54,7 @@ for ds in DATASETS:
 
 # ── plot ──────────────────────────────────────────────────────────────────────
 
-fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(5, 7), sharex=True)
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10, 4.5), sharex=False)
 
 for ax, panel in zip(axes, PANELS):
     for csv_name, style in METHOD_MAP.items():
@@ -74,7 +74,8 @@ for ax, panel in zip(axes, PANELS):
     ax.tick_params(axis="x", labelsize=11)
     ax.tick_params(axis="y", labelsize=10)
 
-axes[-1].set_xlabel("Dataset", fontsize=11)
+for ax in axes:
+    ax.set_xlabel("Dataset", fontsize=11)
 
 # shared legend below the plot
 handles, labels = axes[0].get_legend_handles_labels()
