@@ -37,6 +37,7 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-020 | natural-scarcity-baselines | EXPLORATORY | PLANNED | census, capture24, compas | EXP-019 |
 | EXP-021 | census-hparam-grid | PARAM-TUNING | IN PROGRESS | census | EXP-001 |
 | EXP-022 | census-hparam-random | PARAM-TUNING | PLANNED | census | EXP-021 |
+| EXP-025 | capture24-hparam-grid | PARAM-TUNING | IN PROGRESS | capture24 | EXP-002 |
 
 ---
 
@@ -795,13 +796,14 @@ Supersedes old bundle system (census_grid/, 108 specs, 28 bundles). Parallelizat
 
 | Resource | k | Spec(s) | Status | Started |
 |---|---|---|---|---|
-| Huron GPU 0 | k=0 | census_k0_gpu0_restart_pca15_e10.yaml → census_k0_gpu0_restart_e20.yaml | **RUNNING** → QUEUED | 2026-04-28 |
-| Huron GPU 1 | k=0 | census_k0_gpu1_restart_pca10_e30.yaml → census_k0_gpu1_restart_pca15_e30.yaml | **RUNNING** → QUEUED | 2026-04-28 |
+| Huron GPU 0 | k=0 | census_k0_gpu0_restart_pca15_e10.yaml → census_k0_gpu0_restart_e20.yaml | **RUNNING** (2/27 remaining) | 2026-04-28 |
+| Huron GPU 1 | k=0 | census_k0_gpu1_restart_pca10_e30.yaml → census_k0_gpu1_restart_pca15_e30.yaml | **COMPLETE** | 2026-04-28 |
 | Lambda GPU 0 | k=3 | census_k3_gpu0.yaml | **RUNNING** | 2026-04-25 |
 | Lambda GPU 1 | k=3 | census_k3_gpu1.yaml | **RUNNING** | 2026-04-25 |
-| Aulavik GPU 0 | k=5 | census_k5_gpu0.yaml | **RUNNING** | 2026-04-25 |
-| Aulavik GPU 1 | k=5 | census_k5_gpu1.yaml | **RUNNING** | 2026-04-25 |
-| DRAC (9 jobs) | k=10 | census_k10_r{02,04,06}_e{10,20,30}.sh | **QUEUED** | 2026-04-28 |
+| Aulavik GPU 0 | k=5 | census_k5_gpu0.yaml | **COMPLETE** | 2026-04-25 |
+| Aulavik GPU 1 | k=5 | census_k5_gpu1.yaml | **COMPLETE** | 2026-04-25 |
+| DRAC (8 jobs) | k=10 | census_k10_r{02,04,06}_e{10,20,30}.sh (excl. r02_e10) | **QUEUED** (resubmit under def-mcapretz) | 2026-04-28 |
+| DRAC (1 job) | k=10 | census_k10_r02_e10.sh | **COMPLETE** | 2026-04-28 |
 
 **Huron k=0 history:** Original gpu0/gpu1 runs (started 2026-04-25) completed epochs=10 for PCA5 and PCA10 (all seeds), PCA5 epochs=30, and PCA10 epochs=30 seed_0 before storage issues interrupted them. Completed runs moved to `/storage_1/epigou_storage/FORGE/training_runs/`. Restart specs cover all remaining permutations and write directly to storage via `output_dir` field.
 
@@ -942,3 +944,55 @@ BRFSS behavioral risk factors (age, BMI, smoking, diabetes, physical activity) a
 
 **Next steps:**
 *(pending)*
+
+---
+
+### EXP-025 | capture24-hparam-grid
+
+**Type:** PARAM-TUNING
+**Status:** IN PROGRESS
+**Dataset(s):** capture24 (da_pct=0.015, DA+=45)
+**Seeds:** 0, 1, 42
+**Reference config:** vanilla_config.json
+**Config delta:** Full cartesian grid — same axes as EXP-021
+**Follows from:** EXP-002
+
+---
+
+**Purpose:**
+Mirror of EXP-021 on capture24. Sweeps the same four hyperparameters to identify the best configuration for capture24 independently of census, since optimal settings may differ (capture24 has higher-dimensional time-series features and different class structure).
+
+**Parameters swept:**
+
+| Parameter | Values |
+|---|---|
+| `global_sigmoid_k` | [5] |
+| `pca_components` | [5, 10, 15] |
+| `ratio_trajectory` | [0.2, 0.4, 0.6] |
+| `ffnn.epochs` | [10, 20, 30] |
+
+Total: 1k × 3pca × 3ratio × 3epochs × 3seeds = **81 runs**
+
+**Fixed base patches:** dataset_name=capture24, da_pct=0.015, minority_id=1, majority_id=0, dp_protected_col=sex, win_seconds=1.0, step_seconds=0.5, seeds=[0,1,42], total_episodes=5000, reward_mode=wgl, total_data_size=5000.
+
+**Specs:** `experiment_specs/capture24_grid/capture24_k5_gpu{0,1}.yaml`
+
+**GPU split (Aulavik):** GPU0 runs epochs=[10,20] (54 perms, max_parallel=4); GPU1 runs epochs=[30] (27 perms, max_parallel=4).
+
+**Submission Tracker:**
+
+| Resource | Spec | Status | Started |
+|---|---|---|---|
+| Aulavik GPU 0 | capture24_k5_gpu0.yaml | **RUNNING** | 2026-05-04 |
+| Aulavik GPU 1 | capture24_k5_gpu1.yaml | **RUNNING** | 2026-05-04 |
+
+**Selection criterion:** Same as EXP-021 — lowest mean β-EO, with β-F1w ≥ α-F1w − 0.02.
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+Feed best capture24 params into EXP-022 equivalent (capture24 random search) once complete.
