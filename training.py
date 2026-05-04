@@ -225,9 +225,13 @@ class Training:
 
         #PCA / trajectory
         self.pca_components=spec["pca_components"]
-        total_data_size=spec["total_data_size"]
-        self.traj_length=int(spec["ratio_trajectory"]*total_data_size)
-        self.real_data_size=int(total_data_size-self.traj_length)  
+        if "total_data_size" in spec and "ratio_trajectory" in spec:
+            total_data_size = spec["total_data_size"]
+            self.traj_length = int(spec["ratio_trajectory"] * total_data_size)
+            self.real_data_size = int(total_data_size - self.traj_length)
+        else:
+            self.traj_length = spec["traj_length"]
+            self.real_data_size = spec["real_data_size"]
         self.episodes=spec["total_episodes"]
 
         #reward

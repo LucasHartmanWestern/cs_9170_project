@@ -862,3 +862,83 @@ python make_search_specs.py search_configs/census_random.yaml
 
 **Next steps:**
 Use best combined config (EXP-021 + EXP-022) as the new census vanilla for final paper runs.
+
+---
+
+### EXP-023 | diabetes130-viability-investigation
+
+**Type:** DATASET-VIABILITY
+**Status:** COMPLETE — ALL FRAMINGS FAILED
+**Dataset(s):** diabetes130 (UCI Strack et al. 2014, n≈69,174 encounters)
+**Seeds:** 42, 0, 1
+**Reference config:** dataset_viability.py
+**Logs:** experiment_specs/diabetes130/local/logs/
+
+---
+
+**Purpose:**
+Assess diabetes130 as a potential 3rd paper dataset. Protected attr: age group (young <45 = disadvantaged, old ≥65 = advantaged). Investigated two readmission framings.
+
+**Framing 1 — lt30 (readmitted within 30 days, default):**
+- n_young=4515, n_old=47659; positive rate ≈ 8.8%
+- DA+ with da_pct=0.01433: 17 (below target 43 — bias formula mismatch, but unfixable for this framing)
+- val_disadv_pos = 60 — FAIL (< 200 test threshold; <30 but also < 200 test)
+- test_disadv_pos = 60 — FAIL
+- alpha_EO ≈ 0.002 — FAIL; model collapses to all-negative at 9.4% positive rate despite balanced sampling
+- sep_ratio = 1.68, cosine = 0.30 — PASS (separability is the ONE criterion that passes)
+- Root cause of EO failure: at 9.4% positive rate after bias injection, the FFNN collapses to predicting all-negative despite balanced sampling → hard EO = 0
+
+**Framing 2 — any readmission (readmitted at any point, <30 OR >30):**
+- Positive rate ≈ 39.9%
+- test_disadv_pos ≈ 800+ — PASS
+- alpha_EO (soft) ≈ 0.104 — borderline PASS
+- sep_ratio ≈ 0.56, cosine ≈ 0.96 — FAIL; positive groups (young and old diabetics who get readmitted) overlap heavily in PCA
+- Root cause: readmission at any time is driven by disease severity, not age-specific mechanisms → identical feature profiles for young vs old readmitted patients
+
+**Additional tests run:**
+- Baselines (GroupDRO, FLB, OT Repair, FORGE k=3 1000ep) confirmed: alpha F1(min)=0.000 across all baselines for lt30, confirming degenerate classifier
+- FORGE k=3 1000ep on lt30: alpha_EO≈0.0016, ran to completion but results meaningless
+
+**Takeaway:**
+Diabetes130 does not pass viability for any age-based framing. The lt30 framing has too few test positives and triggers a degenerate classifier; the any-readmission framing has good positives and EO but the PCA structure shows complete overlap (no group-specific signal for RL). Dataset dropped from paper consideration.
+
+**Next steps:**
+Investigate alternative 3rd datasets (see EXP-024).
+
+---
+
+### EXP-024 | 3rd-dataset-search
+
+**Type:** DATASET-VIABILITY
+**Status:** IN PROGRESS
+**Seeds:** 42, 0, 1
+**Reference config:** dataset_viability.py
+
+---
+
+**Purpose:**
+Identify a viable 3rd dataset for the paper. Must pass all 4 viability criteria.
+
+**Candidates investigated:**
+
+| Dataset | Framing | val_pos | test_pos | alpha_EO | sep_ratio | Verdict |
+|---------|---------|---------|---------|---------|-----------|---------|
+| acs_income (CA 2018) | sex, income>50k | 6509 | 6532 | 0.17 | 2.43 | **ALL PASS** |
+| sepsis (PhysioNet 2019) | sex, sepsis onset | 242 | 243 | 0.027 | 0.17 | FAIL: EO+sep |
+| brfss (2022) | sex, heart attack | 1976 | 1896 | 0.016 | 0.52 | FAIL: EO+sep |
+| brfss (2022) | sex, depression | 12101 | 12092 | 0.012 | 0.36 | FAIL: EO+sep |
+| brfss (2022) | race (Black/White), heart attack | pending | — | — | — | — |
+
+**Root cause of BRFSS sex-framing failures:**
+BRFSS behavioral risk factors (age, BMI, smoking, diabetes, physical activity) are universal predictors that do not differ structurally between male and female patients for any outcome tested. Model generalizes across sexes despite few female positives in training → low EO gap and poor PCA separability.
+
+**Status:** Testing BRFSS race framing (Black vs White). If that fails, ACS Income will be adopted as the 3rd dataset with the framing that it represents a distinct data source (Ding et al. NeurIPS 2021 folktables, 2018 ACS survey) from census_income (1994 decennial census).
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+*(pending)*

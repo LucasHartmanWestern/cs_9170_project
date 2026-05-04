@@ -1,0 +1,99 @@
+======================================================================
+STEP 1: DA+ scan across scarcity values and seeds
+  dataset=acs_income  minority_id=0  majority_id=1  dp_col=None
+======================================================================
+       param     value   seed    DA+   n_disadv  val_disadv_pos  test_disadv_pos
+--------------------------------------------------------------------------------
+[acs_income] Total: 195665, pos_rate=0.411
+[acs_income] Female (a=0): n=92354, pos_rate=0.349, pos_total=32238
+[acs_income] Male   (a=1): n=103311, pos_rate=0.466, pos_total=48097
+[acs_income/TRAIN] DA+ (female, income>50k): 43 of 1121 female train examples
+[acs_income/TRAIN] n=3000, income>50k=909 (30.3%), DA+(female)=43, AA+(male)=866
+[acs_income/VAL] n=39133, income>50k=16067 (41.1%), DA+(female)=6470, AA+(male)=9597
+[acs_income/TEST] n=39133, income>50k=16067 (41.1%), DA+(female)=6466, AA+(male)=9601
+      da_pct   0.01433     42     43       1121            6470             6466
+[acs_income] Total: 195665, pos_rate=0.411
+[acs_income] Female (a=0): n=92354, pos_rate=0.349, pos_total=32238
+[acs_income] Male   (a=1): n=103311, pos_rate=0.466, pos_total=48097
+[acs_income/TRAIN] DA+ (female, income>50k): 43 of 1143 female train examples
+[acs_income/TRAIN] n=3000, income>50k=908 (30.3%), DA+(female)=43, AA+(male)=865
+[acs_income/VAL] n=39133, income>50k=16067 (41.1%), DA+(female)=6347, AA+(male)=9720
+[acs_income/TEST] n=39133, income>50k=16067 (41.1%), DA+(female)=6532, AA+(male)=9535
+      da_pct   0.01433      0     43       1143            6347             6532
+[acs_income] Total: 195665, pos_rate=0.411
+[acs_income] Female (a=0): n=92354, pos_rate=0.349, pos_total=32238
+[acs_income] Male   (a=1): n=103311, pos_rate=0.466, pos_total=48097
+[acs_income/TRAIN] DA+ (female, income>50k): 43 of 1176 female train examples
+[acs_income/TRAIN] n=3000, income>50k=924 (30.8%), DA+(female)=43, AA+(male)=881
+[acs_income/VAL] n=39133, income>50k=16067 (41.1%), DA+(female)=6509, AA+(male)=9558
+[acs_income/TEST] n=39133, income>50k=16067 (41.1%), DA+(female)=6407, AA+(male)=9660
+      da_pct   0.01433      1     43       1176            6509             6407
+
+======================================================================
+STEP 2: Alpha-EO baseline
+  da_pcts=[0.01433]  bias_pcts=None  seeds=[42, 0, 1]
+======================================================================
+       param     value   seed    DA+   val_EO   test_EO      AUC      F1w
+--------------------------------------------------------------------------------
+[acs_income] Total: 195665, pos_rate=0.411
+[acs_income] Female (a=0): n=92354, pos_rate=0.349, pos_total=32238
+[acs_income] Male   (a=1): n=103311, pos_rate=0.466, pos_total=48097
+[acs_income/TRAIN] DA+ (female, income>50k): 43 of 1121 female train examples
+[acs_income/TRAIN] n=3000, income>50k=909 (30.3%), DA+(female)=43, AA+(male)=866
+[acs_income/VAL] n=39133, income>50k=16067 (41.1%), DA+(female)=6470, AA+(male)=9597
+[acs_income/TEST] n=39133, income>50k=16067 (41.1%), DA+(female)=6466, AA+(male)=9601
+FFNN Using device: cpu
+      da_pct   0.01433     42     43   0.1101    0.0987   0.7895   0.4760
+[acs_income] Total: 195665, pos_rate=0.411
+[acs_income] Female (a=0): n=92354, pos_rate=0.349, pos_total=32238
+[acs_income] Male   (a=1): n=103311, pos_rate=0.466, pos_total=48097
+[acs_income/TRAIN] DA+ (female, income>50k): 43 of 1143 female train examples
+[acs_income/TRAIN] n=3000, income>50k=908 (30.3%), DA+(female)=43, AA+(male)=865
+[acs_income/VAL] n=39133, income>50k=16067 (41.1%), DA+(female)=6347, AA+(male)=9720
+[acs_income/TEST] n=39133, income>50k=16067 (41.1%), DA+(female)=6532, AA+(male)=9535
+FFNN Using device: cpu
+      da_pct   0.01433      0     43   0.1274    0.1283   0.7827   0.5420
+[acs_income] Total: 195665, pos_rate=0.411
+[acs_income] Female (a=0): n=92354, pos_rate=0.349, pos_total=32238
+[acs_income] Male   (a=1): n=103311, pos_rate=0.466, pos_total=48097
+[acs_income/TRAIN] DA+ (female, income>50k): 43 of 1176 female train examples
+[acs_income/TRAIN] n=3000, income>50k=924 (30.8%), DA+(female)=43, AA+(male)=881
+[acs_income/VAL] n=39133, income>50k=16067 (41.1%), DA+(female)=6509, AA+(male)=9558
+[acs_income/TEST] n=39133, income>50k=16067 (41.1%), DA+(female)=6407, AA+(male)=9660
+FFNN Using device: cpu
+      da_pct   0.01433      1     43   0.1734    0.1805   0.7707   0.5223
+
+======================================================================
+STEP 3: Feature separability (PCA space, seed=42, no bias)
+  Checks if disadvantaged-positive and advantaged-positive
+  subgroups are spatially distinct — prerequisite for RL signal.
+======================================================================
+[acs_income] Total: 195665, pos_rate=0.411
+[acs_income] Female (a=0): n=92354, pos_rate=0.349, pos_total=32238
+[acs_income] Male   (a=1): n=103311, pos_rate=0.466, pos_total=48097
+[acs_income/TRAIN] DA+ (female, income>50k): 19302 of 55376 female train examples
+[acs_income/TRAIN] n=3000, income>50k=1232 (41.1%), DA+(female)=501, AA+(male)=731
+[acs_income/VAL] n=39133, income>50k=16067 (41.1%), DA+(female)=6470, AA+(male)=9597
+[acs_income/TEST] n=39133, income>50k=16067 (41.1%), DA+(female)=6466, AA+(male)=9601
+  Test subgroup sizes:
+    disadv_pos=6466  adv_pos=9601  disadv_neg=12081  adv_neg=10985
+
+  Centroid distance (disadv_pos vs adv_pos): 2.0377
+  Within-group spread: disadv=0.7664  adv=0.8386
+  Separability ratio (between/within):       2.4298
+  Cosine similarity of discriminant vectors: 0.9661
+    (1.0 = identical; <0.7 = group-specific structure)
+
+  Interpretation:
+  sep_ratio=2.43 — groups are spatially distinct. RL signal likely viable.
+
+======================================================================
+SUMMARY — Pass/Fail against paper criteria
+======================================================================
+  Best val_disadv_pos:  6509  PASS
+  Best test_disadv_pos: 6532  PASS
+  Best val alpha-EO:    0.1734  PASS
+  Best test alpha-EO:   0.1805
+
+  Overall: ALL CRITERIA PASS — viable for RL experiments.
+

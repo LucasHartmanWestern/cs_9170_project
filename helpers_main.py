@@ -38,7 +38,7 @@ _KNOWN_TOP_LEVEL_FIELDS = {
     "reward_shaping", "local_weights", "ffnn", "reinforce", "curriculum", "benchmarks",
     "win_seconds", "step_seconds", "eo_guard_threshold",
     "whiten_pca", "beta_reset_interval", "beta_warmstart_from_alpha",
-    "pool_pos_fraction", "permutations", "total_data_size",
+    "pool_pos_fraction", "permutations", "total_data_size", "readmit_outcome", "brfss_outcome",
     "global_sigmoid_k", "epochs", "max_parallel",
     "use_ppo", "ppo",
     "output_dir",

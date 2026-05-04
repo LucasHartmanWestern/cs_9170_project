@@ -44,10 +44,26 @@ class Dataset:
             "data_path": "datasets/acs_income",
             "protected_attributes": ["sex", "race"]
         },
+        "acs_employment": {
+            "data_path": "datasets/acs_income",  # shares the same ACS data root
+            "protected_attributes": ["sex"]
+        },
         "fairjob": {
             "data_path": "datasets/fairjob",
             "protected_attributes": ["protected_attribute"]
-        }
+        },
+        "sepsis": {
+            "data_path": "datasets/sepsis",
+            "protected_attributes": ["sex"]
+        },
+        "diabetes130": {
+            "data_path": "datasets/diabetes130/diabetic_data.csv",
+            "protected_attributes": ["age_group"]
+        },
+        "brfss": {
+            "data_path": "datasets/brfss",
+            "protected_attributes": ["sex"]
+        },
     }
     def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
         self.dataset_name = dataset_name
@@ -1350,17 +1366,27 @@ class Dataset:
             # ---- 2) Filter to Black non-Hispanic (RACETHX=3) and White non-Hispanic (RACETHX=2) ----
             df = df[df["RACETHX"].isin([2, 3])].copy().reset_index(drop=True)
 
-            # ---- 3) Target: any dental visit ----
-            # DVTOT22: total dental visits 2022. Negative codes treated as 0.
-            df["DVTOT22"] = _meps_code(df["DVTOT22"]).fillna(0).clip(lower=0)
-            y_raw = (df["DVTOT22"] >= 1).astype(int).to_numpy()
-
-            vals, cnts = np.unique(y_raw, return_counts=True)
-            print("[meps/race] Label distribution (pre-bias):", dict(zip(vals.tolist(), cnts.tolist())))
-            for group_code, group_name in [(3, "Black non-Hisp"), (2, "White non-Hisp")]:
-                mask = df["RACETHX"] == group_code
-                n = mask.sum(); n1 = int((y_raw[mask.to_numpy()] == 1).sum())
-                print(f"  [{group_name}] n={n}, dental+= {n1} ({100.*n1/n if n else 0:.1f}%)")
+            if dp_protected_col == "race_cond":
+                # ---- 3) Target: any office-based visit (OBTOTV22) ----
+                df["OBTOTV22"] = _meps_code(df["OBTOTV22"]).fillna(0).clip(lower=0)
+                y_raw = (df["OBTOTV22"] >= 1).astype(int).to_numpy()
+                vals, cnts = np.unique(y_raw, return_counts=True)
+                print("[meps/race_cond] Label distribution (pre-bias):", dict(zip(vals.tolist(), cnts.tolist())))
+                for group_code, group_name in [(3, "Black non-Hisp"), (2, "White non-Hisp")]:
+                    mask = df["RACETHX"] == group_code
+                    n = mask.sum(); n1 = int((y_raw[mask.to_numpy()] == 1).sum())
+                    print(f"  [{group_name}] n={n}, office+= {n1} ({100.*n1/n if n else 0:.1f}%)")
+            else:
+                # ---- 3) Target: any dental visit ----
+                # DVTOT22: total dental visits 2022. Negative codes treated as 0.
+                df["DVTOT22"] = _meps_code(df["DVTOT22"]).fillna(0).clip(lower=0)
+                y_raw = (df["DVTOT22"] >= 1).astype(int).to_numpy()
+                vals, cnts = np.unique(y_raw, return_counts=True)
+                print("[meps/race] Label distribution (pre-bias):", dict(zip(vals.tolist(), cnts.tolist())))
+                for group_code, group_name in [(3, "Black non-Hisp"), (2, "White non-Hisp")]:
+                    mask = df["RACETHX"] == group_code
+                    n = mask.sum(); n1 = int((y_raw[mask.to_numpy()] == 1).sum())
+                    print(f"  [{group_name}] n={n}, dental+= {n1} ({100.*n1/n if n else 0:.1f}%)")
 
             A_df_raw = df[["RACETHX"]].rename(columns={"RACETHX": "race"}).copy()
 
@@ -1379,6 +1405,13 @@ class Dataset:
 
         feature_cols = [c for c in num_cols_all + cat_cols_all if c in df.columns]
         X_df_raw = df[feature_cols].copy()
+
+        # race_cond: append binary condition flags (1=diagnosed, 0=not/missing)
+        if dp_protected_col == "race_cond":
+            for cond_col in ["HIBPDX", "DIABDX_M18"]:
+                if cond_col in df.columns:
+                    raw = _meps_code(df[cond_col])
+                    X_df_raw[cond_col] = (raw == 1).astype(float)
 
         # Categoricals as strings so OneHotEncoder treats them as nominal
         for col in cat_cols_all:
@@ -1490,6 +1523,8 @@ class Dataset:
         n_disadv = int(np.sum(a_train == 0))
         if dp_protected_col == "ethnicity":
             print(f"[meps/TRAIN] DA+ (Hispanic, outpatient=1): {da_plus} of {n_disadv} Hispanic train examples")
+        elif dp_protected_col == "race_cond":
+            print(f"[meps/TRAIN] DA+ (Black, office=1): {da_plus} of {n_disadv} Black train examples")
         else:
             print(f"[meps/TRAIN] DA+ (Black, dental=1): {da_plus} of {n_disadv} Black train examples")
 
@@ -1531,7 +1566,7 @@ class Dataset:
         self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=self.device)
         self.dp_protected_col = dp_protected_col
 
-        outcome_label = "outpatient+" if dp_protected_col == "ethnicity" else "dental+"
+        outcome_label = "outpatient+" if dp_protected_col == "ethnicity" else ("office+" if dp_protected_col == "race_cond" else "dental+")
         def log_dist(name, y_split):
             n = len(y_split); n1 = int(np.sum(y_split == 1))
             print(f"[meps/{name}] size={n}, {outcome_label} {n1} ({100.*n1/n if n else 0:.2f}%)")
@@ -1539,7 +1574,7 @@ class Dataset:
         log_dist("VAL",   y_val_biased)
         log_dist("TEST",  y_test_biased)
 
-        label_col = "OPTOTV22_binary" if dp_protected_col == "ethnicity" else "DVTOT22_binary"
+        label_col = "OPTOTV22_binary" if dp_protected_col == "ethnicity" else ("OBTOTV22_binary" if dp_protected_col == "race_cond" else "DVTOT22_binary")
         try:
             self._gan_view_cache = {
                 "supported": True,
@@ -1575,6 +1610,7 @@ class Dataset:
     def split_acs_income(
         self,
         train_size=None,
+        da_pct=None,
         bias_pct=None,
         val_frac=0.20,
         test_frac=0.20,
@@ -1644,10 +1680,10 @@ class Dataset:
         X_te_raw, y_te, a_te = X_raw[idx_te], y_raw[idx_te], a_raw[idx_te]
 
         # Group-specific bias: reduce female (a=0) positives in train
-        def apply_group_bias(X, y, a, bp, seed):
-            idx_adv  = np.where(a == 1)[0]           # male — keep all
-            idx_dneg = np.where((a==0) & (y==0))[0]  # female neg — keep all
-            idx_dpos = np.where((a==0) & (y==1))[0]  # female pos — reduce
+        def apply_group_bias_bp(X, y, a, bp, seed):
+            idx_adv  = np.where(a == 1)[0]
+            idx_dneg = np.where((a==0) & (y==0))[0]
+            idx_dpos = np.where((a==0) & (y==1))[0]
             keep = max(1, int(np.floor(bp * len(idx_dneg) / (1 - bp))))
             keep = min(len(idx_dpos), keep)
             rng2 = np.random.RandomState(seed)
@@ -1656,30 +1692,207 @@ class Dataset:
             perm = np.random.RandomState(seed).permutation(len(sel))
             return X[sel[perm]], y[sel[perm]], a[sel[perm]]
 
-        if bias_pct is not None:
-            X_tr_raw, y_tr, a_tr = apply_group_bias(X_tr_raw, y_tr, a_tr, bias_pct, self.seed)
+        def apply_da_pct_bias(X, y, a, da_p, n_total, seed):
+            target_da_plus = max(1, round(da_p * n_total))
+            idx_dpos = np.where((a == 0) & (y == 1))[0]
+            idx_rest = np.where(~((a == 0) & (y == 1)))[0]
+            keep = min(len(idx_dpos), target_da_plus)
+            if keep < target_da_plus:
+                print(f"  [da_pct WARNING] Only {len(idx_dpos)} female positives available; "
+                      f"target was {target_da_plus}.")
+            rng = np.random.RandomState(seed)
+            kept_dpos = rng.choice(idx_dpos, size=keep, replace=False)
+            n_rest = n_total - keep
+            if len(idx_rest) >= n_rest:
+                kept_rest = rng.choice(idx_rest, size=n_rest, replace=False)
+            else:
+                kept_rest = idx_rest
+            sel = np.sort(np.concatenate([kept_dpos, kept_rest]))
+            sel = np.random.RandomState(seed).permutation(sel)
+            return X[sel], y[sel], a[sel]
+
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(y_tr)
+            X_tr_raw, y_tr, a_tr = apply_da_pct_bias(X_tr_raw, y_tr, a_tr, da_pct, n_total, self.seed)
+        elif bias_pct is not None:
+            X_tr_raw, y_tr, a_tr = apply_group_bias_bp(X_tr_raw, y_tr, a_tr, bias_pct, self.seed)
             if bias_val:
-                X_va_raw, y_va, a_va = apply_group_bias(X_va_raw, y_va, a_va, bias_pct, self.seed)
+                X_va_raw, y_va, a_va = apply_group_bias_bp(X_va_raw, y_va, a_va, bias_pct, self.seed)
 
         da_plus = int(np.sum((y_tr==1) & (a_tr==0)))
+        aa_plus = int(np.sum((y_tr==1) & (a_tr==1)))
         n_disadv_tr = int((a_tr==0).sum())
         print(f"[acs_income/TRAIN] DA+ (female, income>50k): {da_plus} of {n_disadv_tr} female train examples")
 
-        # Cap train_size after bias (stratified), matching census pipeline
-        if train_size is not None and train_size < len(y_tr):
+        # Cap train_size after bias (only needed for bias_pct mode; da_pct integrates this)
+        if da_pct is None and train_size is not None and train_size < len(y_tr):
             X_tr_raw, _, y_tr, _, a_tr, _ = train_test_split(
                 X_tr_raw, y_tr, a_tr,
                 train_size=train_size, random_state=self.seed, stratify=y_tr)
 
-        def _log(name, y_split):
+        def _log(name, y_split, a_split):
             n = len(y_split); n1 = int(np.sum(y_split==1))
-            print(f"[acs_income/{name}] size={n}, income>50k: {n1} ({100.*n1/n:.2f}%)")
+            f_pos = int(np.sum((y_split==1) & (a_split==0)))
+            m_pos = int(np.sum((y_split==1) & (a_split==1)))
+            print(f"[acs_income/{name}] n={n}, income>50k={n1} ({100.*n1/n:.1f}%), "
+                  f"DA+(female)={f_pos}, AA+(male)={m_pos}")
 
-        _log("TRAIN", y_tr)
-        _log("VAL",   y_va)
-        _log("TEST",  y_te)
+        _log("TRAIN", y_tr, a_tr)
+        _log("VAL",   y_va, a_va)
+        _log("TEST",  y_te, a_te)
 
         # StandardScaler (no OHE — all features are numeric)
+        scaler = StandardScaler().fit(X_tr_raw)
+        X_tr_sc = scaler.transform(X_tr_raw)
+        X_va_sc = scaler.transform(X_va_raw)
+        X_te_sc = scaler.transform(X_te_raw)
+
+        X_tr_theta, X_va_theta, X_te_theta, pca_obj = self._to_theta(
+            X_tr_sc, X_va_sc, X_te_sc, pca_components=pca_components)
+
+        X_train_theta = torch.tensor(X_tr_theta, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_va_theta, dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_te_theta, dtype=torch.float32, device=self.device)
+        y_train_theta = torch.tensor(y_tr, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_va, dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_te, dtype=torch.long, device=self.device)
+
+        self.a_train = torch.tensor(a_tr, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_va, dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_te, dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        self._gan_view_cache = {"supported": False}
+
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+
+    def split_acs_employment(
+        self,
+        train_size=None,
+        da_pct=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        bias_val: bool = False,
+        dp_protected_col: str = "sex",
+        acs_state: str = "CA",
+        acs_year: str = "2018",
+    ):
+        """
+        ACS Employment (Ding et al. NeurIPS 2021 / folktables).
+
+        Task: predict employment status (y=1=employed, y=0=not employed).
+        Protected attribute: sex. Female (SEX=2, a=0) is disadvantaged;
+        male (SEX=1, a=1) is advantaged. Natural employment gap: female ~42%
+        vs male ~49% (CA 2018).
+
+        Features (16, all numeric): age, education, marital status, relationship
+        to householder, disability, parental employment, citizenship, mobility,
+        military service, ancestry, nativity, hearing/vision/cognitive difficulty,
+        sex (dropped as protected attr), race.
+
+        Reuses data already downloaded for acs_income (same ACSDataSource root).
+        """
+        from folktables import ACSDataSource, ACSEmployment
+
+        data_dir = Path(self.data_path)
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        data_source = ACSDataSource(
+            survey_year=acs_year, horizon="1-Year", survey="person",
+            root_dir=str(data_dir),
+        )
+        acs_data = data_source.get_data(states=[acs_state], download=True)
+        features, label, _ = ACSEmployment.df_to_pandas(acs_data)
+
+        y_raw = np.array([int(bool(v[0])) if isinstance(v, tuple) else int(bool(v))
+                          for v in label.values], dtype=int)
+        X_raw = features.values.astype(float)
+
+        sex_vals = features["SEX"].values
+        a_raw = (sex_vals == 1).astype(np.int64)  # 1=male (adv), 0=female (disadv)
+
+        print(f"[acs_employment] Total: {len(y_raw)}, employed_rate={y_raw.mean():.3f}")
+        print(f"[acs_employment] Female (a=0): n={int((a_raw==0).sum())}, "
+              f"employed_rate={y_raw[a_raw==0].mean():.3f}, "
+              f"employed_total={int(np.sum((a_raw==0)&(y_raw==1)))}")
+        print(f"[acs_employment] Male   (a=1): n={int((a_raw==1).sum())}, "
+              f"employed_rate={y_raw[a_raw==1].mean():.3f}, "
+              f"employed_total={int(np.sum((a_raw==1)&(y_raw==1)))}")
+
+        # Stratified split
+        idx_all = np.arange(len(y_raw))
+        idx_tr, idx_temp = train_test_split(
+            idx_all, test_size=(val_frac + test_frac),
+            random_state=self.seed, stratify=y_raw)
+        rel_test = test_frac / (val_frac + test_frac)
+        idx_va, idx_te = train_test_split(
+            idx_temp, test_size=rel_test,
+            random_state=self.seed, stratify=y_raw[idx_temp])
+
+        X_tr_raw, y_tr, a_tr = X_raw[idx_tr], y_raw[idx_tr], a_raw[idx_tr]
+        X_va_raw, y_va, a_va = X_raw[idx_va], y_raw[idx_va], a_raw[idx_va]
+        X_te_raw, y_te, a_te = X_raw[idx_te], y_raw[idx_te], a_raw[idx_te]
+
+        def apply_da_pct_bias(X, y, a, da_p, n_total, seed):
+            target_da_plus = max(1, round(da_p * n_total))
+            idx_dpos = np.where((a == 0) & (y == 1))[0]
+            idx_rest = np.where(~((a == 0) & (y == 1)))[0]
+            keep = min(len(idx_dpos), target_da_plus)
+            if keep < target_da_plus:
+                print(f"  [da_pct WARNING] Only {len(idx_dpos)} female employed available; "
+                      f"target was {target_da_plus}.")
+            rng = np.random.RandomState(seed)
+            kept_dpos = rng.choice(idx_dpos, size=keep, replace=False)
+            n_rest = n_total - keep
+            kept_rest = rng.choice(idx_rest, size=min(len(idx_rest), n_rest), replace=False)
+            sel = np.sort(np.concatenate([kept_dpos, kept_rest]))
+            sel = np.random.RandomState(seed).permutation(sel)
+            return X[sel], y[sel], a[sel]
+
+        def apply_bias_pct(X, y, a, bp, seed):
+            idx_adv  = np.where(a == 1)[0]
+            idx_dneg = np.where((a==0) & (y==0))[0]
+            idx_dpos = np.where((a==0) & (y==1))[0]
+            keep = max(1, int(np.floor(bp * len(idx_dneg) / (1 - bp))))
+            keep = min(len(idx_dpos), keep)
+            rng = np.random.RandomState(seed)
+            kept = rng.choice(idx_dpos, size=keep, replace=False)
+            sel = np.concatenate([idx_adv, idx_dneg, kept])
+            perm = np.random.RandomState(seed).permutation(len(sel))
+            return X[sel[perm]], y[sel[perm]], a[sel[perm]]
+
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(y_tr)
+            X_tr_raw, y_tr, a_tr = apply_da_pct_bias(X_tr_raw, y_tr, a_tr, da_pct, n_total, self.seed)
+        elif bias_pct is not None:
+            X_tr_raw, y_tr, a_tr = apply_bias_pct(X_tr_raw, y_tr, a_tr, bias_pct, self.seed)
+            if bias_val:
+                X_va_raw, y_va, a_va = apply_bias_pct(X_va_raw, y_va, a_va, bias_pct, self.seed)
+
+        da_plus    = int(np.sum((y_tr == 1) & (a_tr == 0)))
+        n_disadv_tr = int((a_tr == 0).sum())
+        print(f"[acs_employment/TRAIN] DA+ (female, employed): {da_plus} of "
+              f"{n_disadv_tr} female train examples")
+
+        if da_pct is None and train_size is not None and train_size < len(y_tr):
+            X_tr_raw, _, y_tr, _, a_tr, _ = train_test_split(
+                X_tr_raw, y_tr, a_tr,
+                train_size=train_size, random_state=self.seed, stratify=y_tr)
+
+        def _log(name, y_split, a_split):
+            n = len(y_split); n1 = int(np.sum(y_split==1))
+            f_pos = int(np.sum((y_split==1) & (a_split==0)))
+            m_pos = int(np.sum((y_split==1) & (a_split==1)))
+            print(f"[acs_employment/{name}] n={n}, employed={n1} ({100.*n1/n:.1f}%), "
+                  f"DA+(female)={f_pos}, AA+(male)={m_pos}")
+
+        _log("TRAIN", y_tr, a_tr)
+        _log("VAL",   y_va, a_va)
+        _log("TEST",  y_te, a_te)
+
         scaler = StandardScaler().fit(X_tr_raw)
         X_tr_sc = scaler.transform(X_tr_raw)
         X_va_sc = scaler.transform(X_va_raw)
@@ -2592,6 +2805,907 @@ class Dataset:
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
 
+    def split_sepsis(
+        self,
+        train_size=None,
+        da_pct=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=15,
+        bias_val=False,
+        dp_protected_col="sex",
+        drop_protected=False,
+        protected_cols=None,
+        return_test_df=False,
+        return_raw=False,
+    ):
+        """
+        PhysioNet 2019 Sepsis Challenge (Reyna et al. 2019).
+
+        Task: predict in-ICU sepsis onset (y=1=sepsis, y=0=no sepsis).
+        Protected attr: sex (Gender column; 0=female=disadvantaged, 1=male=advantaged).
+        Bias injection: group-specific — only female positives are reduced in train
+        (and optionally val). Male positives are kept at their natural rate.
+
+        Feature extraction: per-patient mean and std of 34 time-series columns
+        (8 vital signs + 26 lab values), plus 5 patient-level demographics
+        (Age, Unit1, Unit2, HospAdmTime, ICULOS) and Gender = 74 features total.
+        A feature cache (sepsis_features.parquet) is saved on first run.
+
+        Data expected at datasets/sepsis/:
+            training_setA/  —  *.psv patient files from Challenge set A
+            training_setB/  —  *.psv patient files from Challenge set B
+        Download training_setA.zip and training_setB.zip from
+        physionet.org/content/challenge-2019/1.0.0/ and extract both into
+        datasets/sepsis/.
+        """
+        import glob
+
+        assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
+
+        target_pct = da_pct if da_pct is not None else bias_pct
+
+        VITAL_COLS = ["HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp", "EtCO2"]
+        LAB_COLS   = [
+            "BaseExcess", "HCO3", "FiO2", "pH", "PaCO2", "SaO2", "AST", "BUN",
+            "Alkalinephos", "Calcium", "Chloride", "Creatinine", "Bilirubin_direct",
+            "Glucose", "Lactate", "Magnesium", "Phosphate", "Potassium",
+            "Bilirubin_total", "TroponinI", "Hct", "Hgb", "PTT", "WBC",
+            "Fibrinogen", "Platelets",
+        ]
+        TS_COLS = VITAL_COLS + LAB_COLS  # 34 time-series columns
+
+        data_dir    = Path(self.data_path)
+        cache_path  = data_dir / "sepsis_features.parquet"
+
+        # ---- 1) Load or build feature cache ----
+        if cache_path.exists():
+            cache_df = pd.read_parquet(cache_path)
+            print(f"[sepsis] Loaded {len(cache_df)} patients from cache.")
+        else:
+            set_dirs = [data_dir / "training_setA", data_dir / "training_setB"]
+            psv_files = []
+            for d in set_dirs:
+                if d.exists():
+                    psv_files.extend(sorted(glob.glob(str(d / "*.psv"))))
+            if not psv_files:
+                # Auto-download from PhysioNet 2019 (files are publicly accessible)
+                print("[sepsis] No PSV files found — auto-downloading from PhysioNet 2019...")
+                import urllib.request
+                import concurrent.futures
+
+                BASE_URL = "https://physionet.org/files/challenge-2019/1.0.0/training"
+                SETS = {
+                    "training_setA": (1, 20643),   # p000001 – p020643
+                    "training_setB": (100001, 120000),  # p100001 – p120000
+                }
+                _WORKERS = 20
+
+                def _dl(args):
+                    set_name, pid = args
+                    fname = f"p{pid:06d}.psv"
+                    url   = f"{BASE_URL}/{set_name}/{fname}"
+                    dest  = data_dir / set_name / fname
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    if dest.exists():
+                        return True
+                    try:
+                        urllib.request.urlretrieve(url, dest)
+                        return True
+                    except Exception:
+                        return False
+
+                tasks = []
+                for set_name, (lo, hi) in SETS.items():
+                    tasks.extend((set_name, pid) for pid in range(lo, hi + 1))
+
+                print(f"[sepsis] Downloading {len(tasks)} files with {_WORKERS} workers "
+                      f"(~17 min estimated)...")
+                ok = 0
+                with concurrent.futures.ThreadPoolExecutor(max_workers=_WORKERS) as pool:
+                    for i, result in enumerate(pool.map(_dl, tasks), 1):
+                        ok += bool(result)
+                        if i % 2000 == 0:
+                            print(f"[sepsis]   {i}/{len(tasks)} files downloaded ({ok} ok)...")
+                print(f"[sepsis] Download complete: {ok}/{len(tasks)} files.")
+
+                # Re-scan after download
+                for d in set_dirs:
+                    if d.exists():
+                        psv_files.extend(sorted(glob.glob(str(d / "*.psv"))))
+                if not psv_files:
+                    raise FileNotFoundError(
+                        f"Download attempted but still no PSV files under {data_dir}. "
+                        "Check network connectivity or download manually from "
+                        "physionet.org/content/challenge-2019/1.0.0/."
+                    )
+
+            print(f"[sepsis] Parsing {len(psv_files)} PSV files — this may take a few minutes...")
+
+            def _parse_patient(fpath):
+                try:
+                    df = pd.read_csv(fpath, sep="|")
+                except Exception:
+                    return None
+                # Binary label: any sepsis onset
+                label = int(df["SepsisLabel"].max() >= 1)
+                # Protected attribute: Gender (0=female, 1=male)
+                gender_vals = df["Gender"].dropna()
+                gender = int(gender_vals.iloc[0]) if len(gender_vals) > 0 else 0
+                # Time-series aggregation: mean and std per column
+                row = {"sepsis": label, "gender": gender}
+                ts_data = df[TS_COLS].copy().astype(float)
+                ts_data[ts_data < 0] = np.nan  # negative sentinels → missing
+                for col in TS_COLS:
+                    vals = ts_data[col].dropna().to_numpy()
+                    row[f"{col}_mean"] = float(vals.mean()) if len(vals) > 0 else 0.0
+                    row[f"{col}_std"]  = float(vals.std())  if len(vals) > 1 else -1.0
+                # Patient-level demographics
+                for col in ["Age", "Unit1", "Unit2", "HospAdmTime"]:
+                    if col in df.columns:
+                        v = df[col].dropna()
+                        row[col] = float(v.iloc[0]) if len(v) > 0 else 0.0
+                    else:
+                        row[col] = 0.0
+                row["ICULOS"] = float(df["ICULOS"].max()) if "ICULOS" in df.columns else 0.0
+                row["Gender"] = float(gender)
+                return row
+
+            records = [r for f in psv_files if (r := _parse_patient(f)) is not None]
+            cache_df = pd.DataFrame(records)
+            data_dir.mkdir(parents=True, exist_ok=True)
+            cache_df.to_parquet(cache_path, index=False)
+            print(f"[sepsis] Feature cache saved: {len(cache_df)} patients → {cache_path}")
+
+        # ---- 2) Arrays ----
+        y_raw = cache_df["sepsis"].to_numpy(dtype=int)
+        a_raw = cache_df["gender"].to_numpy(dtype=np.int64)
+
+        feat_cols = [c for c in cache_df.columns if c not in ("sepsis", "gender")]
+        X_df = cache_df[feat_cols].copy().astype(float)
+        if drop_protected:
+            X_df = X_df.drop(columns=["Gender"], errors="ignore")
+
+        n_pos = int(y_raw.sum())
+        n_female = int((a_raw == 0).sum())
+        n_f_pos  = int(((a_raw == 0) & (y_raw == 1)).sum())
+        n_male   = int((a_raw == 1).sum())
+        n_m_pos  = int(((a_raw == 1) & (y_raw == 1)).sum())
+        print(f"[sepsis] Total={len(y_raw)}, sepsis={n_pos} ({100.*n_pos/len(y_raw):.1f}%)")
+        print(f"[sepsis] Female(a=0): n={n_female}, sepsis={n_f_pos} ({100.*n_f_pos/n_female:.1f}%)")
+        print(f"[sepsis] Male  (a=1): n={n_male},   sepsis={n_m_pos} ({100.*n_m_pos/n_male:.1f}%)")
+
+        # ---- 3) Stratified split ----
+        idx = np.arange(len(y_raw))
+        idx_tr, idx_temp = train_test_split(
+            idx, test_size=(val_frac + test_frac), random_state=self.seed, stratify=y_raw)
+        rel_test = test_frac / (val_frac + test_frac)
+        idx_va, idx_te = train_test_split(
+            idx_temp, test_size=rel_test, random_state=self.seed, stratify=y_raw[idx_temp])
+
+        X_tr, y_tr, a_tr = X_df.iloc[idx_tr].reset_index(drop=True), y_raw[idx_tr], a_raw[idx_tr]
+        X_va, y_va, a_va = X_df.iloc[idx_va].reset_index(drop=True), y_raw[idx_va], a_raw[idx_va]
+        X_te, y_te, a_te = X_df.iloc[idx_te].reset_index(drop=True), y_raw[idx_te], a_raw[idx_te]
+
+        # ---- 4) Group-specific bias: reduce female (a=0) positives only ----
+        def apply_bias(X, y, a, tpct, seed):
+            idx_adv  = np.where(a == 1)[0]
+            idx_fneg = np.where((a == 0) & (y == 0))[0]
+            idx_fpos = np.where((a == 0) & (y == 1))[0]
+            keep = max(1, int(np.floor(tpct * len(idx_fneg) / (1.0 - tpct))))
+            keep = min(len(idx_fpos), keep)
+            rng  = np.random.RandomState(seed)
+            kept = rng.choice(idx_fpos, size=keep, replace=False)
+            sel  = np.sort(np.concatenate([idx_adv, idx_fneg, kept]))
+            rng2 = np.random.RandomState(seed)
+            sel  = rng2.permutation(sel)
+            return X.iloc[sel].reset_index(drop=True), y[sel], a[sel]
+
+        if target_pct is not None:
+            X_tr, y_tr, a_tr = apply_bias(X_tr, y_tr, a_tr, float(target_pct), self.seed)
+            if bias_val:
+                X_va, y_va, a_va = apply_bias(X_va, y_va, a_va, float(target_pct), self.seed)
+
+        da_plus    = int(np.sum((y_tr == 1) & (a_tr == 0)))
+        n_disadv   = int(np.sum(a_tr == 0))
+        print(f"[sepsis/TRAIN] DA+ (female, sepsis=1): {da_plus} of {n_disadv} female train examples")
+
+        # ---- 5) Optional train subsample ----
+        if train_size is not None and train_size < len(X_tr):
+            keep_idx, _ = train_test_split(
+                np.arange(len(X_tr)), train_size=train_size,
+                random_state=self.seed, stratify=y_tr)
+            X_tr, y_tr, a_tr = (X_tr.iloc[keep_idx].reset_index(drop=True),
+                                 y_tr[keep_idx], a_tr[keep_idx])
+
+        def _log(name, y_s, a_s):
+            n = len(y_s); n1 = int(np.sum(y_s == 1))
+            f_pos = int(np.sum((y_s == 1) & (a_s == 0)))
+            m_pos = int(np.sum((y_s == 1) & (a_s == 1)))
+            print(f"[sepsis/{name}] n={n}, sepsis={n1} ({100.*n1/n:.1f}%), "
+                  f"DA+(female)={f_pos}, AA+(male)={m_pos}")
+        _log("TRAIN", y_tr, a_tr)
+        _log("VAL",   y_va, a_va)
+        _log("TEST",  y_te, a_te)
+
+        # ---- 6) Scale + PCA (fit on train only) ----
+        scaler = StandardScaler()
+        Xtr_z  = scaler.fit_transform(X_tr.values)
+        Xva_z  = scaler.transform(X_va.values)
+        Xte_z  = scaler.transform(X_te.values)
+
+        X_tr_theta, X_va_theta, X_te_theta, pca = self._to_theta(
+            Xtr_z, Xva_z, Xte_z, pca_components=pca_components)
+
+        # ---- 7) Tensors ----
+        def _t(arr, dtype):
+            return torch.tensor(arr, dtype=dtype, device=self.device)
+
+        X_train_theta = _t(X_tr_theta, torch.float32)
+        X_val_theta   = _t(X_va_theta, torch.float32)
+        X_test_theta  = _t(X_te_theta, torch.float32)
+        y_train_theta = _t(y_tr, torch.long)
+        y_val_theta   = _t(y_va, torch.long)
+        y_test_theta  = _t(y_te, torch.long)
+
+        self.a_train = _t(a_tr, torch.long)
+        self.a_val   = _t(a_va, torch.long)
+        self.a_test  = _t(a_te, torch.long)
+        self.dp_protected_col = dp_protected_col
+
+        self._gan_view_cache = {
+            "supported": True,
+            "X_train_unbiased_df": X_tr.copy(),
+            "y_train_unbiased": y_tr.astype(int).copy(),
+            "encoder": None,
+            "scaler": scaler,
+            "pca": pca,
+            "use_pca": self.use_pca,
+            "pca_components": int(pca_components),
+            "cat_cols": [],
+            "num_cols": list(X_tr.columns),
+            "drop_protected": bool(drop_protected),
+            "protected_cols": list(protected_cols or ["Gender"]),
+            "label_col": "SepsisLabel_binary",
+            "dp_protected_col": dp_protected_col,
+        }
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta, X_te.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_te.copy(), y_te.copy())
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+
+    def split_brfss(
+        self,
+        train_size=None,
+        da_pct=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        bias_val=False,
+        dp_protected_col="sex",
+        brfss_outcome="cvdinfr4",
+        drop_protected=False,
+        protected_cols=None,
+        return_test_df=False,
+        return_raw=False,
+    ):
+        """
+        BRFSS 2022 (Behavioral Risk Factor Surveillance System, CDC).
+
+        Task: predict a chronic/cardiovascular disease outcome (see brfss_outcome).
+          brfss_outcome="cvdinfr4"  — heart attack ever (y=1=yes, ~5.6% overall)
+          brfss_outcome="cvdcrhd4"  — coronary heart disease (y=1=yes, ~7.0%)
+          brfss_outcome="cvdstrk3"  — stroke ever (y=1=yes, ~4.4%)
+
+        Protected attr: sex (_SEX).
+          Female (SEX=2, a=0) is disadvantaged: lower heart attack rate but known
+          under-diagnosis and atypical presentation (see Mehta et al. 2016).
+          Male (SEX=1, a=1) is advantaged.
+
+        Features (~22): age, income, education, employment, marital status,
+        general/physical/mental health status, BMI, diabetes, smoking, physical
+        activity, alcohol use, healthcare access (personal doctor, health plan,
+        cost barrier, checkup recency), comorbidities (stroke/CHD when not the
+        outcome, arthritis, kidney disease, depression), cognitive impairment,
+        sleep duration.
+
+        Data expected at datasets/brfss/LLCP2022.XPT (file has a trailing space
+        in the original name — the code handles this automatically).
+
+        A feature cache (brfss_features.parquet) is built on first run.
+        """
+        data_dir  = Path(self.data_path)
+        cache_path = data_dir / "brfss_features.parquet"
+
+        # Maps CLI name → cache column name (after feature engineering)
+        OUTCOME_COL = {
+            "cvdinfr4": "cvdinfr4",
+            "cvdcrhd4": "cvdcrhd4",
+            "cvdstrk3": "cvdstrk3",
+            "addepev3": "depression",   # stored as 'depression' in cache
+        }
+        assert brfss_outcome in OUTCOME_COL, \
+            f"brfss_outcome must be one of {list(OUTCOME_COL)}; got '{brfss_outcome}'"
+        raw_outcome_col = OUTCOME_COL[brfss_outcome]
+
+        # ---- 1) Load or build feature cache ----
+        if cache_path.exists():
+            cache_df = pd.read_parquet(cache_path)
+            print(f"[brfss] Loaded {len(cache_df)} records from cache.")
+        else:
+            # Try both with and without trailing space (original CDC filename has one)
+            xpt_candidates = [
+                data_dir / "LLCP2022.XPT ",
+                data_dir / "LLCP2022.XPT",
+            ]
+            xpt_path = next((p for p in xpt_candidates if p.exists()), None)
+            if xpt_path is None:
+                raise FileNotFoundError(
+                    f"BRFSS XPT file not found in {data_dir}. "
+                    "Download LLCP2022.XPT from https://www.cdc.gov/brfss/annual_data/annual_2022.html"
+                )
+            print(f"[brfss] Parsing {xpt_path} — this may take a few minutes...")
+
+            chunks = []
+            for chunk in pd.read_sas(str(xpt_path), format="xport",
+                                     iterator=True, chunksize=50000):
+                chunks.append(chunk)
+            raw = pd.concat(chunks, ignore_index=True)
+            print(f"[brfss] Loaded {len(raw)} raw records.")
+
+            KEEP_COLS = [
+                "_SEX",
+                "_IMPRACE",    # imputed race 1=White, 2=Black, 3=AIAN, 4=Asian, 5=Hispanic, 6=Other
+                "CVDINFR4", "CVDCRHD4", "CVDSTRK3",  # CVD outcomes
+                "_AGEG5YR",    # age group ordinal 1-13
+                "INCOME3",     # income 1-10, 77/99=miss
+                "EDUCA",       # education 1-6, 9=miss
+                "EMPLOY1",     # employment 1-8, 9=miss
+                "MARITAL",     # marital status 1-6, 9=miss
+                "GENHLTH",     # general health 1-5, 7/9=miss
+                "PHYSHLTH",    # days physical health not good 1-30, 88=0, 77/99=miss
+                "MENTHLTH",    # days mental health not good 1-30, 88=0, 77/99=miss
+                "_BMI5",       # BMI ×100 (divide by 100)
+                "DIABETE4",    # diabetes 1/2=yes, 3/4=no, 7/9=miss
+                "_SMOKER3",    # smoking status 1-4, 9=miss
+                "_TOTINDA",    # physical activity yes(1)/no(2)
+                "DRNKANY6",    # alcohol any in past 30 days 1=yes, 2=no, 7/9=miss
+                "PERSDOC3",    # personal doctor 1/3=yes, 2=no, 7=miss
+                "MEDCOST1",    # couldn't afford care 1=yes, 2=no, 7/9=miss
+                "CHECKUP1",    # last checkup 1=<1yr, 2=1-2yr, 3=2-5yr, 4=5+yr, 8=never, 7/9=miss
+                "_HLTHPLN",    # has health plan 1=yes, 2=no, 9=miss
+                "CHCKDNY2",    # kidney disease 1=yes, 2=no, 7/9=miss
+                "ADDEPEV3",    # depression ever 1=yes, 2=no, 7/9=miss
+                "HAVARTH4",    # arthritis 1=yes, 2=no, 7/9=miss
+                "EXERANY2",    # exercise past month 1=yes, 2=no, 7/9=miss
+                "SLEPTIM1",    # sleep hours 1-24, 77/99=miss
+                "DECIDE",      # concentration/memory difficulty 1=yes, 2=no, 7/9=miss
+            ]
+            available = [c for c in KEEP_COLS if c in raw.columns]
+            df = raw[available].copy()
+
+            def _yes_no(s):
+                """1→1.0, 2→0.0, anything else→NaN"""
+                return s.map(lambda v: 1.0 if v == 1 else (0.0 if v == 2 else np.nan))
+
+            def _yn_or_three(s):
+                """1/3→1.0, 2→0.0, else→NaN  (PERSDOC: 1=one, 3=more than one)"""
+                return s.map(lambda v: 1.0 if v in (1, 3) else (0.0 if v == 2 else np.nan))
+
+            def _ordinal(s, valid_max, miss_vals=(7, 9, 77, 99)):
+                """Keep 1..valid_max, replace miss_vals with NaN."""
+                def _f(v):
+                    if pd.isna(v):
+                        return np.nan
+                    if v in miss_vals:
+                        return np.nan
+                    if 1 <= v <= valid_max:
+                        return float(v)
+                    return np.nan
+                return s.map(_f)
+
+            def _days(s):
+                """PHYSHLTH/MENTHLTH: 1-30→float, 88→0.0, 77/99→NaN"""
+                def _f(v):
+                    if pd.isna(v): return np.nan
+                    if v == 88: return 0.0
+                    if v in (77, 99): return np.nan
+                    if 1 <= v <= 30: return float(v)
+                    return np.nan
+                return s.map(_f)
+
+            features = {}
+
+            # Outcome columns (also used as features for other outcomes)
+            for oc in ("CVDINFR4", "CVDCRHD4", "CVDSTRK3"):
+                if oc in df.columns:
+                    features[oc.lower()] = _yes_no(df[oc])
+
+            # Protected attributes (both stored in cache; selected at runtime)
+            # _SEX: 1=Male, 2=Female
+            features["sex"] = df["_SEX"].map(lambda v: float(v) if v in (1, 2) else np.nan)
+            # _IMPRACE: 1=White, 2=Black, 3=AIAN, 4=Asian, 5=Hispanic, 6=Other
+            if "_IMPRACE" in df.columns:
+                features["imprace"] = df["_IMPRACE"].map(
+                    lambda v: float(v) if pd.notna(v) and 1 <= v <= 6 else np.nan)
+
+            # Age: _AGEG5YR 1-13 ordinal (age groups 18-24 … 80+), 14=DK
+            if "_AGEG5YR" in df.columns:
+                features["age_group"] = _ordinal(df["_AGEG5YR"], 13, miss_vals=(14,))
+
+            # Socioeconomic
+            if "INCOME3" in df.columns:
+                features["income"] = _ordinal(df["INCOME3"], 10, miss_vals=(77, 99))
+            if "EDUCA" in df.columns:
+                features["education"] = _ordinal(df["EDUCA"], 6, miss_vals=(9,))
+            if "EMPLOY1" in df.columns:
+                features["employment"] = _ordinal(df["EMPLOY1"], 8, miss_vals=(9,))
+            if "MARITAL" in df.columns:
+                features["marital"] = _ordinal(df["MARITAL"], 6, miss_vals=(9,))
+
+            # Health status
+            if "GENHLTH" in df.columns:
+                features["genhlth"] = _ordinal(df["GENHLTH"], 5, miss_vals=(7, 9))
+            if "PHYSHLTH" in df.columns:
+                features["physhlth"] = _days(df["PHYSHLTH"])
+            if "MENTHLTH" in df.columns:
+                features["menthlth"] = _days(df["MENTHLTH"])
+            if "_BMI5" in df.columns:
+                features["bmi"] = df["_BMI5"].apply(
+                    lambda v: float(v) / 100.0 if pd.notna(v) and v > 0 else np.nan)
+
+            # Comorbidities / risk factors
+            if "DIABETE4" in df.columns:
+                features["diabetes"] = df["DIABETE4"].map(
+                    lambda v: 1.0 if v in (1, 2) else (0.0 if v in (3, 4) else np.nan))
+            if "_SMOKER3" in df.columns:
+                features["smoker"] = _ordinal(df["_SMOKER3"], 4, miss_vals=(9,))
+            if "_TOTINDA" in df.columns:
+                features["physical_activity"] = df["_TOTINDA"].map(
+                    lambda v: 1.0 if v == 1 else (0.0 if v == 2 else np.nan))
+            if "DRNKANY6" in df.columns:
+                features["alcohol"] = _yes_no(df["DRNKANY6"])
+            if "HAVARTH4" in df.columns:
+                features["arthritis"] = _yes_no(df["HAVARTH4"])
+            if "CHCKDNY2" in df.columns:
+                features["kidney_disease"] = _yes_no(df["CHCKDNY2"])
+            if "ADDEPEV3" in df.columns:
+                features["depression"] = _yes_no(df["ADDEPEV3"])
+            if "EXERANY2" in df.columns:
+                features["exercise"] = _yes_no(df["EXERANY2"])
+            if "SLEPTIM1" in df.columns:
+                features["sleep_hours"] = df["SLEPTIM1"].apply(
+                    lambda v: float(v) if pd.notna(v) and 1 <= v <= 24 else np.nan)
+            if "DECIDE" in df.columns:
+                features["cognitive_difficulty"] = _yes_no(df["DECIDE"])
+
+            # Healthcare access
+            if "PERSDOC3" in df.columns:
+                features["has_doctor"] = _yn_or_three(df["PERSDOC3"])
+            if "MEDCOST1" in df.columns:
+                features["cost_barrier"] = _yes_no(df["MEDCOST1"])
+            if "CHECKUP1" in df.columns:
+                features["checkup_recency"] = df["CHECKUP1"].map(
+                    lambda v: 5.0 if v == 8 else
+                              (np.nan if v in (7, 9) or pd.isna(v) else
+                               (float(v) if 1 <= v <= 4 else np.nan)))
+            if "_HLTHPLN" in df.columns:
+                features["health_plan"] = df["_HLTHPLN"].map(
+                    lambda v: 1.0 if v == 1 else (0.0 if v == 2 else np.nan))
+
+            feat_df = pd.DataFrame(features)
+            # Median impute
+            for col in feat_df.columns:
+                if feat_df[col].isna().any():
+                    feat_df[col] = feat_df[col].fillna(feat_df[col].median())
+
+            cache_df = feat_df
+            data_dir.mkdir(parents=True, exist_ok=True)
+            cache_df.to_parquet(cache_path, index=False)
+            print(f"[brfss] Feature cache saved: {len(cache_df)} records, "
+                  f"{len(cache_df.columns)} features → {cache_path}")
+
+        # ---- 2) Filter valid records and set up arrays ----
+        # raw_outcome_col is the cache column name (e.g. "cvdinfr4" or "depression")
+        valid_mask = cache_df[raw_outcome_col].isin([0.0, 1.0])
+        df_valid = cache_df[valid_mask].copy().reset_index(drop=True)
+
+        y_raw = df_valid[raw_outcome_col].to_numpy(dtype=int)
+
+        # Protected attribute selection
+        use_race = (dp_protected_col == "race")
+        if use_race:
+            # Race framing: White (a=1=advantaged) vs Black (a=0=disadvantaged)
+            # Filter to White (1) and Black (2) only for clean binary comparison
+            race_vals = df_valid["imprace"].to_numpy()
+            race_mask = np.isin(race_vals, [1.0, 2.0])
+            df_valid  = df_valid[race_mask].reset_index(drop=True)
+            y_raw     = y_raw[race_mask]
+            race_vals = race_vals[race_mask]
+            a_raw     = (race_vals == 1.0).astype(np.int64)  # 1=White(adv), 0=Black(disadv)
+            prot_drop = ["sex", "imprace"]
+            disadv_label, adv_label = "Black(a=0)", "White(a=1)"
+        else:
+            # Sex framing: Female (a=0=disadvantaged), Male (a=1=advantaged)
+            a_raw = (df_valid["sex"] == 1.0).astype(np.int64).to_numpy()
+            prot_drop = ["sex", "imprace"]
+            disadv_label, adv_label = "Female(a=0)", "Male(a=1)"
+
+        # Feature matrix: drop predicted outcome + both protected-attr columns
+        drop_cols = [raw_outcome_col] + prot_drop
+        feat_cols = [c for c in df_valid.columns if c not in drop_cols]
+        X_df = df_valid[feat_cols].copy()
+
+        n_disadv = int((a_raw == 0).sum())
+        n_adv    = int((a_raw == 1).sum())
+        n_d_pos  = int(((a_raw == 0) & (y_raw == 1)).sum())
+        n_a_pos  = int(((a_raw == 1) & (y_raw == 1)).sum())
+        print(f"[brfss/{brfss_outcome}] Total={len(y_raw)}, pos={y_raw.sum()} "
+              f"({100.*y_raw.mean():.1f}%)")
+        print(f"[brfss/{brfss_outcome}] {disadv_label}: n={n_disadv}, pos={n_d_pos} "
+              f"({100.*n_d_pos/n_disadv:.1f}%)")
+        print(f"[brfss/{brfss_outcome}] {adv_label}:   n={n_adv},   pos={n_a_pos} "
+              f"({100.*n_a_pos/n_adv:.1f}%)")
+
+        # ---- 3) Stratified train/val/test split ----
+        idx = np.arange(len(y_raw))
+        idx_tr, idx_temp = train_test_split(
+            idx, test_size=(val_frac + test_frac), random_state=self.seed, stratify=y_raw)
+        rel_test = test_frac / (val_frac + test_frac)
+        idx_va, idx_te = train_test_split(
+            idx_temp, test_size=rel_test, random_state=self.seed, stratify=y_raw[idx_temp])
+
+        X_tr = X_df.iloc[idx_tr].reset_index(drop=True)
+        y_tr = y_raw[idx_tr]; a_tr = a_raw[idx_tr]
+        X_va = X_df.iloc[idx_va].reset_index(drop=True)
+        y_va = y_raw[idx_va]; a_va = a_raw[idx_va]
+        X_te = X_df.iloc[idx_te].reset_index(drop=True)
+        y_te = y_raw[idx_te]; a_te = a_raw[idx_te]
+
+        # ---- 4) Bias injection ----
+        def apply_da_pct(X, y, a, da_p, n_total, seed):
+            target_da_plus = max(1, round(da_p * n_total))
+            idx_dpos = np.where((a == 0) & (y == 1))[0]
+            idx_rest = np.where(~((a == 0) & (y == 1)))[0]
+            keep = min(len(idx_dpos), target_da_plus)
+            if keep < target_da_plus:
+                print(f"  [brfss da_pct WARNING] Only {len(idx_dpos)} female positives; "
+                      f"target was {target_da_plus}.")
+            rng = np.random.RandomState(seed)
+            kept_dpos = rng.choice(idx_dpos, size=keep, replace=False)
+            n_rest = n_total - keep
+            kept_rest = rng.choice(idx_rest, size=min(len(idx_rest), n_rest), replace=False)
+            sel = np.sort(np.concatenate([kept_dpos, kept_rest]))
+            sel = np.random.RandomState(seed).permutation(sel)
+            return X.iloc[sel].reset_index(drop=True), y[sel], a[sel]
+
+        def apply_bias_pct(X, y, a, bp, seed):
+            idx_adv  = np.where(a == 1)[0]
+            idx_fneg = np.where((a == 0) & (y == 0))[0]
+            idx_fpos = np.where((a == 0) & (y == 1))[0]
+            keep = max(1, int(np.floor(bp * len(idx_fneg) / (1.0 - bp))))
+            keep = min(len(idx_fpos), keep)
+            rng = np.random.RandomState(seed)
+            kept = rng.choice(idx_fpos, size=keep, replace=False)
+            sel = np.sort(np.concatenate([idx_adv, idx_fneg, kept]))
+            sel = np.random.RandomState(seed).permutation(sel)
+            return X.iloc[sel].reset_index(drop=True), y[sel], a[sel]
+
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(y_tr)
+            X_tr, y_tr, a_tr = apply_da_pct(X_tr, y_tr, a_tr, da_pct, n_total, self.seed)
+        elif bias_pct is not None:
+            X_tr, y_tr, a_tr = apply_bias_pct(X_tr, y_tr, a_tr, bias_pct, self.seed)
+            if bias_val:
+                X_va, y_va, a_va = apply_bias_pct(X_va, y_va, a_va, bias_pct, self.seed)
+
+        da_plus  = int(np.sum((y_tr == 1) & (a_tr == 0)))
+        aa_plus  = int(np.sum((y_tr == 1) & (a_tr == 1)))
+        n_disadv = int((a_tr == 0).sum())
+        print(f"[brfss/TRAIN] DA+ (female, {brfss_outcome}=1): {da_plus} of {n_disadv} "
+              f"female train examples")
+
+        # ---- 5) Cap train size (bias_pct mode only; da_pct integrates this) ----
+        if da_pct is None and train_size is not None and train_size < len(y_tr):
+            keep_idx, _ = train_test_split(
+                np.arange(len(y_tr)), train_size=train_size,
+                random_state=self.seed, stratify=y_tr)
+            X_tr, y_tr, a_tr = (X_tr.iloc[keep_idx].reset_index(drop=True),
+                                 y_tr[keep_idx], a_tr[keep_idx])
+
+        def _log(name, y_s, a_s):
+            n = len(y_s); n1 = int(np.sum(y_s == 1))
+            f_pos = int(np.sum((y_s == 1) & (a_s == 0)))
+            m_pos = int(np.sum((y_s == 1) & (a_s == 1)))
+            print(f"[brfss/{name}] n={n}, {brfss_outcome}={n1} ({100.*n1/n:.1f}%), "
+                  f"DA+(female)={f_pos}, AA+(male)={m_pos}")
+        _log("TRAIN", y_tr, a_tr)
+        _log("VAL",   y_va, a_va)
+        _log("TEST",  y_te, a_te)
+
+        # ---- 6) Scale + PCA ----
+        X_tr_arr = X_tr.values.astype(float)
+        X_va_arr = X_va.values.astype(float)
+        X_te_arr = X_te.values.astype(float)
+
+        scaler = StandardScaler()
+        X_tr_z = scaler.fit_transform(X_tr_arr)
+        X_va_z = scaler.transform(X_va_arr)
+        X_te_z = scaler.transform(X_te_arr)
+
+        X_tr_theta, X_va_theta, X_te_theta, pca = self._to_theta(
+            X_tr_z, X_va_z, X_te_z, pca_components=pca_components)
+
+        def _t(arr, dtype):
+            return torch.tensor(arr, dtype=dtype, device=self.device)
+
+        X_train_theta = _t(X_tr_theta, torch.float32)
+        X_val_theta   = _t(X_va_theta, torch.float32)
+        X_test_theta  = _t(X_te_theta, torch.float32)
+        y_train_theta = _t(y_tr, torch.long)
+        y_val_theta   = _t(y_va, torch.long)
+        y_test_theta  = _t(y_te, torch.long)
+
+        self.a_train = _t(a_tr, torch.long)
+        self.a_val   = _t(a_va, torch.long)
+        self.a_test  = _t(a_te, torch.long)
+        self.dp_protected_col = dp_protected_col
+        self.pca_transform = pca
+
+        self._gan_view_cache = {"supported": False}
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta, X_te.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_te.copy(), y_te.copy())
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+
+    def split_diabetes(
+        self,
+        train_size=None,
+        da_pct=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        bias_val=False,
+        dp_protected_col="age_group",
+        drop_protected=False,
+        protected_cols=None,
+        young_max=45,
+        old_min=65,
+        readmit_outcome="lt30",
+        return_test_df=False,
+        return_raw=False,
+    ):
+        """
+        Diabetes 130-US (UCI, Strack et al. 2014).
+
+        Task: predict hospital readmission (y=1) vs not.
+          readmit_outcome="lt30"  — readmitted within 30 days (default, 8.8% positive)
+          readmit_outcome="any"   — readmitted at any point (<30 or >30, 39.9% positive)
+        Protected attr: age group — young (<young_max, a=0, disadvantaged) vs
+        older (>=old_min, a=1, advantaged). Default young<45 / old>=65 captures
+        the Type-1 vs Type-2 mechanistic split with cosine~0.69.
+        Middle-age patients (age_mid in [young_max, old_min)) are excluded.
+        One encounter per patient (first encounter by encounter_id).
+
+        Features: utilisation counts, glucose/A1C results, medication flags (23
+        drugs), ICD-9 diagnosis category flags (3 diagnoses × 8 categories),
+        admission/discharge/source type IDs — ~70 features total.
+        """
+        data_path = Path(self.data_path)
+
+        raw = pd.read_csv(data_path)
+
+        # --- First encounter per patient ---
+        raw = raw.sort_values("encounter_id").drop_duplicates("patient_nbr", keep="first")
+
+        # --- Age group ---
+        age_map = {
+            "[0-10)": 5, "[10-20)": 15, "[20-30)": 25, "[30-40)": 35,
+            "[40-50)": 45, "[50-60)": 55, "[60-70)": 65,
+            "[70-80)": 75, "[80-90)": 85, "[90-100)": 95,
+        }
+        raw["age_mid"] = raw["age"].map(age_map).fillna(55)
+        raw = raw[(raw["age_mid"] < young_max) | (raw["age_mid"] >= old_min)].copy()
+        raw["a"] = (raw["age_mid"] >= old_min).astype(int)  # 1=old (adv), 0=young (disadv)
+
+        n_young = (raw["a"] == 0).sum()
+        n_old   = (raw["a"] == 1).sum()
+        print(f"[diabetes] young(<{young_max}): n={n_young}  old(>={old_min}): n={n_old}")
+
+        # --- Outcome ---
+        if readmit_outcome == "any":
+            raw["y"] = (raw["readmitted"] != "NO").astype(int)
+        else:  # "lt30"
+            raw["y"] = (raw["readmitted"] == "<30").astype(int)
+
+        # --- Feature engineering ---
+        MED_COLS = [
+            "metformin", "repaglinide", "nateglinide", "chlorpropamide", "glimepiride",
+            "acetohexamide", "glipizide", "glyburide", "tolbutamide", "pioglitazone",
+            "rosiglitazone", "acarbose", "miglitol", "troglitazone", "tolazamide",
+            "examide", "citoglipton", "insulin", "glyburide-metformin",
+            "glipizide-metformin", "glimepiride-pioglitazone",
+            "metformin-rosiglitazone", "metformin-pioglitazone",
+        ]
+        for c in MED_COLS:
+            raw[c + "_bin"] = (raw[c] != "No").astype(float)
+
+        gluc_map = {"None": 0, "Norm": 1, ">200": 2, ">300": 3}
+        a1c_map  = {"None": 0, "Norm": 1, ">7": 2, ">8": 3}
+        raw["glu_num"] = raw["max_glu_serum"].map(gluc_map).fillna(0)
+        raw["a1c_num"] = raw["A1Cresult"].map(a1c_map).fillna(0)
+        raw["change_bin"]      = (raw["change"] == "Ch").astype(float)
+        raw["diabetesMed_bin"] = (raw["diabetesMed"] == "Yes").astype(float)
+        raw["gender_bin"]      = (raw["gender"] == "Male").astype(float)
+
+        def _diag_cat(code):
+            try:
+                v = float(str(code).replace("V", "400").replace("E", "500").split(".")[0])
+            except Exception:
+                return "other"
+            if 390 <= v <= 459 or v == 785: return "circ"
+            if 250 <= v < 251:              return "diab"
+            if 460 <= v <= 519 or v == 786: return "resp"
+            if 520 <= v <= 579 or v == 787: return "dig"
+            if 800 <= v <= 999:             return "inj"
+            if 140 <= v <= 239:             return "neo"
+            if 580 <= v <= 629 or v == 788: return "gu"
+            return "other"
+
+        DIAG_CATS = ["circ", "diab", "resp", "dig", "inj", "neo", "gu", "other"]
+        for dx in ["diag_1", "diag_2", "diag_3"]:
+            for cat in DIAG_CATS:
+                raw[f"{dx}_{cat}"] = (raw[dx].apply(_diag_cat) == cat).astype(float)
+
+        FEAT_COLS = (
+            ["time_in_hospital", "num_lab_procedures", "num_procedures", "num_medications",
+             "number_outpatient", "number_emergency", "number_inpatient", "number_diagnoses",
+             "glu_num", "a1c_num", "change_bin", "diabetesMed_bin", "gender_bin",
+             "admission_type_id", "discharge_disposition_id", "admission_source_id"]
+            + [c + "_bin" for c in MED_COLS]
+            + [f"{dx}_{cat}" for dx in ["diag_1", "diag_2", "diag_3"] for cat in DIAG_CATS]
+        )
+
+        # --- Stratified split (stratify on y + a jointly) ---
+        rng = np.random.default_rng(self.seed)
+        idx = np.arange(len(raw))
+        strat_key = raw["y"].values * 2 + raw["a"].values  # 4-class stratification
+
+        from sklearn.model_selection import train_test_split
+        remaining_frac = 1.0 - val_frac - test_frac
+        idx_train_pool, idx_valtest = train_test_split(
+            idx, test_size=(val_frac + test_frac), stratify=strat_key,
+            random_state=self.seed)
+        idx_val, idx_test = train_test_split(
+            idx_valtest,
+            test_size=test_frac / (val_frac + test_frac),
+            stratify=strat_key[idx_valtest],
+            random_state=self.seed)
+
+        # Sample train_size from pool
+        if train_size is not None and train_size < len(idx_train_pool):
+            pool_strat = strat_key[idx_train_pool]
+            idx_train, _ = train_test_split(
+                idx_train_pool, train_size=train_size, stratify=pool_strat,
+                random_state=self.seed)
+        else:
+            idx_train = idx_train_pool
+
+        raw_reset = raw.reset_index(drop=True)
+        tr = raw_reset.iloc[idx_train]
+        va = raw_reset.iloc[idx_val]
+        te = raw_reset.iloc[idx_test]
+
+        # --- Bias injection (reduce young positives in train) ---
+        target_pct = da_pct if da_pct is not None else bias_pct
+        if target_pct is not None:
+            n_train = len(tr)
+            target_da_plus = max(1, round(target_pct * n_train))
+            young_pos_idx = tr.index[(tr["a"] == 0) & (tr["y"] == 1)].tolist()
+            if len(young_pos_idx) > target_da_plus:
+                keep = rng.choice(young_pos_idx, size=target_da_plus, replace=False).tolist()
+                drop = set(young_pos_idx) - set(keep)
+                tr = tr.drop(index=list(drop))
+
+        if bias_val and target_pct is not None:
+            young_pos_val = va.index[(va["a"] == 0) & (va["y"] == 1)].tolist()
+            target_val = max(1, round(target_pct * len(va)))
+            if len(young_pos_val) > target_val:
+                keep = rng.choice(young_pos_val, size=target_val, replace=False).tolist()
+                va = va.drop(index=list(set(young_pos_val) - set(keep)))
+
+        da_plus = int(((tr["a"] == 0) & (tr["y"] == 1)).sum())
+        n_disadv = int((tr["a"] == 0).sum())
+        outcome_label = "readmit_any" if readmit_outcome == "any" else "readmit<30"
+        print(f"[diabetes/TRAIN] DA+ (young, {outcome_label}): {da_plus} of {n_disadv} young train examples")
+
+        for split, name in [(tr, "TRAIN"), (va, "VAL"), (te, "TEST")]:
+            n = len(split); n1 = split["y"].sum()
+            n_y = (split["a"] == 0).sum(); n_y1 = ((split["a"] == 0) & (split["y"] == 1)).sum()
+            print(f"[diabetes/{name}] n={n}, {outcome_label}={n1} ({100*n1/n:.1f}%), "
+                  f"DA+(young)={n_y1}, AA+(old)={n1-n_y1}")
+
+        # --- PCA encode ---
+        X_tr = tr[FEAT_COLS].fillna(0)
+        X_va = va[FEAT_COLS].fillna(0)
+        X_te = te[FEAT_COLS].fillna(0)
+        y_tr = tr["y"].values; y_va = va["y"].values; y_te = te["y"].values
+        a_tr = tr["a"].values; a_va = va["a"].values; a_te = te["a"].values
+
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        X_tr_sc = scaler.fit_transform(X_tr)
+        X_va_sc = scaler.transform(X_va)
+        X_te_sc = scaler.transform(X_te)
+
+        if not drop_protected:
+            # Append group indicator as extra feature (consistent with other datasets)
+            X_tr_sc = np.hstack([X_tr_sc, a_tr.reshape(-1, 1)])
+            X_va_sc = np.hstack([X_va_sc, a_va.reshape(-1, 1)])
+            X_te_sc = np.hstack([X_te_sc, a_te.reshape(-1, 1)])
+
+        n_comp = min(pca_components, X_tr_sc.shape[1], X_tr_sc.shape[0] - 1)
+        pca = PCA(n_components=n_comp, whiten=self.whiten_pca, random_state=self.seed)
+        if self.use_pca:
+            X_tr_p = pca.fit_transform(X_tr_sc)
+            X_va_p = pca.transform(X_va_sc)
+            X_te_p = pca.transform(X_te_sc)
+        else:
+            pca.fit(X_tr_sc)
+            X_tr_p = X_tr_sc; X_va_p = X_va_sc; X_te_p = X_te_sc
+
+        self.pca_transform = pca
+
+        def _t(arr):
+            return torch.tensor(arr, dtype=torch.float32).to(self.device)
+
+        X_train_theta = _t(X_tr_p); X_val_theta = _t(X_va_p); X_test_theta = _t(X_te_p)
+        y_train_theta = _t(y_tr);   y_val_theta  = _t(y_va);   y_test_theta  = _t(y_te)
+
+        self.a_train = torch.tensor(a_tr, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_va, dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_te, dtype=torch.long, device=self.device)
+
+        self._gan_view_cache = {
+            "X_train": X_tr_p.copy(), "y_train": y_tr.copy(),
+            "a_train": a_tr.copy(),   "X_val":   X_va_p.copy(),
+            "y_val":   y_va.copy(),   "a_val":   a_va.copy(),
+            "X_test":  X_te_p.copy(), "y_test":  y_te.copy(),
+            "a_test":  a_te.copy(),
+            "y_train_unbiased": y_tr.astype(int).copy(),
+            "encoder": None, "scaler": scaler, "pca": pca,
+            "use_pca": self.use_pca, "pca_components": int(n_comp),
+            "cat_cols": [], "num_cols": FEAT_COLS,
+            "drop_protected": bool(drop_protected),
+            "protected_cols": list(protected_cols or ["age_group"]),
+            "label_col": "readmitted_lt30",
+            "dp_protected_col": dp_protected_col,
+        }
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta, te.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_te_p.copy(), y_te.copy())
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
     def get_data_splits(self, **kwargs):
         _tabular_drop = ("win_seconds", "step_seconds")
         if self.dataset_name == "census_income":
@@ -2608,7 +3722,7 @@ class Dataset:
         elif self.dataset_name == "ptb_xl":
             ptbxl_kwargs = {k: v for k, v in kwargs.items()
                             if k not in ("drop_protected", "protected_cols",
-                                         "win_seconds", "step_seconds")}
+                                         "win_seconds", "step_seconds", "da_pct")}
             return self.split_ptb_xl(**ptbxl_kwargs)
         elif self.dataset_name == "capture24":
             c24_kwargs = {k: v for k, v in kwargs.items()
@@ -2619,15 +3733,28 @@ class Dataset:
             kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
             return self.split_compas(**kw)
         elif self.dataset_name == "meps":
-            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            kw = {k: v for k, v in kwargs.items() if k not in (*_tabular_drop, "da_pct")}
             return self.split_meps(**kw)
         elif self.dataset_name == "acs_income":
             _acs_drop = ("drop_protected", "protected_cols", "win_seconds", "step_seconds")
             kw = {k: v for k, v in kwargs.items() if k not in _acs_drop}
             return self.split_acs_income(**kw)
+        elif self.dataset_name == "acs_employment":
+            _acs_drop = ("drop_protected", "protected_cols", "win_seconds", "step_seconds")
+            kw = {k: v for k, v in kwargs.items() if k not in _acs_drop}
+            return self.split_acs_employment(**kw)
         elif self.dataset_name == "fairjob":
             kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
             return self.split_fairjob(**kw)
+        elif self.dataset_name == "sepsis":
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_sepsis(**kw)
+        elif self.dataset_name == "diabetes130":
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_diabetes(**kw)
+        elif self.dataset_name == "brfss":
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_brfss(**kw)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 

@@ -73,6 +73,8 @@ def parse_args():
     p.add_argument("--device",       default="cpu")
     p.add_argument("--skip-separability", action="store_true",
                    help="Skip feature separability analysis (faster)")
+    p.add_argument("--brfss-outcome", default="cvdinfr4",
+                   help="BRFSS outcome to predict (cvdinfr4, cvdcrhd4, cvdstrk3, addepev3)")
     return p.parse_args()
 
 
@@ -102,6 +104,8 @@ def make_dataset(args, seed, bias_pct=None, da_pct=None):
         win_seconds=args.win_seconds,
         step_seconds=args.step_seconds,
     )
+    if args.dataset == "brfss":
+        kwargs["brfss_outcome"] = args.brfss_outcome
     if args.dp_col is not None:
         kwargs["dp_protected_col"] = args.dp_col
 
@@ -111,17 +115,29 @@ def make_dataset(args, seed, bias_pct=None, da_pct=None):
 
 
 def train_alpha(x_train, y_train, seed, args):
+    from torch.utils.data import WeightedRandomSampler
     agent = FFNNAgent(
         input_size=x_train.shape[1],
         hidden_sizes=[32, 16],
         output_size=1,
         learning_rate=0.001,
         batch_size=64,
-        epochs=20,
+        epochs=50,
         device=args.device,
         seed=seed,
     )
-    loader = DataLoader(TensorDataset(x_train, y_train.float()), batch_size=64, shuffle=True)
+    # Balanced sampling when positive rate is low (avoids collapse to all-negative)
+    y_np = y_train.cpu().numpy() if torch.is_tensor(y_train) else np.array(y_train)
+    pos_rate = y_np.mean()
+    if pos_rate < 0.3:
+        n = len(y_np)
+        weights = np.where(y_np == 1, (1 - pos_rate) / pos_rate, 1.0)
+        sampler = WeightedRandomSampler(weights, num_samples=n, replacement=True)
+        loader = DataLoader(TensorDataset(x_train, y_train.float()),
+                            batch_size=64, sampler=sampler)
+    else:
+        loader = DataLoader(TensorDataset(x_train, y_train.float()),
+                            batch_size=64, shuffle=True)
     agent.train(loader)
     return agent
 

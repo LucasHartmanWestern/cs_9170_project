@@ -1,0 +1,99 @@
+======================================================================
+STEP 1: DA+ scan across scarcity values and seeds
+  dataset=acs_employment  minority_id=0  majority_id=1  dp_col=None
+======================================================================
+       param     value   seed    DA+   n_disadv  val_disadv_pos  test_disadv_pos
+--------------------------------------------------------------------------------
+[acs_employment] Total: 378817, employed_rate=0.456
+[acs_employment] Female (a=0): n=192140, employed_rate=0.423, employed_total=81184
+[acs_employment] Male   (a=1): n=186677, employed_rate=0.491, employed_total=91619
+[acs_employment/TRAIN] DA+ (female, employed): 43 of 1137 female train examples
+[acs_employment/TRAIN] n=3000, employed=984 (32.8%), DA+(female)=43, AA+(male)=941
+[acs_employment/VAL] n=75763, employed=34560 (45.6%), DA+(female)=16221, AA+(male)=18339
+[acs_employment/TEST] n=75764, employed=34561 (45.6%), DA+(female)=16358, AA+(male)=18203
+      da_pct   0.01433     42     43       1137           16221            16358
+[acs_employment] Total: 378817, employed_rate=0.456
+[acs_employment] Female (a=0): n=192140, employed_rate=0.423, employed_total=81184
+[acs_employment] Male   (a=1): n=186677, employed_rate=0.491, employed_total=91619
+[acs_employment/TRAIN] DA+ (female, employed): 43 of 1106 female train examples
+[acs_employment/TRAIN] n=3000, employed=967 (32.2%), DA+(female)=43, AA+(male)=924
+[acs_employment/VAL] n=75763, employed=34560 (45.6%), DA+(female)=16168, AA+(male)=18392
+[acs_employment/TEST] n=75764, employed=34561 (45.6%), DA+(female)=16208, AA+(male)=18353
+      da_pct   0.01433      0     43       1106           16168            16208
+[acs_employment] Total: 378817, employed_rate=0.456
+[acs_employment] Female (a=0): n=192140, employed_rate=0.423, employed_total=81184
+[acs_employment] Male   (a=1): n=186677, employed_rate=0.491, employed_total=91619
+[acs_employment/TRAIN] DA+ (female, employed): 43 of 1176 female train examples
+[acs_employment/TRAIN] n=3000, employed=949 (31.6%), DA+(female)=43, AA+(male)=906
+[acs_employment/VAL] n=75763, employed=34560 (45.6%), DA+(female)=16125, AA+(male)=18435
+[acs_employment/TEST] n=75764, employed=34561 (45.6%), DA+(female)=16315, AA+(male)=18246
+      da_pct   0.01433      1     43       1176           16125            16315
+
+======================================================================
+STEP 2: Alpha-EO baseline
+  da_pcts=[0.01433]  bias_pcts=None  seeds=[42, 0, 1]
+======================================================================
+       param     value   seed    DA+   val_EO   test_EO      AUC      F1w
+--------------------------------------------------------------------------------
+[acs_employment] Total: 378817, employed_rate=0.456
+[acs_employment] Female (a=0): n=192140, employed_rate=0.423, employed_total=81184
+[acs_employment] Male   (a=1): n=186677, employed_rate=0.491, employed_total=91619
+[acs_employment/TRAIN] DA+ (female, employed): 43 of 1137 female train examples
+[acs_employment/TRAIN] n=3000, employed=984 (32.8%), DA+(female)=43, AA+(male)=941
+[acs_employment/VAL] n=75763, employed=34560 (45.6%), DA+(female)=16221, AA+(male)=18339
+[acs_employment/TEST] n=75764, employed=34561 (45.6%), DA+(female)=16358, AA+(male)=18203
+FFNN Using device: cpu
+      da_pct   0.01433     42     43   0.0588    0.0630   0.7658   0.5620
+[acs_employment] Total: 378817, employed_rate=0.456
+[acs_employment] Female (a=0): n=192140, employed_rate=0.423, employed_total=81184
+[acs_employment] Male   (a=1): n=186677, employed_rate=0.491, employed_total=91619
+[acs_employment/TRAIN] DA+ (female, employed): 43 of 1106 female train examples
+[acs_employment/TRAIN] n=3000, employed=967 (32.2%), DA+(female)=43, AA+(male)=924
+[acs_employment/VAL] n=75763, employed=34560 (45.6%), DA+(female)=16168, AA+(male)=18392
+[acs_employment/TEST] n=75764, employed=34561 (45.6%), DA+(female)=16208, AA+(male)=18353
+FFNN Using device: cpu
+      da_pct   0.01433      0     43   0.1665    0.1637   0.6850   0.4449
+[acs_employment] Total: 378817, employed_rate=0.456
+[acs_employment] Female (a=0): n=192140, employed_rate=0.423, employed_total=81184
+[acs_employment] Male   (a=1): n=186677, employed_rate=0.491, employed_total=91619
+[acs_employment/TRAIN] DA+ (female, employed): 43 of 1176 female train examples
+[acs_employment/TRAIN] n=3000, employed=949 (31.6%), DA+(female)=43, AA+(male)=906
+[acs_employment/VAL] n=75763, employed=34560 (45.6%), DA+(female)=16125, AA+(male)=18435
+[acs_employment/TEST] n=75764, employed=34561 (45.6%), DA+(female)=16315, AA+(male)=18246
+FFNN Using device: cpu
+      da_pct   0.01433      1     43   0.1234    0.1251   0.7458   0.5172
+
+======================================================================
+STEP 3: Feature separability (PCA space, seed=42, no bias)
+  Checks if disadvantaged-positive and advantaged-positive
+  subgroups are spatially distinct — prerequisite for RL signal.
+======================================================================
+[acs_employment] Total: 378817, employed_rate=0.456
+[acs_employment] Female (a=0): n=192140, employed_rate=0.423, employed_total=81184
+[acs_employment] Male   (a=1): n=186677, employed_rate=0.491, employed_total=91619
+[acs_employment/TRAIN] DA+ (female, employed): 48605 of 115043 female train examples
+[acs_employment/TRAIN] n=3000, employed=1368 (45.6%), DA+(female)=631, AA+(male)=737
+[acs_employment/VAL] n=75763, employed=34560 (45.6%), DA+(female)=16221, AA+(male)=18339
+[acs_employment/TEST] n=75764, employed=34561 (45.6%), DA+(female)=16358, AA+(male)=18203
+  Test subgroup sizes:
+    disadv_pos=16358  adv_pos=18203  disadv_neg=22112  adv_neg=19091
+
+  Centroid distance (disadv_pos vs adv_pos): 2.0047
+  Within-group spread: disadv=0.8476  adv=0.8677
+  Separability ratio (between/within):       2.3105
+  Cosine similarity of discriminant vectors: 0.9682
+    (1.0 = identical; <0.7 = group-specific structure)
+
+  Interpretation:
+  sep_ratio=2.31 — groups are spatially distinct. RL signal likely viable.
+
+======================================================================
+SUMMARY — Pass/Fail against paper criteria
+======================================================================
+  Best val_disadv_pos:  16221  PASS
+  Best test_disadv_pos: 16358  PASS
+  Best val alpha-EO:    0.1665  PASS
+  Best test alpha-EO:   0.1637
+
+  Overall: ALL CRITERIA PASS — viable for RL experiments.
+

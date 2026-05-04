@@ -1,0 +1,108 @@
+======================================================================
+STEP 1: DA+ scan across scarcity values and seeds
+  dataset=brfss  minority_id=0  majority_id=1  dp_col=None
+======================================================================
+       param     value   seed    DA+   n_disadv  val_disadv_pos  test_disadv_pos
+--------------------------------------------------------------------------------
+[brfss] Parsing datasets/brfss/LLCP2022.XPT  — this may take a few minutes...
+[brfss] Loaded 445132 raw records.
+[brfss] Feature cache saved: 445132 records, 27 features → datasets/brfss/brfss_features.parquet
+[brfss/cvdinfr4] Total=445132, pos=25108 (5.6%)
+[brfss/cvdinfr4] Female(a=0): n=235894, pos=9687 (4.1%)
+[brfss/cvdinfr4] Male  (a=1): n=209238,   pos=15421 (7.4%)
+[brfss/TRAIN] DA+ (female, cvdinfr4=1): 43 of 1543 female train examples
+[brfss/TRAIN] n=3000, cvdinfr4=175 (5.8%), DA+(female)=43, AA+(male)=132
+[brfss/VAL] n=89026, cvdinfr4=5021 (5.6%), DA+(female)=1976, AA+(male)=3045
+[brfss/TEST] n=89027, cvdinfr4=5022 (5.6%), DA+(female)=1896, AA+(male)=3126
+      da_pct   0.01433     42     43       1543            1976             1896
+[brfss] Loaded 445132 records from cache.
+[brfss/cvdinfr4] Total=445132, pos=25108 (5.6%)
+[brfss/cvdinfr4] Female(a=0): n=235894, pos=9687 (4.1%)
+[brfss/cvdinfr4] Male  (a=1): n=209238,   pos=15421 (7.4%)
+[brfss/TRAIN] DA+ (female, cvdinfr4=1): 43 of 1588 female train examples
+[brfss/TRAIN] n=3000, cvdinfr4=138 (4.6%), DA+(female)=43, AA+(male)=95
+[brfss/VAL] n=89026, cvdinfr4=5021 (5.6%), DA+(female)=1941, AA+(male)=3080
+[brfss/TEST] n=89027, cvdinfr4=5022 (5.6%), DA+(female)=1912, AA+(male)=3110
+      da_pct   0.01433      0     43       1588            1941             1912
+[brfss] Loaded 445132 records from cache.
+[brfss/cvdinfr4] Total=445132, pos=25108 (5.6%)
+[brfss/cvdinfr4] Female(a=0): n=235894, pos=9687 (4.1%)
+[brfss/cvdinfr4] Male  (a=1): n=209238,   pos=15421 (7.4%)
+[brfss/TRAIN] DA+ (female, cvdinfr4=1): 43 of 1549 female train examples
+[brfss/TRAIN] n=3000, cvdinfr4=137 (4.6%), DA+(female)=43, AA+(male)=94
+[brfss/VAL] n=89026, cvdinfr4=5021 (5.6%), DA+(female)=1969, AA+(male)=3052
+[brfss/TEST] n=89027, cvdinfr4=5022 (5.6%), DA+(female)=1927, AA+(male)=3095
+      da_pct   0.01433      1     43       1549            1969             1927
+
+======================================================================
+STEP 2: Alpha-EO baseline
+  da_pcts=[0.01433]  bias_pcts=None  seeds=[42, 0, 1]
+======================================================================
+       param     value   seed    DA+   val_EO   test_EO      AUC      F1w
+--------------------------------------------------------------------------------
+[brfss] Loaded 445132 records from cache.
+[brfss/cvdinfr4] Total=445132, pos=25108 (5.6%)
+[brfss/cvdinfr4] Female(a=0): n=235894, pos=9687 (4.1%)
+[brfss/cvdinfr4] Male  (a=1): n=209238,   pos=15421 (7.4%)
+[brfss/TRAIN] DA+ (female, cvdinfr4=1): 43 of 1543 female train examples
+[brfss/TRAIN] n=3000, cvdinfr4=175 (5.8%), DA+(female)=43, AA+(male)=132
+[brfss/VAL] n=89026, cvdinfr4=5021 (5.6%), DA+(female)=1976, AA+(male)=3045
+[brfss/TEST] n=89027, cvdinfr4=5022 (5.6%), DA+(female)=1896, AA+(male)=3126
+FFNN Using device: cpu
+      da_pct   0.01433     42     43   0.0029    0.0080   0.7853   0.3850
+[brfss] Loaded 445132 records from cache.
+[brfss/cvdinfr4] Total=445132, pos=25108 (5.6%)
+[brfss/cvdinfr4] Female(a=0): n=235894, pos=9687 (4.1%)
+[brfss/cvdinfr4] Male  (a=1): n=209238,   pos=15421 (7.4%)
+[brfss/TRAIN] DA+ (female, cvdinfr4=1): 43 of 1588 female train examples
+[brfss/TRAIN] n=3000, cvdinfr4=138 (4.6%), DA+(female)=43, AA+(male)=95
+[brfss/VAL] n=89026, cvdinfr4=5021 (5.6%), DA+(female)=1941, AA+(male)=3080
+[brfss/TEST] n=89027, cvdinfr4=5022 (5.6%), DA+(female)=1912, AA+(male)=3110
+FFNN Using device: cpu
+      da_pct   0.01433      0     43   0.0025    0.0070   0.7735   0.4578
+[brfss] Loaded 445132 records from cache.
+[brfss/cvdinfr4] Total=445132, pos=25108 (5.6%)
+[brfss/cvdinfr4] Female(a=0): n=235894, pos=9687 (4.1%)
+[brfss/cvdinfr4] Male  (a=1): n=209238,   pos=15421 (7.4%)
+[brfss/TRAIN] DA+ (female, cvdinfr4=1): 43 of 1549 female train examples
+[brfss/TRAIN] n=3000, cvdinfr4=137 (4.6%), DA+(female)=43, AA+(male)=94
+[brfss/VAL] n=89026, cvdinfr4=5021 (5.6%), DA+(female)=1969, AA+(male)=3052
+[brfss/TEST] n=89027, cvdinfr4=5022 (5.6%), DA+(female)=1927, AA+(male)=3095
+FFNN Using device: cpu
+      da_pct   0.01433      1     43   0.0157    0.0088   0.7858   0.3955
+
+======================================================================
+STEP 3: Feature separability (PCA space, seed=42, no bias)
+  Checks if disadvantaged-positive and advantaged-positive
+  subgroups are spatially distinct — prerequisite for RL signal.
+======================================================================
+[brfss] Loaded 445132 records from cache.
+[brfss/cvdinfr4] Total=445132, pos=25108 (5.6%)
+[brfss/cvdinfr4] Female(a=0): n=235894, pos=9687 (4.1%)
+[brfss/cvdinfr4] Male  (a=1): n=209238,   pos=15421 (7.4%)
+[brfss/TRAIN] DA+ (female, cvdinfr4=1): 5815 of 141686 female train examples
+[brfss/TRAIN] n=3000, cvdinfr4=169 (5.6%), DA+(female)=65, AA+(male)=104
+[brfss/VAL] n=89026, cvdinfr4=5021 (5.6%), DA+(female)=1976, AA+(male)=3045
+[brfss/TEST] n=89027, cvdinfr4=5022 (5.6%), DA+(female)=1896, AA+(male)=3126
+  Test subgroup sizes:
+    disadv_pos=1896  adv_pos=3126  disadv_neg=45005  adv_neg=39000
+
+  Centroid distance (disadv_pos vs adv_pos): 0.7623
+  Within-group spread: disadv=1.4799  adv=1.4219
+  Separability ratio (between/within):       0.5151
+  Cosine similarity of discriminant vectors: 0.9831
+    (1.0 = identical; <0.7 = group-specific structure)
+
+  Interpretation:
+  sep_ratio=0.52 — groups are spatially distinct. RL signal likely viable.
+
+======================================================================
+SUMMARY — Pass/Fail against paper criteria
+======================================================================
+  Best val_disadv_pos:  1976  PASS
+  Best test_disadv_pos: 1927  PASS
+  Best val alpha-EO:    0.0157  FAIL
+  Best test alpha-EO:   0.0088
+
+  Overall: ONE OR MORE CRITERIA FAIL — investigate before committing.
+

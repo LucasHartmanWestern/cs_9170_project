@@ -1,0 +1,85 @@
+======================================================================
+STEP 1: DA+ scan across scarcity values and seeds
+  dataset=diabetes130  minority_id=0  majority_id=1  dp_col=None
+======================================================================
+       param     value   seed    DA+   n_disadv  val_disadv_pos  test_disadv_pos
+--------------------------------------------------------------------------------
+[diabetes] young(<45): n=4515  old(>=65): n=47659
+[diabetes/TRAIN] DA+ (young, readmit<30): 17 of 259 young train examples
+[diabetes/TRAIN] n=3000, readmit<30=282 (9.4%), DA+(young)=17, AA+(old)=265
+[diabetes/VAL] n=10435, readmit<30=982 (9.4%), DA+(young)=60, AA+(old)=922
+[diabetes/TEST] n=10435, readmit<30=981 (9.4%), DA+(young)=60, AA+(old)=921
+      da_pct      None     42     17        259              60               60
+[diabetes] young(<45): n=4515  old(>=65): n=47659
+[diabetes/TRAIN] DA+ (young, readmit<30): 17 of 259 young train examples
+[diabetes/TRAIN] n=3000, readmit<30=282 (9.4%), DA+(young)=17, AA+(old)=265
+[diabetes/VAL] n=10435, readmit<30=982 (9.4%), DA+(young)=60, AA+(old)=922
+[diabetes/TEST] n=10435, readmit<30=981 (9.4%), DA+(young)=60, AA+(old)=921
+      da_pct      None      0     17        259              60               60
+[diabetes] young(<45): n=4515  old(>=65): n=47659
+[diabetes/TRAIN] DA+ (young, readmit<30): 17 of 259 young train examples
+[diabetes/TRAIN] n=3000, readmit<30=282 (9.4%), DA+(young)=17, AA+(old)=265
+[diabetes/VAL] n=10435, readmit<30=981 (9.4%), DA+(young)=60, AA+(old)=921
+[diabetes/TEST] n=10435, readmit<30=982 (9.4%), DA+(young)=60, AA+(old)=922
+      da_pct      None      1     17        259              60               60
+
+======================================================================
+STEP 2: Alpha-EO baseline
+  da_pcts=None  bias_pcts=None  seeds=[42, 0, 1]
+======================================================================
+       param     value   seed    DA+   val_EO   test_EO      AUC      F1w
+--------------------------------------------------------------------------------
+[diabetes] young(<45): n=4515  old(>=65): n=47659
+[diabetes/TRAIN] DA+ (young, readmit<30): 17 of 259 young train examples
+[diabetes/TRAIN] n=3000, readmit<30=282 (9.4%), DA+(young)=17, AA+(old)=265
+[diabetes/VAL] n=10435, readmit<30=982 (9.4%), DA+(young)=60, AA+(old)=922
+[diabetes/TEST] n=10435, readmit<30=981 (9.4%), DA+(young)=60, AA+(old)=921
+FFNN Using device: cpu
+      da_pct      None     42     17   0.0556    0.0783   0.5296   0.1948
+[diabetes] young(<45): n=4515  old(>=65): n=47659
+[diabetes/TRAIN] DA+ (young, readmit<30): 17 of 259 young train examples
+[diabetes/TRAIN] n=3000, readmit<30=282 (9.4%), DA+(young)=17, AA+(old)=265
+[diabetes/VAL] n=10435, readmit<30=982 (9.4%), DA+(young)=60, AA+(old)=922
+[diabetes/TEST] n=10435, readmit<30=981 (9.4%), DA+(young)=60, AA+(old)=921
+FFNN Using device: cpu
+      da_pct      None      0     17   0.0060    0.0151   0.5178   0.1508
+[diabetes] young(<45): n=4515  old(>=65): n=47659
+[diabetes/TRAIN] DA+ (young, readmit<30): 17 of 259 young train examples
+[diabetes/TRAIN] n=3000, readmit<30=282 (9.4%), DA+(young)=17, AA+(old)=265
+[diabetes/VAL] n=10435, readmit<30=981 (9.4%), DA+(young)=60, AA+(old)=921
+[diabetes/TEST] n=10435, readmit<30=982 (9.4%), DA+(young)=60, AA+(old)=922
+FFNN Using device: cpu
+      da_pct      None      1     17   0.0052    0.0538   0.5464   0.1724
+
+======================================================================
+STEP 3: Feature separability (PCA space, seed=42, no bias)
+  Checks if disadvantaged-positive and advantaged-positive
+  subgroups are spatially distinct — prerequisite for RL signal.
+======================================================================
+[diabetes] young(<45): n=4515  old(>=65): n=47659
+[diabetes/TRAIN] DA+ (young, readmit<30): 17 of 259 young train examples
+[diabetes/TRAIN] n=3000, readmit<30=282 (9.4%), DA+(young)=17, AA+(old)=265
+[diabetes/VAL] n=10435, readmit<30=982 (9.4%), DA+(young)=60, AA+(old)=922
+[diabetes/TEST] n=10435, readmit<30=981 (9.4%), DA+(young)=60, AA+(old)=921
+  Test subgroup sizes:
+    disadv_pos=60  adv_pos=921  disadv_neg=843  adv_neg=8611
+
+  Centroid distance (disadv_pos vs adv_pos): 2.1678
+  Within-group spread: disadv=1.2439  adv=1.2917
+  Separability ratio (between/within):       1.6783
+  Cosine similarity of discriminant vectors: 0.3041
+    (1.0 = identical; <0.7 = group-specific structure)
+
+  Interpretation:
+  sep_ratio=1.68 — groups are spatially distinct. RL signal likely viable.
+
+======================================================================
+SUMMARY — Pass/Fail against paper criteria
+======================================================================
+  Best val_disadv_pos:  60  PASS
+  Best test_disadv_pos: 60  FAIL
+  Best val alpha-EO:    0.0556  FAIL
+  Best test alpha-EO:   0.0783
+
+  Overall: ONE OR MORE CRITERIA FAIL — investigate before committing.
+

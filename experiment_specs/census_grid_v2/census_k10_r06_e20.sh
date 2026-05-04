@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=k10_r06_e20
-#SBATCH --account=rrg-kgroling
+#SBATCH --account=def-mcapretx
 #SBATCH --time=74:00:00
 #SBATCH --mem=20G
 #SBATCH --cpus-per-task=9
