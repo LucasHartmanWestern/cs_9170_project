@@ -798,8 +798,8 @@ Supersedes old bundle system (census_grid/, 108 specs, 28 bundles). Parallelizat
 |---|---|---|---|---|
 | Huron GPU 0 | k=0 | census_k0_gpu0_restart_pca15_e10.yaml → census_k0_gpu0_restart_e20.yaml | **RUNNING** (2/27 remaining) | 2026-04-28 |
 | Huron GPU 1 | k=0 | census_k0_gpu1_restart_pca10_e30.yaml → census_k0_gpu1_restart_pca15_e30.yaml | **COMPLETE** | 2026-04-28 |
-| Lambda GPU 0 | k=3 | census_k3_gpu0.yaml | **RUNNING** | 2026-04-25 |
-| Lambda GPU 1 | k=3 | census_k3_gpu1.yaml | **RUNNING** | 2026-04-25 |
+| Lambda GPU 0 | k=3 | census_k3_gpu0.yaml | **COMPLETE** | 2026-04-25 |
+| Lambda GPU 1 | k=3 | census_k3_gpu1.yaml | **COMPLETE** | 2026-04-25 |
 | Aulavik GPU 0 | k=5 | census_k5_gpu0.yaml | **COMPLETE** | 2026-04-25 |
 | Aulavik GPU 1 | k=5 | census_k5_gpu1.yaml | **COMPLETE** | 2026-04-25 |
 | DRAC (8 jobs) | k=10 | census_k10_r{02,04,06}_e{10,20,30}.sh (excl. r02_e10) | **QUEUED** (resubmit under def-mcapretz) | 2026-04-28 |
