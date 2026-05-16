@@ -266,6 +266,9 @@ class Training:
         #dataset protected attribute column (passed to get_data_splits)
         self.dp_protected_col=spec.get("dp_protected_col", None)
 
+        #ACS Employment: list of state codes to load (None = default single state)
+        self.acs_states=spec.get("acs_states", None)
+
         #FairJob: target positive fraction for neg-undersampling of train+val
         self.pool_pos_fraction=spec.get("pool_pos_fraction", None)
 
@@ -1217,6 +1220,7 @@ class Training:
                     win_seconds=self.win_seconds,
                     step_seconds=self.step_seconds,
                     **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
+                    **({"acs_states": self.acs_states} if self.acs_states is not None else {}),
                     **({"pool_pos_fraction": self.pool_pos_fraction} if self.pool_pos_fraction is not None else {}),
                 )
             )

@@ -75,6 +75,10 @@ def parse_args():
                    help="Skip feature separability analysis (faster)")
     p.add_argument("--brfss-outcome", default="cvdinfr4",
                    help="BRFSS outcome to predict (cvdinfr4, cvdcrhd4, cvdstrk3, addepev3)")
+    p.add_argument("--covertype-positive", type=int, default=5,
+                   help="Covertype: cover type id (1-7) to treat as y=1 (default=5 Aspen)")
+    p.add_argument("--acs-states", nargs="+", default=None,
+                   help="ACS Employment: list of state codes to load (e.g. CA TX NY FL)")
     return p.parse_args()
 
 
@@ -83,11 +87,16 @@ def parse_args():
 # ---------------------------------------------------------------------------
 
 def make_dataset(args, seed, bias_pct=None, da_pct=None):
+    # covertype uses binary group IDs (0=minority, 1=majority) in a_train;
+    # the original area IDs are passed separately as minority_area/majority_area.
+    minority_id = 0 if args.dataset == "covertype" else args.minority_id
+    majority_id = 1 if args.dataset == "covertype" else args.majority_id
+
     ds = Dataset(
         dataset_name=args.dataset,
         multiclass=False,
-        minority_id=args.minority_id,
-        majority_id=args.majority_id,
+        minority_id=minority_id,
+        majority_id=majority_id,
         third_id=None,
         pca_components=args.pca_components,
         seed=seed,
@@ -106,6 +115,15 @@ def make_dataset(args, seed, bias_pct=None, da_pct=None):
     )
     if args.dataset == "brfss":
         kwargs["brfss_outcome"] = args.brfss_outcome
+    if args.dataset == "covertype":
+        kwargs["positive_cover_type"] = args.covertype_positive
+        kwargs["minority_area"] = args.minority_id  # original wilderness area ID
+        kwargs["majority_area"] = args.majority_id
+    if args.dataset == "acs_employment":
+        # drop_protected so DIS is not visible as a feature during the alpha-EO check
+        kwargs["drop_protected"] = True
+        if args.acs_states is not None:
+            kwargs["acs_states"] = args.acs_states
     if args.dp_col is not None:
         kwargs["dp_protected_col"] = args.dp_col
 
@@ -192,15 +210,15 @@ def step1_da_scan(args):
         for seed in args.seeds:
             try:
                 ds, x_tr, x_val, x_te, y_tr, y_val, y_te = make_dataset(args, seed, **kw)
-                da_plus, n_disadv = group_counts(ds.a_train, y_tr, args.minority_id)
+                da_plus, n_disadv = group_counts(ds.a_train, y_tr, ds.MINORITY_ID)
 
                 a_val_np = ds.a_val.cpu().numpy() if torch.is_tensor(ds.a_val) else np.array(ds.a_val)
                 y_val_np = y_val.cpu().numpy()
-                val_dp = int(np.sum((a_val_np == args.minority_id) & (y_val_np == 1)))
+                val_dp = int(np.sum((a_val_np == ds.MINORITY_ID) & (y_val_np == 1)))
 
                 a_te_np = ds.a_test.cpu().numpy() if torch.is_tensor(ds.a_test) else np.array(ds.a_test)
                 y_te_np = y_te.cpu().numpy()
-                test_dp = int(np.sum((a_te_np == args.minority_id) & (y_te_np == 1)))
+                test_dp = int(np.sum((a_te_np == ds.MINORITY_ID) & (y_te_np == 1)))
 
                 val_str = f"{param_val:.5f}" if param_val is not None else "   None"
                 print(f"{param_name:>12}  {val_str:>8}  {seed:>5}  {da_plus:>5}  {n_disadv:>9}  "
@@ -249,7 +267,7 @@ def step2_alpha_eo(args):
         for seed in args.seeds:
             try:
                 ds, x_tr, x_val, x_te, y_tr, y_val, y_te = make_dataset(args, seed, **kw)
-                da_plus, _ = group_counts(ds.a_train, y_tr, args.minority_id)
+                da_plus, _ = group_counts(ds.a_train, y_tr, ds.MINORITY_ID)
 
                 alpha = train_alpha(x_tr, y_tr, seed, args)
                 p_val  = get_probs(alpha, x_val,  args.device)
@@ -308,10 +326,10 @@ def step3_separability(args):
     y_np = y_te.cpu().numpy()
     a_np = ds.a_test.cpu().numpy() if torch.is_tensor(ds.a_test) else np.array(ds.a_test)
 
-    disadv_pos = x_np[(y_np == 1) & (a_np == args.minority_id)]
-    adv_pos    = x_np[(y_np == 1) & (a_np == args.majority_id)]
-    disadv_neg = x_np[(y_np == 0) & (a_np == args.minority_id)]
-    adv_neg    = x_np[(y_np == 0) & (a_np == args.majority_id)]
+    disadv_pos = x_np[(y_np == 1) & (a_np == ds.MINORITY_ID)]
+    adv_pos    = x_np[(y_np == 1) & (a_np == ds.MAJORITY_ID)]
+    disadv_neg = x_np[(y_np == 0) & (a_np == ds.MINORITY_ID)]
+    adv_neg    = x_np[(y_np == 0) & (a_np == ds.MAJORITY_ID)]
 
     print(f"  Test subgroup sizes:")
     print(f"    disadv_pos={len(disadv_pos)}  adv_pos={len(adv_pos)}  "

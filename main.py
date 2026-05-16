@@ -9,6 +9,16 @@ import torch.multiprocessing as mp
 from training import Training
 from helpers_main import _load_spec, build_exp_group
 
+# Workaround: Python 3.12 + certain PyTorch versions have an ABCMeta incompatibility
+# in torch.autograd.profiler.record_function, which the DataLoader wraps every
+# __next__ call with. Replacing it with a no-op is safe — it only disables profiling,
+# not training. Runs in both parent and spawned worker processes (spawn re-imports).
+class _NoOpRecordFunction:
+    def __init__(self, *args, **kwargs): pass
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+torch.autograd.profiler.record_function = _NoOpRecordFunction
+
 def worker(exp_group, spec_name, spec, output_dir, seed, process_label, device):
     trainer = Training(
         exp_group=exp_group,

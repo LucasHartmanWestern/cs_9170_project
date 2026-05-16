@@ -47,7 +47,7 @@ reinforce:
 benchmarks:
   run_ctgan: false
   run_ctabgan: false
-max_parallel: 9
+max_parallel: 4
 global_sigmoid_k: 10
 permutations:
   principals:

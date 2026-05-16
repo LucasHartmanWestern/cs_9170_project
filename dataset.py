@@ -45,8 +45,8 @@ class Dataset:
             "protected_attributes": ["sex", "race"]
         },
         "acs_employment": {
-            "data_path": "datasets/acs_income",  # shares the same ACS data root
-            "protected_attributes": ["sex"]
+            "data_path": "datasets/acs_employment",
+            "protected_attributes": ["sex", "disability"]
         },
         "fairjob": {
             "data_path": "datasets/fairjob",
@@ -63,6 +63,14 @@ class Dataset:
         "brfss": {
             "data_path": "datasets/brfss",
             "protected_attributes": ["sex"]
+        },
+        "covertype": {
+            "data_path": "sklearn_cache",  # loaded via fetch_covtype(), no local file
+            "protected_attributes": ["wilderness_area"]
+        },
+        "wildfire": {
+            "data_path": "datasets/wildfire/Data/FPA_FOD_20221014.sqlite",
+            "protected_attributes": ["owner_descr"],
         },
     }
     def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
@@ -1778,24 +1786,29 @@ class Dataset:
         bias_val: bool = False,
         dp_protected_col: str = "sex",
         acs_state: str = "CA",
+        acs_states: list = None,
         acs_year: str = "2018",
+        drop_protected: bool = True,
     ):
         """
         ACS Employment (Ding et al. NeurIPS 2021 / folktables).
 
         Task: predict employment status (y=1=employed, y=0=not employed).
-        Protected attribute: sex. Female (SEX=2, a=0) is disadvantaged;
-        male (SEX=1, a=1) is advantaged. Natural employment gap: female ~42%
-        vs male ~49% (CA 2018).
 
-        Features (16, all numeric): age, education, marital status, relationship
-        to householder, disability, parental employment, citizenship, mobility,
-        military service, ancestry, nativity, hearing/vision/cognitive difficulty,
-        sex (dropped as protected attr), race.
+        Protected attribute options (dp_protected_col):
+          "sex"      — Female (SEX=2, a=0) disadvantaged; male (SEX=1, a=1) advantaged.
+          "disability" — Disabled (DIS=1, a=0) disadvantaged; not disabled (DIS=2, a=1)
+                         advantaged. Natural gap: 18% vs 50% employment rate. DA+(disabled)
+                         ≈ 43 at da_pct=0.01433 with train_size=3000.
 
-        Reuses data already downloaded for acs_income (same ACSDataSource root).
+        acs_states: list of 2-letter state codes (default ["CA"]). Pass multiple states for
+            a larger pool; data will be loaded from datasets/acs_employment/ cache.
+        drop_protected: if True (default), remove the protected attribute column from
+            features so the model cannot directly observe group membership.
         """
         from folktables import ACSDataSource, ACSEmployment
+
+        states = acs_states if acs_states is not None else [acs_state]
 
         data_dir = Path(self.data_path)
         data_dir.mkdir(parents=True, exist_ok=True)
@@ -1804,21 +1817,34 @@ class Dataset:
             survey_year=acs_year, horizon="1-Year", survey="person",
             root_dir=str(data_dir),
         )
-        acs_data = data_source.get_data(states=[acs_state], download=True)
+        acs_data = data_source.get_data(states=states, download=True)
         features, label, _ = ACSEmployment.df_to_pandas(acs_data)
 
         y_raw = np.array([int(bool(v[0])) if isinstance(v, tuple) else int(bool(v))
                           for v in label.values], dtype=int)
+
+        # Build group variable and optionally drop protected col from features
+        if dp_protected_col == "disability":
+            dis_vals = features["DIS"].values
+            a_raw = (dis_vals != 1).astype(np.int64)  # DIS=1 (disabled) → a=0, DIS=2 → a=1
+            if drop_protected:
+                features = features.drop(columns=["DIS"])
+            g0_name, g1_name = "disabled", "not_disabled"
+        else:
+            sex_vals = features["SEX"].values
+            a_raw = (sex_vals == 1).astype(np.int64)  # SEX=1 (male) → a=1, SEX=2 (female) → a=0
+            if drop_protected:
+                features = features.drop(columns=["SEX"])
+            g0_name, g1_name = "female", "male"
+
         X_raw = features.values.astype(float)
 
-        sex_vals = features["SEX"].values
-        a_raw = (sex_vals == 1).astype(np.int64)  # 1=male (adv), 0=female (disadv)
-
-        print(f"[acs_employment] Total: {len(y_raw)}, employed_rate={y_raw.mean():.3f}")
-        print(f"[acs_employment] Female (a=0): n={int((a_raw==0).sum())}, "
+        print(f"[acs_employment] Total: {len(y_raw)}, employed_rate={y_raw.mean():.3f}, "
+              f"features={X_raw.shape[1]}, states={states}")
+        print(f"[acs_employment] {g0_name} (a=0): n={int((a_raw==0).sum())}, "
               f"employed_rate={y_raw[a_raw==0].mean():.3f}, "
               f"employed_total={int(np.sum((a_raw==0)&(y_raw==1)))}")
-        print(f"[acs_employment] Male   (a=1): n={int((a_raw==1).sum())}, "
+        print(f"[acs_employment] {g1_name} (a=1): n={int((a_raw==1).sum())}, "
               f"employed_rate={y_raw[a_raw==1].mean():.3f}, "
               f"employed_total={int(np.sum((a_raw==1)&(y_raw==1)))}")
 
@@ -1842,7 +1868,7 @@ class Dataset:
             idx_rest = np.where(~((a == 0) & (y == 1)))[0]
             keep = min(len(idx_dpos), target_da_plus)
             if keep < target_da_plus:
-                print(f"  [da_pct WARNING] Only {len(idx_dpos)} female employed available; "
+                print(f"  [da_pct WARNING] Only {len(idx_dpos)} disadvantaged employed available; "
                       f"target was {target_da_plus}.")
             rng = np.random.RandomState(seed)
             kept_dpos = rng.choice(idx_dpos, size=keep, replace=False)
@@ -1874,8 +1900,8 @@ class Dataset:
 
         da_plus    = int(np.sum((y_tr == 1) & (a_tr == 0)))
         n_disadv_tr = int((a_tr == 0).sum())
-        print(f"[acs_employment/TRAIN] DA+ (female, employed): {da_plus} of "
-              f"{n_disadv_tr} female train examples")
+        print(f"[acs_employment/TRAIN] DA+ ({g0_name}, employed): {da_plus} of "
+              f"{n_disadv_tr} {g0_name} train examples")
 
         if da_pct is None and train_size is not None and train_size < len(y_tr):
             X_tr_raw, _, y_tr, _, a_tr, _ = train_test_split(
@@ -1884,10 +1910,10 @@ class Dataset:
 
         def _log(name, y_split, a_split):
             n = len(y_split); n1 = int(np.sum(y_split==1))
-            f_pos = int(np.sum((y_split==1) & (a_split==0)))
-            m_pos = int(np.sum((y_split==1) & (a_split==1)))
+            g0_pos = int(np.sum((y_split==1) & (a_split==0)))
+            g1_pos = int(np.sum((y_split==1) & (a_split==1)))
             print(f"[acs_employment/{name}] n={n}, employed={n1} ({100.*n1/n:.1f}%), "
-                  f"DA+(female)={f_pos}, AA+(male)={m_pos}")
+                  f"DA+({g0_name})={g0_pos}, AA+({g1_name})={g1_pos}")
 
         _log("TRAIN", y_tr, a_tr)
         _log("VAL",   y_va, a_va)
@@ -3706,6 +3732,460 @@ class Dataset:
                     X_te_p.copy(), y_te.copy())
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
+    def split_covertype(
+        self,
+        train_size=None,
+        da_pct=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        bias_val=False,
+        dp_protected_col="wilderness_area",
+        drop_protected=False,
+        protected_cols=None,
+        positive_cover_type=5,
+        minority_area=None,
+        majority_area=None,
+        return_test_df=False,
+        return_raw=False,
+    ):
+        """
+        Forest Covertype (sklearn built-in, Blackard & Dean 1999, 581012 rows).
+
+        Task: predict rare cover type (y=1) vs all others within the same wilderness areas.
+          positive_cover_type: cover type id 1-7 to treat as positive class (default=5 Aspen, ~1.6%).
+        Protected attr: wilderness area integer 1-4 (1=Rawah, 2=Neota, 3=Comanche, 4=Cache la Poudre).
+          minority_area / majority_area select which areas to retain (default: MINORITY_ID / MAJORITY_ID).
+          After selection, rows are remapped to binary a: minority_area → a=0, majority_area → a=1,
+          matching the (0, 1) group convention used throughout the training code.
+
+        Features: 10 continuous (elevation, slope, distances, hillshade) +
+                  40 soil type binary flags. Wilderness area one-hots excluded (used as group label).
+        """
+        from sklearn.datasets import fetch_covtype
+
+        min_area = int(minority_area) if minority_area is not None else int(self.MINORITY_ID)
+        maj_area = int(majority_area) if majority_area is not None else int(self.MAJORITY_ID)
+
+        data = fetch_covtype(as_frame=True)
+        df = data.frame.copy()
+
+        # Decode wilderness area one-hot (0-indexed cols) to integer 1-4
+        wa_cols = [f"Wilderness_Area_{i}" for i in range(4)]
+        df["wilderness_area"] = 0
+        for i, col in enumerate(wa_cols):
+            df.loc[df[col] == 1, "wilderness_area"] = i + 1
+
+        # Filter to target wilderness areas; remap to binary a (0=minority, 1=majority)
+        df = df[df["wilderness_area"].isin([min_area, maj_area])].copy()
+        df["a"] = (df["wilderness_area"] == maj_area).astype(int)
+
+        n_min = int((df["a"] == 0).sum())
+        n_maj = int((df["a"] == 1).sum())
+        print(f"[covertype] minority_area={min_area}: n={n_min}  "
+              f"majority_area={maj_area}: n={n_maj}")
+
+        # Target: rare cover type vs all others in these areas
+        df["y"] = (df["Cover_Type"] == positive_cover_type).astype(int)
+
+        CONT_COLS = [
+            "Elevation", "Aspect", "Slope",
+            "Horizontal_Distance_To_Hydrology", "Vertical_Distance_To_Hydrology",
+            "Horizontal_Distance_To_Roadways",
+            "Hillshade_9am", "Hillshade_Noon", "Hillshade_3pm",
+            "Horizontal_Distance_To_Fire_Points",
+        ]
+        SOIL_COLS = [f"Soil_Type_{i}" for i in range(40)]
+        FEAT_COLS = CONT_COLS + SOIL_COLS
+
+        # Stratified split on y × a
+        rng = np.random.default_rng(self.seed)
+        df = df.reset_index(drop=True)
+        idx = np.arange(len(df))
+        strat_key = df["y"].values * 2 + df["a"].values
+
+        idx_train_pool, idx_valtest = train_test_split(
+            idx, test_size=(val_frac + test_frac), stratify=strat_key,
+            random_state=self.seed)
+        idx_val, idx_test = train_test_split(
+            idx_valtest,
+            test_size=test_frac / (val_frac + test_frac),
+            stratify=strat_key[idx_valtest],
+            random_state=self.seed)
+
+        if train_size is not None and train_size < len(idx_train_pool):
+            pool_strat = strat_key[idx_train_pool]
+            idx_train, _ = train_test_split(
+                idx_train_pool, train_size=train_size, stratify=pool_strat,
+                random_state=self.seed)
+        else:
+            idx_train = idx_train_pool
+
+        tr = df.iloc[idx_train]
+        va = df.iloc[idx_val]
+        te = df.iloc[idx_test]
+
+        # Bias injection: reduce minority-area positives in train
+        target_pct = da_pct if da_pct is not None else bias_pct
+        if target_pct is not None:
+            n_train = len(tr)
+            target_da_plus = max(1, round(target_pct * n_train))
+            min_pos_idx = tr.index[(tr["a"] == 0) & (tr["y"] == 1)].tolist()
+            if len(min_pos_idx) > target_da_plus:
+                keep = rng.choice(min_pos_idx, size=target_da_plus, replace=False).tolist()
+                tr = tr.drop(index=list(set(min_pos_idx) - set(keep)))
+
+        if bias_val and target_pct is not None:
+            min_pos_val = va.index[(va["a"] == 0) & (va["y"] == 1)].tolist()
+            target_val = max(1, round(target_pct * len(va)))
+            if len(min_pos_val) > target_val:
+                keep = rng.choice(min_pos_val, size=target_val, replace=False).tolist()
+                va = va.drop(index=list(set(min_pos_val) - set(keep)))
+
+        da_plus = int(((tr["a"] == 0) & (tr["y"] == 1)).sum())
+        n_disadv = int((tr["a"] == 0).sum())
+        print(f"[covertype/TRAIN] DA+ (area={min_area}, cover_type={positive_cover_type}): "
+              f"{da_plus} of {n_disadv} minority train examples")
+
+        for split, name in [(tr, "TRAIN"), (va, "VAL"), (te, "TEST")]:
+            n = len(split)
+            n1 = int(split["y"].sum())
+            n_y1 = int(((split["a"] == 0) & (split["y"] == 1)).sum())
+            print(f"[covertype/{name}] n={n}, pos={n1} ({100*n1/n:.1f}%), DA+={n_y1}")
+
+        X_tr = tr[FEAT_COLS].fillna(0)
+        X_va = va[FEAT_COLS].fillna(0)
+        X_te = te[FEAT_COLS].fillna(0)
+        y_tr = tr["y"].values
+        y_va = va["y"].values
+        y_te = te["y"].values
+        a_tr = tr["a"].values
+        a_va = va["a"].values
+        a_te = te["a"].values
+
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        X_tr_sc = scaler.fit_transform(X_tr)
+        X_va_sc = scaler.transform(X_va)
+        X_te_sc = scaler.transform(X_te)
+
+        if not drop_protected:
+            X_tr_sc = np.hstack([X_tr_sc, a_tr.reshape(-1, 1)])
+            X_va_sc = np.hstack([X_va_sc, a_va.reshape(-1, 1)])
+            X_te_sc = np.hstack([X_te_sc, a_te.reshape(-1, 1)])
+
+        n_comp = min(pca_components, X_tr_sc.shape[1], X_tr_sc.shape[0] - 1)
+        pca = PCA(n_components=n_comp, whiten=self.whiten_pca, random_state=self.seed)
+        if self.use_pca:
+            X_tr_p = pca.fit_transform(X_tr_sc)
+            X_va_p = pca.transform(X_va_sc)
+            X_te_p = pca.transform(X_te_sc)
+        else:
+            pca.fit(X_tr_sc)
+            X_tr_p = X_tr_sc
+            X_va_p = X_va_sc
+            X_te_p = X_te_sc
+
+        self.pca_transform = pca
+
+        def _t(arr):
+            return torch.tensor(arr, dtype=torch.float32).to(self.device)
+
+        X_train_theta = _t(X_tr_p)
+        X_val_theta   = _t(X_va_p)
+        X_test_theta  = _t(X_te_p)
+        y_train_theta = _t(y_tr)
+        y_val_theta   = _t(y_va)
+        y_test_theta  = _t(y_te)
+
+        self.a_train = torch.tensor(a_tr, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_va, dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_te, dtype=torch.long, device=self.device)
+
+        self._gan_view_cache = {
+            "X_train": X_tr_p.copy(), "y_train": y_tr.copy(),
+            "a_train": a_tr.copy(),   "X_val":   X_va_p.copy(),
+            "y_val":   y_va.copy(),   "a_val":   a_va.copy(),
+            "X_test":  X_te_p.copy(), "y_test":  y_te.copy(),
+            "a_test":  a_te.copy(),
+            "y_train_unbiased": y_tr.astype(int).copy(),
+            "encoder": None, "scaler": scaler, "pca": pca,
+            "use_pca": self.use_pca, "pca_components": int(n_comp),
+            "cat_cols": [], "num_cols": list(FEAT_COLS),
+            "drop_protected": bool(drop_protected),
+            "protected_cols": list(protected_cols or ["wilderness_area"]),
+            "label_col": f"cover_type_{positive_cover_type}",
+            "dp_protected_col": dp_protected_col,
+        }
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta, te.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_te_p.copy(), y_te.copy())
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+    def split_wildfire(
+        self,
+        train_size=None,
+        bias_pct=None,
+        da_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        drop_protected: bool = False,
+        protected_cols=None,
+        return_test_df: bool = False,
+        return_raw: bool = False,
+        bias_val: bool = True,
+        dp_protected_col: str = "owner_descr",
+    ):
+        """
+        FPA-FOD US Wildfire Occurrences 1992-2020.
+        SQLite: datasets/wildfire/Data/FPA_FOD_20221014.sqlite
+
+        Task: predict large fire (y=1 = FIRE_SIZE_CLASS in {D,E,F,G}, >=100 acres).
+        Protected attr: owner_descr (land ownership type).
+          Default: PRIVATE (a=0, disadvantaged, ~2.6% large-fire rate)
+                   vs BLM (a=1, advantaged, ~9.3% large-fire rate).
+
+        Features: LATITUDE, LONGITUDE, FIRE_YEAR, DOY_SIN, DOY_COS (cyclical
+        encoding of DISCOVERY_DOY), STATE (one-hot), NWCG_CAUSE_CLASSIFICATION
+        (one-hot), OWNER_DESCR (one-hot, unless drop_protected=True).
+
+        Pipeline mirrors split_compas: split → bias per split →
+        fit encoder/scaler on train only → PCA → tensors.
+        """
+        import sqlite3
+
+        assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
+
+        if protected_cols is None:
+            protected_cols = ["owner_descr"]
+
+        # ---- 1) Load from SQLite (filter to the two groups at query time) ----
+        conn = sqlite3.connect(self.data_path)
+        df = pd.read_sql_query(
+            """
+            SELECT FIRE_SIZE_CLASS, LATITUDE, LONGITUDE, FIRE_YEAR,
+                   DISCOVERY_DOY, STATE, NWCG_CAUSE_CLASSIFICATION, OWNER_DESCR
+            FROM Fires
+            WHERE OWNER_DESCR IN ('PRIVATE', 'BLM')
+            """,
+            conn,
+        )
+        conn.close()
+
+        df = df.dropna(subset=["LATITUDE", "LONGITUDE", "DISCOVERY_DOY",
+                                "FIRE_SIZE_CLASS", "STATE", "OWNER_DESCR"]).reset_index(drop=True)
+        df.columns = [c.lower() for c in df.columns]
+
+        # ---- Label: large fire = D/E/F/G (>= 100 acres) ----
+        y_raw = df["fire_size_class"].isin(["D", "E", "F", "G"]).astype(int).to_numpy()
+        print(f"[wildfire] Total rows: {len(df)}, large-fire positive rate: {y_raw.mean():.4f}")
+
+        # ---- Protected attribute ----
+        A_df_raw = df[["owner_descr"]].copy()
+
+        def _map_protected(a_series):
+            # PRIVATE → 0 (disadvantaged), BLM → 1 (advantaged)
+            return (a_series.str.upper() == "BLM").astype(np.int64).to_numpy()
+
+        # ---- Feature engineering ----
+        doy = df["discovery_doy"].to_numpy(dtype=float)
+        df["doy_sin"] = np.sin(2 * np.pi * doy / 366.0)
+        df["doy_cos"] = np.cos(2 * np.pi * doy / 366.0)
+
+        num_cols_all = ["latitude", "longitude", "fire_year", "doy_sin", "doy_cos"]
+        cat_cols_all = ["state", "nwcg_cause_classification", "owner_descr"]
+
+        feature_cols = num_cols_all + cat_cols_all
+        X_df_raw = df[feature_cols].copy()
+
+        # ---- 2) Optional: drop protected ----
+        if drop_protected:
+            drop_c = [c for c in protected_cols if c in X_df_raw.columns]
+            if drop_c:
+                X_df_raw = X_df_raw.drop(columns=drop_c)
+
+        cat_cols = [c for c in cat_cols_all if c in X_df_raw.columns]
+        num_cols = [c for c in num_cols_all if c in X_df_raw.columns]
+
+        # ---- 3) Split (stratified by label) ----
+        X_train_df, X_temp_df, y_train, y_temp, A_train_df, A_temp_df = train_test_split(
+            X_df_raw, y_raw, A_df_raw,
+            test_size=(val_frac + test_frac),
+            random_state=self.seed,
+            stratify=y_raw,
+        )
+        rel_test = test_frac / (val_frac + test_frac)
+        X_val_df, X_test_df, y_val, y_test, A_val_df, A_test_df = train_test_split(
+            X_temp_df, y_temp, A_temp_df,
+            test_size=rel_test,
+            random_state=self.seed,
+            stratify=y_temp,
+        )
+
+        # ---- 4) Bias injection ----
+        def apply_da_pct_bias_wf(df_split, y_split, a_split_df, da_pct, n_total):
+            df_ = df_split.copy()
+            df_["__y__"] = y_split
+            df_["__a__"] = _map_protected(a_split_df["owner_descr"])
+            target_da_plus = max(1, round(da_pct * n_total))
+            disadv_pos_mask = (df_["__a__"] == self.MINORITY_ID) & (df_["__y__"] == 1)
+            disadv_pos = df_[disadv_pos_mask]
+            rest = df_[~disadv_pos_mask]
+            keep_n = min(len(disadv_pos), target_da_plus)
+            if keep_n < target_da_plus:
+                print(f"  [da_pct WARNING] Only {len(disadv_pos)} disadvantaged positives; "
+                      f"target was {target_da_plus}")
+            disadv_kept = disadv_pos.sample(n=keep_n, random_state=self.seed, replace=False)
+            n_rest = n_total - keep_n
+            rest_kept = rest.sample(n=n_rest, random_state=self.seed, replace=False) \
+                if len(rest) >= n_rest else rest
+            result = pd.concat([disadv_kept, rest_kept]).sample(
+                frac=1.0, random_state=self.seed).reset_index(drop=True)
+            y_out = result["__y__"].to_numpy(dtype=int)
+            a_out = result["__a__"].to_numpy(dtype=np.int64)
+            X_out = result.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        def apply_bias_wf(df_split, y_split, a_split_df, target_minority_pct):
+            df_ = df_split.copy()
+            df_["__y__"] = y_split
+            df_["__a__"] = a_split_df["owner_descr"].to_numpy()
+            df_neg = df_[df_["__y__"] == 0]
+            df_pos = df_[df_["__y__"] == 1]
+            if len(df_neg) == 0 or len(df_pos) == 0:
+                out = df_
+            else:
+                keep_min = int(np.floor(
+                    (target_minority_pct * len(df_neg)) / (1 - target_minority_pct)
+                ))
+                keep_min = min(len(df_pos), max(1, keep_min))
+                df_pos_b = df_pos.sample(n=keep_min, random_state=self.seed, replace=False)
+                out = pd.concat([df_neg, df_pos_b]).sample(
+                    frac=1.0, random_state=self.seed).reset_index(drop=True)
+            y_out = out["__y__"].to_numpy(dtype=int)
+            a_out = _map_protected(out["__a__"])
+            X_out = out.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(X_train_df)
+            X_train_biased_df, y_train_biased, a_train = apply_da_pct_bias_wf(
+                X_train_df, y_train, A_train_df, da_pct, n_total)
+            X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+            y_val_biased = y_val.copy()
+            a_val = _map_protected(A_val_df["owner_descr"])
+        elif bias_pct is not None:
+            X_train_biased_df, y_train_biased, a_train = apply_bias_wf(
+                X_train_df, y_train, A_train_df, float(bias_pct))
+            if bias_val:
+                X_val_biased_df, y_val_biased, a_val = apply_bias_wf(
+                    X_val_df, y_val, A_val_df, float(bias_pct))
+            else:
+                X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+                y_val_biased = y_val.copy()
+                a_val = _map_protected(A_val_df["owner_descr"])
+        else:
+            X_train_biased_df = X_train_df.copy().reset_index(drop=True)
+            y_train_biased = y_train.copy()
+            a_train = _map_protected(A_train_df["owner_descr"])
+            X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+            y_val_biased = y_val.copy()
+            a_val = _map_protected(A_val_df["owner_descr"])
+
+        X_test_biased_df = X_test_df.copy().reset_index(drop=True)
+        y_test_biased = y_test.copy()
+        a_test = _map_protected(A_test_df["owner_descr"])
+
+        if da_pct is None and train_size is not None and train_size < len(X_train_biased_df):
+            X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
+                X_train_biased_df, y_train_biased, a_train,
+                train_size=train_size, random_state=self.seed, stratify=y_train_biased,
+            )
+
+        # ---- 5) Fit encoder + scaler on train only ----
+        try:
+            encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        except TypeError:
+            encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
+        scaler = StandardScaler()
+
+        Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if cat_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])  if num_cols else np.empty((len(X_train_biased_df), 0))
+        Xtr_all = np.hstack([Xtr_num, Xtr_cat])
+
+        Xva_cat = encoder.transform(X_val_biased_df[cat_cols]) if cat_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_num = scaler.transform(X_val_biased_df[num_cols])  if num_cols else np.empty((len(X_val_biased_df), 0))
+        Xva_all = np.hstack([Xva_num, Xva_cat])
+
+        Xte_cat = encoder.transform(X_test_biased_df[cat_cols]) if cat_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_num = scaler.transform(X_test_biased_df[num_cols])  if num_cols else np.empty((len(X_test_biased_df), 0))
+        Xte_all = np.hstack([Xte_num, Xte_cat])
+
+        # ---- 6) PCA ----
+        X_train_theta_np, X_val_theta_np, X_test_theta_np, pca = self._to_theta(
+            Xtr_all, Xva_all, Xte_all, pca_components=pca_components
+        )
+
+        # ---- 7) Tensors ----
+        X_train_theta = torch.tensor(X_train_theta_np, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_val_theta_np,   dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_test_theta_np,  dtype=torch.float32, device=self.device)
+
+        y_train_theta = torch.tensor(y_train_biased, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_val_biased,   dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_test_biased,  dtype=torch.long, device=self.device)
+
+        self.a_train = torch.tensor(a_train, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_val,   dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        def _log(name, y_split, a_split):
+            n = len(y_split); n1 = int(np.sum(y_split == 1))
+            n_disadv = int(np.sum((a_split == 0) & (y_split == 1)))
+            print(f"[wildfire/{name}] size={n}, large-fire={n1} ({100.*n1/n:.2f}%), "
+                  f"disadv_pos(PRIVATE)={n_disadv}")
+        _log("TRAIN", y_train_biased, a_train)
+        _log("VAL",   y_val_biased,   a_val)
+        _log("TEST",  y_test_biased,  a_test)
+
+        try:
+            self._gan_view_cache = {
+                "supported": True,
+                "X_train_unbiased_df": X_train_df.copy(),
+                "y_train_unbiased": y_train.astype(int).copy(),
+                "encoder": encoder,
+                "scaler": scaler,
+                "pca": pca,
+                "use_pca": self.use_pca,
+                "pca_components": int(pca_components),
+                "cat_cols": list(cat_cols),
+                "num_cols": list(num_cols),
+                "drop_protected": bool(drop_protected),
+                "protected_cols": list(protected_cols),
+                "label_col": "fire_size_class_large",
+                "dp_protected_col": dp_protected_col,
+            }
+        except Exception:
+            pass
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_biased_df.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_test_biased_df.copy(), y_test_biased.copy())
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
     def get_data_splits(self, **kwargs):
         _tabular_drop = ("win_seconds", "step_seconds")
         if self.dataset_name == "census_income":
@@ -3740,7 +4220,7 @@ class Dataset:
             kw = {k: v for k, v in kwargs.items() if k not in _acs_drop}
             return self.split_acs_income(**kw)
         elif self.dataset_name == "acs_employment":
-            _acs_drop = ("drop_protected", "protected_cols", "win_seconds", "step_seconds")
+            _acs_drop = ("protected_cols", "win_seconds", "step_seconds")
             kw = {k: v for k, v in kwargs.items() if k not in _acs_drop}
             return self.split_acs_employment(**kw)
         elif self.dataset_name == "fairjob":
@@ -3755,6 +4235,12 @@ class Dataset:
         elif self.dataset_name == "brfss":
             kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
             return self.split_brfss(**kw)
+        elif self.dataset_name == "covertype":
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_covertype(**kw)
+        elif self.dataset_name == "wildfire":
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_wildfire(**kw)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 

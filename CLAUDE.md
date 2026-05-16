@@ -208,3 +208,19 @@ Update the EXPERIMENTS.md entry (change status to COMPLETE, fill in Result, Take
 ### SLURM Defaults (DRAC rorqual)
 
 1 CPU, 3 GB RAM, 1 thread per library. See existing `.sh` files for the template.
+
+---
+
+## 4. Server Infrastructure
+
+Three local GPU servers. SSH from the Windows client uses the keys listed below. SSH between servers (e.g. Huron → Aulavik) requires Huron's `~/.ssh/id_rsa.pub` to be in Aulavik/Lambda's `~/.ssh/authorized_keys`.
+
+| Host | IP | Port | User | Windows key |
+|------|----|------|------|-------------|
+| Huron | 129.100.226.162 | 2021 | epigou | `C:\Users\epigo\Documents\Summer2024\id_rsa_huron` |
+| Lambda | 129.100.226.208 | 2023 | epigou | `C:\Users\epigo\Documents\Summer2024\id_rsa_lambda` |
+| Aulavik | 129.100.226.194 | 2023 | epigou | `C:\Users\epigo\Documents\Summer2024\id_rsa_aulavik` |
+
+**Storage layout (Huron):** `/storage_1/epigou_storage/FORGE/` contains `training_runs/`, `training_runs_k10/`, `aulavik_runs/`, `lambda_runs/`.
+
+**Python environment:** `~/envs/rl/` — activate with `source ~/envs/rl/bin/activate` before running any project scripts.

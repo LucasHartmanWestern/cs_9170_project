@@ -38,6 +38,8 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-021 | census-hparam-grid | PARAM-TUNING | IN PROGRESS | census | EXP-001 |
 | EXP-022 | census-hparam-random | PARAM-TUNING | PLANNED | census | EXP-021 |
 | EXP-025 | capture24-hparam-grid | PARAM-TUNING | IN PROGRESS | capture24 | EXP-002 |
+| EXP-027 | acs-employment-rl-main | PAPER-FINAL | PLANNED | acs_employment | EXP-024 |
+| EXP-028 | acs-employment-baselines | PAPER-FINAL | PLANNED | acs_employment | EXP-024 |
 
 ---
 
@@ -632,7 +634,9 @@ Prior baseline runs (EXP-013, EXP-014) used the old bias_pct regime and differen
 | SMOTE | 0.108±0.012 | 0.108±0.012 | 0.814±0.005 | 0.867±0.004 | 0.582±0.015 |
 | CTGAN | 0.328±0.008 | 0.328±0.008 | 0.827±0.003 | 0.869±0.005 | 0.632±0.003 |
 | FairTabDDPM | 0.151±0.074 | 0.151±0.074 | 0.819±0.005 | 0.869±0.001 | 0.625±0.012 |
-| **RL k=3** | **0.079±0.015** | — | **0.810±0.003** | **0.877±0.002** | — |
+| **FORGE (k=5, pca=10, ep=30)** | **0.031±0.018** | **0.057±0.007** | **0.821±0.001** | **0.879±0.001** | — |
+
+*Previous result (k=3 vanilla, superseded): β-EO=0.079±0.015, F1w=0.810, AUC=0.877. Replaced by EXP-021 best config.*
 
 **Result — Capture24 (α-EO=0.196±0.016):**
 
@@ -648,7 +652,7 @@ Prior baseline runs (EXP-013, EXP-014) used the old bias_pct regime and differen
 
 **Takeaway:**
 
-**Census:** RL k=3 (β-EO=0.079±0.015) beats all baselines on EO, including the best reweighting method (FLB β-EO=0.039 on TPR diff but EOd=0.091; OT Repair β-EO=0.085). RL achieves this with competitive utility (F1w=0.810), near GroupDRO and OT Repair levels. CTGAN and FairTabDDPM both fail to match reweighting methods on EO, with CTGAN particularly poor (0.328). FairTabDDPM shows improvement over CTGAN (0.151) but with high variance (±0.074).
+**Census:** FORGE (k=5, pca=10, ep=30; from EXP-021) achieves β-EO=0.031±0.018 and EOd=0.057±0.007 — beating all baselines on both metrics. FLB has the lowest TPR-EO among baselines (0.039) but high EOd (0.091), meaning it trades FPR fairness for TPR fairness. FORGE achieves genuinely balanced improvement: EOd≈2×EO (0.057 vs 0.031), indicating modest FPR component. GroupDRO EOd=0.141 — worst on the complete fairness measure. FORGE F1w=0.821 exceeds all baselines except CTGAN (0.827, but EO=0.328). AUC=0.879 matches OT Repair (0.863 baseline). CTGAN and FairTabDDPM fail to match reweighting baselines on EO.
 
 **Capture24:** Generative methods (CTGAN, FairTabDDPM) degrade badly vs no-augmentation — both show EO *higher* than α-EO=0.196, indicating synthetic samples are hurting fairness. Reweighting methods (GroupDRO, SMOTE) work better here. This is a meaningful finding: in high-dimensional wearable data with low DA+, naive generative augmentation backfires. RL k=3 result pending full seeds, but current trajectory suggests it should outperform or match SMOTE/GroupDRO.
 
@@ -788,37 +792,72 @@ Total: 4k × 3pca × 3ratio × 3epochs × 3seeds = **324 runs**
 
 ---
 
-**Submission Tracker — census_grid_v2 (revised 2026-04-28)**
+**Submission Tracker — census_grid_v2 (revised 2026-05-12)**
 
 Supersedes old bundle system (census_grid/, 108 specs, 28 bundles). Parallelization via Santiago's `torch.multiprocessing` spawn approach. Bug fixed in `main.py`: seed extraction now uses `principal_vars.index('seed')` rather than `permutation[0]` to handle epochs-first variable ordering correctly. `output_dir` spec field added to `main.py` to allow redirecting output directly to storage (used by Huron restart specs).
 
 **Architecture change (2026-04-28):** k=10 DRAC submission restructured from 2 monolithic specs (census_k10_gpu0/gpu1.yaml, 54+27 perms each) into 9 per-(ratio×epoch) specs (census_k10_r{02,04,06}_e{10,20,30}), each with 9 perms and max_parallel=9. Confirmed safe from parallelism scaling tests (max_parallel=9, 9 CPUs, ~17.5–21.7 s/ep, all jobs within 168h wall limit).
 
+**DRAC decommissioned (2026-05-12):** Remaining k=10 jobs redirected to Huron. Output goes to `/storage_1/epigou_storage/FORGE/training_runs_k10/`. Launch scripts: `experiment_specs/census_grid_v2/run_k10_gpu{0,1}.sh`. Logs: `/storage_1/epigou_storage/FORGE/training_runs_k10/logs/`.
+
 | Resource | k | Spec(s) | Status | Started |
 |---|---|---|---|---|
-| Huron GPU 0 | k=0 | census_k0_gpu0_restart_pca15_e10.yaml → census_k0_gpu0_restart_e20.yaml | **RUNNING** (2/27 remaining) | 2026-04-28 |
+| Huron GPU 0 | k=0 | census_k0_gpu0_restart_pca15_e10.yaml → census_k0_gpu0_restart_e20.yaml | **COMPLETE** | 2026-04-28 |
 | Huron GPU 1 | k=0 | census_k0_gpu1_restart_pca10_e30.yaml → census_k0_gpu1_restart_pca15_e30.yaml | **COMPLETE** | 2026-04-28 |
 | Lambda GPU 0 | k=3 | census_k3_gpu0.yaml | **COMPLETE** | 2026-04-25 |
 | Lambda GPU 1 | k=3 | census_k3_gpu1.yaml | **COMPLETE** | 2026-04-25 |
 | Aulavik GPU 0 | k=5 | census_k5_gpu0.yaml | **COMPLETE** | 2026-04-25 |
 | Aulavik GPU 1 | k=5 | census_k5_gpu1.yaml | **COMPLETE** | 2026-04-25 |
-| DRAC (8 jobs) | k=10 | census_k10_r{02,04,06}_e{10,20,30}.sh (excl. r02_e10) | **QUEUED** (resubmit under def-mcapretz) | 2026-04-28 |
-| DRAC (1 job) | k=10 | census_k10_r02_e10.sh | **COMPLETE** | 2026-04-28 |
+| Huron GPU 0 | k=10 | r02_e20 | **COMPLETE** | 9/9 runs, all seeds verified 2026-05-15 |
+| Huron GPU 1 | k=10 | r04_e30 | **COMPLETE** | 9/9 runs, all seeds verified 2026-05-15 |
+| Huron GPU 0 | k=10 | r02_e30 → r04_e10 → r04_e20 (sequential) | **RUNNING** | r02_e30 at ep~1964/5000 as of 2026-05-15; est. done ~2026-05-23 |
+| Huron GPU 1 | k=10 | r06_e10 → r06_e20 → r06_e30 (sequential) | **RUNNING** | r06_e10 at ep~751/5000 as of 2026-05-15; est. done ~2026-05-24 |
+| Huron GPU 0 | k=10 | census_k10_r02_e20_restart.yaml + census_k10_r02_e20_pca10_s42_restart.yaml | **CANCELLED** | r02_e20 completed all 9/9 runs cleanly — max_parallel=9 drop bug did not occur on Huron |
+| Huron GPU 1 | k=10 | census_k10_r04_e30_restart.yaml | **CANCELLED** | r04_e30 completed all 9/9 runs cleanly — max_parallel=9 drop bug did not occur on Huron |
+| Huron GPU 0 | k=10 | census_k10_r02_e10.yaml | **COMPLETE** | 2026-04-28 |
 
 **Huron k=0 history:** Original gpu0/gpu1 runs (started 2026-04-25) completed epochs=10 for PCA5 and PCA10 (all seeds), PCA5 epochs=30, and PCA10 epochs=30 seed_0 before storage issues interrupted them. Completed runs moved to `/storage_1/epigou_storage/FORGE/training_runs/`. Restart specs cover all remaining permutations and write directly to storage via `output_dir` field.
 
-**DRAC k=10 timing:** epochs=10/20 → ~17.5 s/ep, epochs=30 → ~21.7 s/ep. Per-job wall time estimates: e10 jobs 50–68h, e20 jobs 52–74h, e30 jobs 64–84h. All within 168h limit.
+**k=10 timing:** epochs=10/20 → ~17.5 s/ep, epochs=30 → ~21.7 s/ep. ~24–30h per spec, ~4.5 days total per GPU. With max_parallel=4 (patched 2026-05-13), specs with 9 runs take 3 batches → ~72–90h per spec.
+
+**Silent worker-drop bug (found 2026-05-13, resolved 2026-05-15):** Originally observed on DRAC — r02_e20 got 5/9 and r04_e30 got 3/9 workers. However, both specs ran cleanly on Huron with all 9/9 runs completing (verified via final_test_metrics.csv). Bug was DRAC-specific (likely DRAC's multiprocessing spawn environment). Remaining chain specs remain patched to max_parallel=4 as a precaution. Restart specs are cancelled.
 
 ---
 
-**Result:**
-*(pending)*
+**Note (2026-05-15):** `census_k10_r02_e10.yaml` (ratio=0.2, epochs=10) is absent from both batch scripts and has no run directories — 9 runs (pca=[5,10,15] × seeds=[0,1,42]) unaccounted for. Intentional omission or oversight TBD; create spec and append to GPU0 chain if needed.
 
-**Takeaway:**
-*(pending)*
+**Result (partial — k=0, k=3, k=5 complete; k=10 still running on Huron):**
+
+Grid over 81 complete configs (27 per k). Best config by β-EO with F1w ≥ α-F1w − 0.02 utility guard:
+
+**Best: k=5, pca=10, ep=30, traj=2000 (real=3000)**
+
+| Seed | α-EO | β-EO | EOd | F1w | AUC |
+|---|---|---|---|---|---|
+| 0 | 0.304 | 0.011 | 0.052 | 0.822 | 0.879 |
+| 1 | 0.348 | 0.028 | 0.053 | 0.820 | 0.880 |
+| 42 | 0.387 | 0.054 | 0.066 | 0.820 | 0.877 |
+| **mean** | **0.346±0.034** | **0.031±0.018** | **0.057±0.007** | **0.821±0.001** | **0.879±0.001** |
+
+Run directory: `/storage_1/epigou_storage/FORGE/aulavik_runs/SPECcensus_k5_gpu1_EP5000_PCA10_REWwgl_minID0_majID1_TRJ2000_REAL3000_GG202604251803_9af13c63`
+
+Top 5 complete configs (F1w ≥ 0.800, ranked by β-EO):
+
+| k | pca | ep | traj | β-EO | EOd | F1w | AUC |
+|---|---|---|---|---|---|---|---|
+| 5 | 10 | 30 | 2000 | 0.031±0.018 | 0.057±0.007 | 0.821 | 0.879 |
+| 3 | 10 | 10 | 1000 | 0.032±0.020 | 0.032±0.020 | 0.812 | 0.866 |
+| 5 | 15 | 20 | 2000 | 0.039±0.034 | 0.052±0.023 | 0.817 | 0.875 |
+| 0 | 15 | 20 | 3000 | 0.039±0.016 | 0.039±0.016 | 0.806 | 0.861 |
+| 3 | 10 | 30 | 3000 | 0.039±0.023 | 0.050±0.020 | 0.804 | 0.864 |
+
+**Takeaway (partial):**
+k=5, ep=30, pca=10 outperforms vanilla (k=3/10, ep=20, pca=10) substantially: 0.031 vs 0.079 β-EO. Key drivers: k=5 (sharper sigmoid than vanilla k=3) and ep=30 (more classifier training per episode). Standard traj=2000/real=3000 remains optimal. Low EO variance (±0.018) and negligible F1w variance (±0.001) indicate stable convergence. k=10 results pending — if they don't surpass k=5, this is the final census best config.
 
 **Next steps:**
-Feed best principal params into EXP-022 base_patches before running random search.
+- Await k=10 completion to confirm whether k=5 holds top position.
+- Feed k=5, pca=10, ep=30, traj=2000 as base_patches into EXP-022 random search.
+- Update EXP-018 comparison table (done below).
 
 ---
 
@@ -923,27 +962,45 @@ Identify a viable 3rd dataset for the paper. Must pass all 4 viability criteria.
 
 **Candidates investigated:**
 
-| Dataset | Framing | val_pos | test_pos | alpha_EO | sep_ratio | Verdict |
-|---------|---------|---------|---------|---------|-----------|---------|
-| acs_income (CA 2018) | sex, income>50k | 6509 | 6532 | 0.17 | 2.43 | **ALL PASS** |
-| sepsis (PhysioNet 2019) | sex, sepsis onset | 242 | 243 | 0.027 | 0.17 | FAIL: EO+sep |
-| brfss (2022) | sex, heart attack | 1976 | 1896 | 0.016 | 0.52 | FAIL: EO+sep |
-| brfss (2022) | sex, depression | 12101 | 12092 | 0.012 | 0.36 | FAIL: EO+sep |
-| brfss (2022) | race (Black/White), heart attack | pending | — | — | — | — |
+| Dataset | Framing | val_pos | test_pos | alpha_EO | sep_ratio | cosine | Verdict |
+|---------|---------|---------|---------|---------|-----------|--------|---------|
+| acs_income (CA 2018) | sex, income>50k | 6509 | 6532 | 0.17 | 2.43 | — | PASS (rejected: same task as census) |
+| sepsis (PhysioNet 2019) | sex, sepsis onset | 242 | 243 | 0.027 | 0.17 | — | FAIL: EO+sep |
+| brfss (2022) | sex, heart attack | 1976 | 1896 | 0.016 | 0.52 | — | FAIL: EO+sep |
+| brfss (2022) | sex, depression | 12101 | 12092 | 0.012 | 0.36 | — | FAIL: EO+sep |
+| brfss (2022) | race (Black/White), heart attack | — | — | 0.005–0.055 | — | 0.99 | FAIL: EO+sep (cosine≈1 = universal predictor) |
+| NSL-KDD | network intrusion attacks | — | — | — | — | — | FAIL: R2L/U2R minority groups have 0–3 examples total |
+| covertype (sklearn) | wilderness area, Aspen/Krummholz | — | 4800+ | <0.02 | 2.1–3.2 | 0.18 | FAIL: low DA+(maj)/DA+(min) ratio (1.3–2.6x); FFNN learns both groups equally |
+| acs_employment (10 states, 2018) | disability (DIS), employed | 9035 | 9096 | 0.09–0.14 | 1.71 | 0.41 | **ALL PASS** |
 
-**Root cause of BRFSS sex-framing failures:**
-BRFSS behavioral risk factors (age, BMI, smoking, diabetes, physical activity) are universal predictors that do not differ structurally between male and female patients for any outcome tested. Model generalizes across sexes despite few female positives in training → low EO gap and poor PCA separability.
+**Root-cause analysis of failures:**
 
-**Status:** Testing BRFSS race framing (Black vs White). If that fails, ACS Income will be adopted as the 3rd dataset with the framing that it represents a distinct data source (Ding et al. NeurIPS 2021 folktables, 2018 ACS survey) from census_income (1994 decennial census).
+*BRFSS/COMPAS/sepsis EO failures:* Universal predictor structure — behavioral risk factors or recidivism predictors explain outcomes similarly for both demographic groups regardless of scarcity. Cosine similarity ≈ 1.0 between group discriminant vectors.
+
+*Covertype failure:* Feature separability is good (cosine = 0.18), but the DA+(majority)/DA+(minority) ratio is only 1.3–2.6x after bias injection. Census works because DA+(male)/DA+(female) ≈ 14x. With a low ratio, the FFNN receives similar absolute positive-example counts for both groups (≈43 vs 56–112) and learns both groups equally → alpha-EO near zero. Feature separability alone is not sufficient; the ratio of positive examples between groups must also be large.
+
+**ACS Employment + disability framing:**
+- Task: predict employment status (ESR=1) from 15 ACS features (DIS dropped as protected col)
+- Protected group: disability (DIS=1 → disabled → a=0 disadvantaged, n=245K; DIS=2 → a=1, n=1.48M)
+- Natural employment rates: 18.3% (disabled) vs 50.0% (not disabled) → DA+ ratio ≈ 30x after bias
+- da_pct=0.01433 gives DA+(disabled)=43 in 3000-sample training
+- val_disadv_pos ≈ 9035, test_disadv_pos ≈ 9096 (both easily exceed thresholds)
+- Alpha-EO: 0.09–0.14 across 3 seeds (marginal at seed 1 = 0.09; 2/3 seeds clear ≥0.10)
+- Feature separability: sep_ratio=1.71, cosine=0.41 (distinct group-positive regions)
+- Dataset files: 10 states (CA TX NY FL PA OH IL GA NC MI), 2018 ACS 1-Year PUMS, cached at datasets/acs_employment/2018/1-Year/
+
+**Status:** COMPLETE — ACS Employment + disability adopted as 3rd dataset.
 
 **Result:**
-*(pending)*
+ACS Employment with disability as protected group passes all four viability criteria. The 30x DA+ ratio ensures the alpha classifier is systematically biased against disabled employed people. The disability framing is legally grounded (ADA), distinct from both census (income vs employment, sex vs disability) and capture24 (activity monitoring, sex framing).
 
 **Takeaway:**
-*(pending)*
+The 3rd paper dataset is ACS Employment (folktables, Ding et al. NeurIPS 2021), disability framing, 10-state pool, 2018 ACS 1-Year. Use `da_pct=0.01433`, `dp_protected_col=disability`, `acs_states=[CA, TX, NY, FL, PA, OH, IL, GA, NC, MI]`.
 
 **Next steps:**
-*(pending)*
+1. Create vanilla spec and run baseline (FORGE) experiments on ACS Employment (add EXP-027).
+2. Run baselines (GroupDRO, CTGAN, OT Repair) on ACS Employment (add EXP-028).
+3. Update paper dataset table with ACS Employment statistics.
 
 ---
 
@@ -966,27 +1023,182 @@ Mirror of EXP-021 on capture24. Sweeps the same four hyperparameters to identify
 
 | Parameter | Values |
 |---|---|
-| `global_sigmoid_k` | [5] |
+| `global_sigmoid_k` | [0, 3, 5] |
 | `pca_components` | [5, 10, 15] |
 | `ratio_trajectory` | [0.2, 0.4, 0.6] |
 | `ffnn.epochs` | [10, 20, 30] |
 
-Total: 1k × 3pca × 3ratio × 3epochs × 3seeds = **81 runs**
+Total: 3k × 3pca × 3ratio × 3epochs × 3seeds = **243 runs**
 
 **Fixed base patches:** dataset_name=capture24, da_pct=0.015, minority_id=1, majority_id=0, dp_protected_col=sex, win_seconds=1.0, step_seconds=0.5, seeds=[0,1,42], total_episodes=5000, reward_mode=wgl, total_data_size=5000.
 
-**Specs:** `experiment_specs/capture24_grid/capture24_k5_gpu{0,1}.yaml`
+**Specs:** `experiment_specs/capture24_grid/capture24_k{0,3,5}_gpu{0,1}.yaml`
 
-**GPU split (Aulavik):** GPU0 runs epochs=[10,20] (54 perms, max_parallel=4); GPU1 runs epochs=[30] (27 perms, max_parallel=4).
+**GPU split per server:** GPU0 runs epochs=[10,20] (54 perms, max_parallel=4); GPU1 runs epochs=[30] (27 perms, max_parallel=4).
 
 **Submission Tracker:**
 
-| Resource | Spec | Status | Started |
+| Resource | k | Spec | Status | Notes |
+|---|---|---|---|---|
+| Aulavik GPU 0 | k=5 | capture24_k5_gpu0.yaml | **COMPLETE** | All 9 configs 3/3 seeds done (audited 2026-05-11; duplicate dirs for some configs — use hashes below) |
+| Aulavik GPU 0 | k=0 | capture24_k0_aulavik_ep10pca15.yaml → ep20.yaml → ep30pca1015.yaml | **RUNNING** | 54 gap-fill runs launched 2026-05-15 (PID 76794); ep10/pca15 (9 runs) → ep20/allpca (27 runs) → ep30/pca10+15 (18 runs); est. ~10 days |
+| Aulavik GPU 1 | k=5 | capture24_k5_gpu1.yaml + capture24_k5_gpu1_restart.yaml | **RUNNING** | 6/9 original configs complete; PCA=15 restart re-launched 2026-05-15 after ABCMeta fix (PID 74549); TRJ=20% seeds 0+1 done, TRJ=40% seeds 0+1 done, TRJ=60% seed_0 done; seed_42 for all ratios still pending; seeds 1 for TRJ=40%+60% may still be running |
+| Lambda GPU 0 | k=3 | capture24_k3_gpu0.yaml + capture24_k3_gpu0_ep20_restart.yaml | **RUNNING** | epochs=10 all PCA all TRJ 3/3 seeds ✓; epochs=20 PCA=5 all TRJ 3/3 seeds ✓; epochs=20 PCA=10 3/3 seeds ✓ (ep20_restart); epochs=20 PCA=15 seed_0 done, seeds 1+42 pending (in progress ~May 16) |
+| Lambda GPU 0 | k=5 | capture24_k5_gpu0_restart.yaml | **QUEUED** | All crashed before ep1 in original run (2026-05-04 silent init crash, likely RAM OOM from 4 parallel capture24 windowing ops); full restart queued on cuda:0 after k3 ep20 restart, max_parallel reduced 4→2 |
+| Lambda GPU 1 | k=3 | capture24_k3_gpu1.yaml + capture24_k3_gpu1_pca10_restart.yaml + capture24_k3_gpu1_pca15_restart.yaml | **RUNNING** | PCA=5 all TRJ 3/3 seeds ✓; PCA=10 TRJ=20% 3/3 seeds ✓; PCA=10 TRJ=40%+60% seed_1 + seed_42 covered by pca10_restart (running); PCA=15 seeds 0+1 for TRJ=20%+40% done, TRJ=60% seed_0 done — pca15_restart in progress, est. ~May 18 |
+| Lambda GPU 1 | k=5 | capture24_k5_gpu1_lambda_restart.yaml | **QUEUED** | Never ran on Lambda; queued on cuda:1 after k3 restarts complete, max_parallel reduced 4→2 |
+| Huron GPU 0 | k=0 | capture24_k0_gpu0.yaml | **PARTIAL** | epochs=10 PCA=5+10 only (6 configs 3/3 seeds); PCA=15 and epochs=20+30 gaps covered by Aulavik GPU 0 |
+| Huron GPU 1 | k=0 | capture24_k0_gpu1.yaml | **PARTIAL** | epochs=30 PCA=5 only (3 configs 3/3 seeds); PCA=10+15 for epochs=30 covered by Aulavik GPU 0 |
+
+**Huron k=0 completion detail (audited 2026-05-15):**
+
+Original k0_gpu0 run completed epochs=10 for PCA=[5,10] before dying. k0_gpu1 run completed epochs=30 for PCA=5 only. The remaining 54 configs (epochs=10/PCA=15, all of epochs=20, and epochs=30/PCA=[10,15]) are being covered by the Aulavik GPU 0 gap-fill runs launched 2026-05-15.
+
+| Config | Epochs | Seeds complete | Action |
 |---|---|---|---|
-| Aulavik GPU 0 | capture24_k5_gpu0.yaml | **RUNNING** | 2026-05-04 |
-| Aulavik GPU 1 | capture24_k5_gpu1.yaml | **RUNNING** | 2026-05-04 |
+| PCA=10, TRJ=20%, REAL=4000 | 10 | 3/3 | Done |
+| PCA=10, TRJ=40%, REAL=3000 | 10 | 3/3 | Done |
+| PCA=10, TRJ=60%, REAL=2000 | 10 | 3/3 | Done (seed_42 restart complete 2026-05-12) |
+| PCA=5, TRJ=20%, REAL=4000 | 10 | 3/3 | Done |
+| PCA=5, TRJ=40%, REAL=3000 | 10 | 3/3 | Done |
+| PCA=5, TRJ=60%, REAL=2000 | 10 | 3/3 | Done |
+| PCA=5, TRJ=20%, REAL=4000 | 30 | 3/3 | Done |
+| PCA=5, TRJ=40%, REAL=3000 | 30 | 3/3 | Done (seed_42 restart complete 2026-05-12) |
+| PCA=5, TRJ=60%, REAL=2000 | 30 | 3/3 | Done (seed_42 restart complete 2026-05-12) |
+| PCA=15, all TRJ | 10 | 0/3 | **Aulavik GPU0** (ep10pca15 spec) |
+| all PCA, all TRJ | 20 | 0/3 | **Aulavik GPU0** (ep20 spec) |
+| PCA=10+15, all TRJ | 30 | 0/3 | **Aulavik GPU0** (ep30pca1015 spec) |
+
+Huron restart specs: `experiment_specs/capture24_grid/capture24_k0_gpu{0,1}_restart.yaml`
+Storage: `/storage_1/epigou_storage/FORGE/training_runs/`
+Aulavik gap-fill specs: `experiment_specs/capture24_grid/capture24_k0_aulavik_ep{10pca15,20,30pca1015}.yaml`
+
+**Huron restarts complete (2026-05-12). Merge still pending:**
+1. Run `experiment_specs/capture24_grid/merge_restart_seeds.sh` to move each `seed_42/` into the corresponding original run directory.
+2. Verify with `check_run.py` on the three original run directories.
+
+**Aulavik k=5 completion detail (audited 2026-05-11):**
+
+Storage path on Aulavik: `~/cs_9170_project/training_runs/`
+
+gpu0 (epochs=10) — all complete. Some configs have duplicate run dirs from earlier failed attempts; use the complete (3/3 seed) directory for analysis:
+
+| Config | Use this directory hash |
+|---|---|
+| PCA=10, TRJ=20% | `61cc570d` (3/3); ignore `08f4d75d` (cut at ep~958) |
+| PCA=10, TRJ=40% | `6d4e3edf` (3/3); ignore `96b94fae` (cut at ep~733) |
+| PCA=10, TRJ=60% | `a4838d16` (3/3); ignore `6db5cd8f` (cut at ep~593) |
+| PCA=15, TRJ=20% | `779cf9c5` (3/3) |
+| PCA=15, TRJ=40% | `b0ce000f` (3/3) |
+| PCA=15, TRJ=60% | `a36aa01d` (3/3) |
+| PCA=5, TRJ=20% | either `40bdd3c1` or `a15dfda0` (both 3/3) |
+| PCA=5, TRJ=40% | either `bf8371ef` or `d57d4218` (both 3/3) |
+| PCA=5, TRJ=60% | either `141f0030` or `b54ce07a` (both 3/3) |
+
+gpu1 (epochs=30) — 3 PCA=15 configs incomplete at shutdown:
+
+| Config | Seeds complete | Action |
+|---|---|---|
+| PCA=10, TRJ=20% | 3/3 (`015bf5ad`) | Done |
+| PCA=10, TRJ=40% | 3/3 (`b02ad122`) | Done |
+| PCA=10, TRJ=60% | 3/3 (`ce46b3d8`) | Done |
+| PCA=5, TRJ=20% | 3/3 (`e380c82a`) | Done |
+| PCA=5, TRJ=40% | 3/3 (`d7c3ca89`) | Done |
+| PCA=5, TRJ=60% | 3/3 (`8c658b54`) | Done |
+| PCA=15, TRJ=20% | 2/3 (`af6419db`; seed_42 missing) | **Restarting** — restart dirs: seed_0 ep5000 ✓, seed_1 ep5000 ✓, seed_42 pending |
+| PCA=15, TRJ=40% | 1/3 (`75a56293`; seed_1 @ ep4878, seed_42 missing) | **Restarting** — restart dirs: seed_0 ep5000 ✓, seed_1 ep5000 ✓, seed_42 pending |
+| PCA=15, TRJ=60% | 0/3 (`8093d5d7`; seed_0 @ ep4112, seed_1 @ ep4107, seed_42 missing) | **Restarting** — restart dirs: seed_0 ep5000 ✓, seed_1 at ep674 (running), seed_42 pending |
+
+Restart spec: `experiment_specs/capture24_grid/capture24_k5_gpu1_restart.yaml` (runs seeds=[0,1,42] × ratio=[0.2,0.4,0.6] for PCA=15, epochs=30; 3 redundant runs acceptable)
+Restart log: `~/cs_9170_project/experiment_specs/capture24_grid/logs/k5_gpu1_restart.log` (on Aulavik)
+New run dir prefix: `SPECcapture24_k5_gpu1_restart_EP5000_PCA15_*_GG202605111125_*`
+Progress audited 2026-05-13: TRJ=20% and TRJ=40% seeds 0+1 complete in restart dirs; TRJ=60% seed_0 done, seed_1 at ep674. seed_42 for all three ratios not yet started (batch 3 of 3 pending).
+
+**After Aulavik gpu1 restarts finish:**
+1. For each PCA15 config, copy the needed seed_N/ directories from the new restart run dirs into the original run dirs (`af6419db`, `75a56293`, `8093d5d7`).
+2. Update seeds.json in each original directory.
+3. Verify with `check_run.py`.
 
 **Selection criterion:** Same as EXP-021 — lowest mean β-EO, with β-F1w ≥ α-F1w − 0.02.
+
+**Result (partial — k=0 Huron 9 configs done, k=3 ep=10 all PCA + ep=20 PCA=[5,10] + ep=30 PCA=5 Lambda complete, k=5 ep=10+ep=20/pca=5+ep=30/pca=[5,10] Aulavik complete; 39 configs; k=0 gap-fills (54 runs) now running on Aulavik GPU0):**
+
+Best overall: **k=5, pca=15, ep=10, traj=1000** — β-EO=0.022±0.013, EOd=0.028±0.009, F1w=0.955, AUC=0.931, α-EO=0.158±0.083.
+
+**Caution:** pca=15 α-EO (0.158) is lower than EXP-018 baseline setup (α-EO=0.196, pca=10). For direct comparison with baselines, provisional best is k=3, pca=10, ep=10, traj=2000: β-EO=0.063±0.051, EOd=0.064, F1w=0.953, AUC=0.923, α-EO=0.294±0.062.
+
+Top 5 configs (ranked by β-EO):
+
+| k | pca | ep | traj | α-EO | β-EO | EOd | F1w | AUC |
+|---|---|---|---|---|---|---|---|---|
+| 5 | 15 | 10 | 1000 | 0.158±0.083 | 0.022±0.013 | 0.028±0.009 | 0.955 | 0.931 |
+| 0 | 5 | 30 | 1000 | 0.044±0.033 | 0.055±0.038 | 0.055±0.038 | 0.949 | 0.918 |
+| 3 | 10 | 10 | 2000 | 0.294±0.062 | 0.063±0.051 | 0.064±0.050 | 0.953 | 0.923 |
+| 3 | 5 | 30 | 1000 | 0.092±0.036 | 0.066±0.029 | 0.066±0.029 | 0.947 | 0.878 |
+| 3 | 5 | 30 | 2000 | 0.099±0.078 | 0.076±0.052 | 0.076±0.052 | 0.939 | 0.883 |
+
+Run dirs: best overall on Aulavik `SPECcapture24_k5_gpu0_EP5000_PCA15_REWwgl_minID1_majID0_TRJ1000_REAL4000_GG202605041119_779cf9c5`; best pca=10 on Lambda `SPECcapture24_k3_gpu0_EP5000_PCA10_REWwgl_minID1_majID0_TRJ2000_REAL3000_GG202605041148_7b75cd2a`
+
+**Takeaway (partial):** k=5 pca=15 shows exceptional β-EO=0.022, but low variable α-EO complicates comparison. For pca=10, k=3 beats k=5 — sigmoid sharpness benefit from census does not transfer straightforwardly. Known α-EO instability (capture24 seed variance) remains the main obstacle. Use k=3, pca=10, ep=10, traj=2000 as provisional paper config pending full grid.
+
+**Next steps:**
+- Await k=3 ep=20/30 pca=10/15 on Lambda (~May 16-18) and k=5 ep=30 pca=15 on Aulavik (~May 18).
+- Await k=0 gap-fills on Aulavik GPU0 (~May 25-28).
+- Re-run aggregation once all complete.
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+1. Wait for Aulavik gpu1 PCA=15 restart to finish (seed_42 batch pending ~May 18), then merge seed dirs into original run dirs and verify with `check_run.py`.
+2. Wait for Lambda k=3 restarts (epochs=20 PCA=15 seeds 1+42 ~May 16; epochs=30 PCA=10+15 seeds ~May 18) to complete.
+3. Wait for Lambda k=5 restarts to complete (queued behind k=3, ~May 20+).
+4. Wait for Aulavik GPU0 k=0 gap-fills (54 runs, ~May 25-28).
+5. Run merge_restart_seeds.sh on Huron k=0 dirs (pending since 2026-05-12).
+6. Once all 243 runs complete, run `check_run.py` across all configs and select best params.
+7. Feed best capture24 params into capture24 random search (equivalent of EXP-022).
+
+---
+
+### EXP-026 | raw-space-eval
+
+**Status:** PLANNED
+
+**Datasets:** census_income, capture24
+
+**Purpose:**
+Address supervisor feedback that classifiers and baselines should be evaluated in the original (raw) feature space rather than PCA-compressed space. Implements the approach recommended by Santiago: keep all RL training unchanged (agent still operates in PCA space), but for the final reported result, inverse-transform the best synthetic dataset via φ^{-1} and re-train β once on raw D_aug = raw real train + inverse-transformed synthetic. Baselines are also re-run with `use_pca: false` so all methods are compared in a common raw-feature representation.
+
+**Design rationale:**
+Full re-running of the RL training loop in raw space is not feasible (would invalidate all grid search results). The checkpoint selection criterion (worst-group loss of β trained in PCA space) remains a proxy for raw-space performance, but this is defensible: PCA is a linear transform that preserves the group-specific spatial structure the agent learned to target. Expected performance difference vs current PCA-space results: small to moderate. Census is at higher risk of noticeable shift (~100 raw features vs d=10 PCA). If a reviewer questions this, the current PCA-space numbers serve as the supplementary comparison.
+
+**Config delta from vanilla:**
+- No changes to RL training config.
+- Baselines re-run with `use_pca: false` in their spec files.
+
+**Infrastructure:**
+- `eval_raw_space.py` — post-processing script. For each seed in a run dir:
+  1. Re-fits PCA with same seed/config to recover `pca_transform`.
+  2. Loads dataset with `use_pca=False` for raw real train/test data.
+  3. Loads `best_synthetic_phase1_class1.npz` (PCA space).
+  4. Applies `pca_transform.inverse_transform()` → raw synthetic features.
+  5. Trains fresh β (same FFNN architecture) on raw D_aug.
+  6. Evaluates on raw test set; saves to `seed_dir/raw_space_eval/metrics.json`.
+  7. Writes run-level summary to `run_dir/raw_space_eval_summary.json`.
+
+**Usage:**
+```bash
+# Run on a single FORGE run dir
+python eval_raw_space.py training_runs/<run_dir> --device cpu
+
+# Re-run baselines without PCA (edit baseline spec files first: use_pca: false)
+python run_baseline.py --spec experiment_specs/<baseline_spec>.json --device cuda:0
+```
+
+**Execution order:**
+1. Re-run all baselines with `use_pca: false` on census and capture24 (do first — independent of eval_raw_space.py).
+2. Run `eval_raw_space.py` on the best FORGE runs for each dataset (best configs from EXP-021/EXP-025 + EXP-022).
+3. Compare FORGE raw-space EO/AUC/F1w against raw-space baselines.
 
 **Result:**
 *(pending)*
@@ -995,4 +1207,55 @@ Total: 1k × 3pca × 3ratio × 3epochs × 3seeds = **81 runs**
 *(pending)*
 
 **Next steps:**
-Feed best capture24 params into EXP-022 equivalent (capture24 random search) once complete.
+*(pending — blocked on baseline re-runs and EXP-021/EXP-025 completion)*
+
+---
+
+### EXP-027 | acs-employment-rl-main
+
+**Type:** PAPER-FINAL
+**Status:** PLANNED
+**Dataset(s):** acs_employment (da_pct=0.01433, DA+=43, disability framing)
+**Seeds:** 42, 0, 1 (provisional; increase to 5 for final)
+**Reference config:** vanilla_config.json
+**Config delta:** dataset_name=acs_employment, da_pct=0.01433, dp_protected_col=disability, acs_states=[CA,TX,NY,FL,PA,OH,IL,GA,NC,MI], minority_id=0, majority_id=1, total_episodes=800
+**Follows from:** EXP-024
+
+---
+
+**Purpose:**
+Main FORGE result for ACS Employment + disability. Demonstrates FORGE generalizes to non-demographic protected groups (disability status) and a non-income prediction task (employment).
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+*(pending — run after capture24 stabilization in EXP-025)*
+
+---
+
+### EXP-028 | acs-employment-baselines
+
+**Type:** PAPER-FINAL
+**Status:** PLANNED
+**Dataset(s):** acs_employment (same config as EXP-027)
+**Reference config:** run_baseline.py
+**Config delta:** same dataset config as EXP-027
+**Follows from:** EXP-027
+
+---
+
+**Purpose:**
+Run GroupDRO, CTGAN, OT Repair baselines on ACS Employment + disability to enable paper comparison table.
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+*(pending — run after EXP-027)*
