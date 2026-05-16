@@ -32,10 +32,14 @@
 % ---------------------------------------------------------------------------
 
 The performance of FORGE is governed by four principal design parameters:
-the sigmoid sharpness~$k$ of the reward function, the number of PCA
-components~$d$ defining the generation space, the number of classifier
-training epochs per episode~$e$, and the ratio of synthetic to real
-samples~$r$ in the augmented training set.
+the reward sharpness~$k$, the number of PCA components~$d$ defining the
+generation space, the number of classifier training epochs per episode~$e$,
+and the ratio of synthetic to real samples~$r$ in the augmented training set.
+For $k > 0$, the global reward is $\sigma(k \cdot \Delta_\text{wgl}) \in (0,1)$,
+where $\Delta_\text{wgl} = \text{WGL}_\alpha - \text{WGL}_\beta$ and $\sigma$
+is the logistic sigmoid; $k=0$ is a special case that replaces the sigmoid
+with a normalised difference $\Delta_\text{wgl} / \text{WGL}_\alpha$, whose
+range is $(-\infty, 1)$ and whose neutral point is zero rather than $0.5$.
 These parameters are not independent of each other, nor are they independent
 of the dataset.
 This chapter presents a systematic analysis of their effects through a
@@ -261,10 +265,20 @@ noise.
 The sharp sigmoid then amplifies this noise, producing a reward that does
 not reliably rank trajectories.
 
-Softer rewards ($k = 0$, unnormalised difference) are more robust to this
-overfitting noise because the reward gradient is non-zero over a wider range
-of $\Delta_\text{wgl}$ values.
-This is why $k = 0$ degrades less steeply with increasing $e$ than $k = 10$.
+The normalised-difference reward ($k = 0$) behaves differently because it uses a
+fundamentally distinct formula: the reward is proportional to
+$\Delta_\text{wgl} / \text{WGL}_\alpha$, not a sigmoid.
+Its range is unbounded below (negative when beta is worse than alpha) and saturates
+near $1$ only for very large improvements.
+Near the decision boundary, where $\Delta_\text{wgl}$ is small, the gradient
+signal is correspondingly small, so the agent accumulates weaker policy updates
+per episode.
+This attenuated signal is less susceptible to the sharp amplification of
+overfitting noise that affects high-$k$ sigmoid rewards at $e = 30$, which
+explains why $k = 0$ degrades less steeply with increasing $e$ than $k = 10$.
+However, because the gradient is never strongly amplified at any improvement level,
+$k = 0$ also fails to discriminate small but consistent improvements from noise,
+leading to slower and less reliable policy convergence than $k \in \{3, 5\}$.
 
 \subsection{\texorpdfstring{$k \times d$}{k x d}: Sharpness Interacts with Feature Space}
 

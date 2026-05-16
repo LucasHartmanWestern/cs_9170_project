@@ -1,0 +1,36 @@
+acs_states:
+- CA
+- TX
+- NY
+- FL
+- PA
+- OH
+- IL
+- GA
+- NC
+- MI
+baseline: smote
+bias_pct: null
+da_pct: null
+dataset_name: acs_employment
+dp_protected_col: disability
+ffnn:
+  batch_size: 64
+  epochs: 20
+  hidden_sizes:
+  - 32
+  - 16
+  learning_rate: 0.001
+majority_id: 1
+minority_id: 0
+multiclass: false
+pca_components: 10
+real_data_size: 3000
+seeds:
+- 0
+- 1
+- 42
+smote:
+  n_synthetic: 2000
+third_id: null
+use_pca: false

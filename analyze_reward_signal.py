@@ -33,7 +33,10 @@ COL_GLOBAL_OBJ = "global.global_obj"
 COL_RETURN     = "meta.episode_return"
 COL_AVG_REWARD = "meta.avg_reward"
 
-DEADZONE_THRESHOLD = 0.5  # global_obj < this => deadzone
+# For k>0 (sigmoid reward): neutral point is 0.5 (beta = alpha), deadzone when < 0.5.
+# For k=0 (normalized difference): neutral point is 0.0, deadzone when < 0 (beta worse than alpha).
+DEADZONE_THRESHOLD_SIGMOID = 0.5
+DEADZONE_THRESHOLD_K0      = 0.0
 
 
 def load_runs(dataset: str, storage_roots: list[Path]) -> pd.DataFrame:
@@ -78,7 +81,8 @@ def load_runs(dataset: str, storage_roots: list[Path]) -> pd.DataFrame:
                     if len(obj) < 10:
                         continue
 
-                    deadzone_frac = float((obj < DEADZONE_THRESHOLD).mean())
+                    dz_thresh = DEADZONE_THRESHOLD_K0 if k == 0.0 else DEADZONE_THRESHOLD_SIGMOID
+                    deadzone_frac = float((obj < dz_thresh).mean())
                     obj_mean = float(obj.mean())
                     obj_std  = float(obj.std())
                     ret_std  = float(ret.std()) if len(ret) > 1 else np.nan
@@ -119,9 +123,10 @@ def plot_deadzone_by_k(df: pd.DataFrame, out_dir: Path, dataset: str):
     ax.set_xticks(range(len(ks)))
     ax.set_xticklabels([f"k={k:.0f}" for k in ks])
     ax.set_ylabel("Deadzone fraction (%)")
-    ax.set_title(f"Reward deadzone by sigmoid sharpness — {dataset}")
-    ax.axhline(20, color="red", linestyle="--", linewidth=0.8, label="20% threshold")
-    ax.legend()
+    ax.set_title(f"Reward deadzone by sharpness — {dataset}\n"
+                 r"(k=0: global\_obj$<$0 i.e. beta worse; k$>$0: global\_obj$<$0.5 i.e. no improvement)")
+    ax.axhline(20, color="red", linestyle="--", linewidth=0.8, label="20% caution threshold")
+    ax.legend(fontsize=8)
     ax.set_ylim(0, max(means.max() * 100 * 1.4, 25))
 
     for bar, m, n in zip(bars, means, summary["count"].values):
@@ -147,9 +152,10 @@ def plot_obj_distribution_by_k(df: pd.DataFrame, out_dir: Path, dataset: str):
         all_obj = np.concatenate(sub["obj_values"].values)
         ax.hist(all_obj, bins=40, orientation="horizontal", color="steelblue",
                 edgecolor="none", alpha=0.75, density=True)
-        ax.axhline(DEADZONE_THRESHOLD, color="red", linestyle="--",
-                   linewidth=1, label="deadzone boundary")
-        dz = float((all_obj < DEADZONE_THRESHOLD).mean())
+        dz_thresh = DEADZONE_THRESHOLD_K0 if k == 0.0 else DEADZONE_THRESHOLD_SIGMOID
+        ax.axhline(dz_thresh, color="red", linestyle="--",
+                   linewidth=1, label=f"deadzone boundary ({dz_thresh})")
+        dz = float((all_obj < dz_thresh).mean())
         ax.set_title(f"k={k:.0f}\n{dz*100:.1f}% DZ", fontsize=10)
         ax.set_xlabel("Density")
         if ax == axes[0]:
@@ -189,16 +195,18 @@ def plot_return_variance_by_k(df: pd.DataFrame, out_dir: Path, dataset: str):
 
 
 def print_summary_table(df: pd.DataFrame, dataset: str):
-    print(f"\n{'='*60}")
+    print(f"\n{'='*70}")
     print(f"Reward signal summary — {dataset}")
-    print(f"{'='*60}")
+    print(f"  DZ threshold: k=0 → global_obj<0 (beta worse);  k>0 → global_obj<0.5 (no improvement)")
+    print(f"{'='*70}")
     print(f"{'k':>5}  {'runs':>5}  {'DZ mean':>9}  {'DZ std':>8}  {'obj_mean':>9}  {'obj_std':>9}")
-    print("-" * 60)
+    print("-" * 70)
     for k, g in df.groupby("k"):
+        dz_label = "(beta<alpha)" if k == 0 else "(no improv)"
         print(f"{k:>5.0f}  {len(g):>5}  {g['deadzone_frac'].mean()*100:>8.1f}%  "
               f"{g['deadzone_frac'].std()*100:>7.1f}%  "
-              f"{g['obj_mean'].mean():>9.4f}  {g['obj_std'].mean():>9.4f}")
-    print("=" * 60)
+              f"{g['obj_mean'].mean():>9.4f}  {g['obj_std'].mean():>9.4f}  {dz_label}")
+    print("=" * 70)
 
 
 def main():
