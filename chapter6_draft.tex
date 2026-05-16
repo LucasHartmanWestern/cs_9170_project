@@ -2,15 +2,30 @@
 % Chapter 6: Hyperparameter Analysis (C3)
 % Draft for thesis: Reinforcement Learning for Fairness-Aware Synthetic
 % Data Generation under Positive-Class Scarcity
+%
+% Compile from project root with:
+%   pdflatex chapter6_draft.tex
+% Requires: graphicx, subcaption, booktabs, geometry packages.
+% Figure paths are relative to project root (figs/grid_census/, etc.)
+% k=10 census results marked [PARTIAL] where runs are still completing.
 % ===========================================================================
 
-\chapter{Hyperparameter Analysis}
-\label{ch:grid}
+% --- Preamble (remove if embedding in main thesis document) ---
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{parskip}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\captionsetup{font=small, labelfont=bf}
+\begin{document}
+% --- End preamble ---
 
-% Note for final version:
-% - Replace \chapter with \section if compiling standalone
-% - Figure paths assume figs/grid_census/ and figs/grid_capture24_filtered/
-% - k=10 results for census are marked [PARTIAL] where incomplete runs remain
+\section{Hyperparameter Analysis}
+\label{ch:grid}
 
 % ---------------------------------------------------------------------------
 \section{Overview}
@@ -52,12 +67,42 @@ separation signal required for the agent to learn.
 \label{sec:grid-marginals}
 % ---------------------------------------------------------------------------
 
-Figure~\ref{fig:marginals} shows the mean relative EO reduction for each
-parameter level, averaged over all other parameter combinations and both
-datasets.
+Figure~\ref{fig:marginals-census} shows the mean relative EO reduction for each
+parameter level on census, averaged over all other parameter combinations.
+The cross-dataset comparison for classifier epochs and trajectory ratio is
+shown in Figure~\ref{fig:cross-dataset}.
 The plots reveal that no single parameter dominates universally: the optimal
 setting for each parameter differs between datasets, and in some cases the
 direction of the effect reverses.
+
+\begin{figure}[t]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_census/delta_bar_k.png}
+    \caption{Sigmoid sharpness $k$}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_census/delta_bar_ep.png}
+    \caption{Classifier epochs per episode}
+  \end{subfigure}
+
+  \vspace{0.5em}
+
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_census/delta_bar_pca.png}
+    \caption{PCA components}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_census/delta_bar_ratio.png}
+    \caption{Trajectory ratio}
+  \end{subfigure}
+  \caption{Marginal relative EO reduction $(\alpha\text{-EO} - \beta\text{-EO})/\alpha\text{-EO}$
+           for each hyperparameter level on census income, averaged over all other
+           parameter combinations (3 seeds per config, $\alpha$-EO $\geq 0.10$ filter applied).
+           Error bars show $\pm 1$ standard error across configurations.
+           Higher is better (more of the baseline fairness gap is closed).}
+  \label{fig:marginals-census}
+\end{figure}
 
 \subsection{Sigmoid Sharpness \texorpdfstring{$k$}{k}}
 
@@ -163,6 +208,28 @@ The marginal effects in Section~\ref{sec:grid-marginals} are averages over
 all other parameters and therefore mask important interactions.
 Two interactions are particularly relevant to understanding FORGE's behaviour.
 
+\begin{figure}[t]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_census/heatmap_k_x_ep.png}
+    \caption{$k \times e$ interaction}
+    \label{fig:heatmap-kep}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_census/heatmap_k_x_pca.png}
+    \caption{$k \times d$ interaction}
+    \label{fig:heatmap-kpca}
+  \end{subfigure}
+  \caption{Mean $\beta$-EO for parameter pairs on census income, averaged over
+           all remaining parameter combinations and 3 seeds.
+           Lower (greener) is fairer.
+           White cells indicate no completed runs for that combination.
+           The $k \times e$ heatmap reveals that high sharpness ($k{=}10$) is
+           only beneficial at low epoch counts; the $k \times d$ heatmap shows
+           that PCA$=5$ is consistently the worst choice across all $k$.}
+  \label{fig:heatmaps}
+\end{figure}
+
 \subsection{\texorpdfstring{$k \times e$}{k x e}: Sharpness Requires Fast Feedback}
 
 Figure~\ref{fig:heatmap-kep} shows the mean $\beta$-EO for each $(k, e)$
@@ -224,6 +291,37 @@ collapses.
 \section{Cross-Dataset Divergence and Mechanistic Summary}
 \label{sec:grid-divergence}
 % ---------------------------------------------------------------------------
+
+\begin{figure}[t]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_census/delta_bar_ep.png}
+    \caption{Epochs per episode — census}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_capture24_filtered/delta_bar_ep.png}
+    \caption{Epochs per episode — Capture-24 (provisional)}
+  \end{subfigure}
+
+  \vspace{0.5em}
+
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_census/delta_bar_ratio.png}
+    \caption{Trajectory ratio — census}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figs/grid_capture24_filtered/delta_bar_ratio.png}
+    \caption{Trajectory ratio — Capture-24 (provisional)}
+  \end{subfigure}
+  \caption{Cross-dataset comparison of relative EO reduction for classifier
+           epochs per episode (top row) and trajectory ratio (bottom row).
+           Both parameters show opposite optimal directions between datasets:
+           census favours $e{=}10$ and $r{=}0.6$; Capture-24 favours $e{=}30$
+           and $r{=}0.4$.
+           Capture-24 results are provisional (grid $\approx$60\% complete).
+           $\alpha$-EO $\geq 0.10$ filter applied to both.}
+  \label{fig:cross-dataset}
+\end{figure}
 
 Table~\ref{tab:param-summary} collects the optimal value for each parameter
 per dataset and the direction of the sensitivity.
@@ -339,3 +437,4 @@ Above the threshold, additional dimensions offer diminishing returns.
 These findings are used in Chapter~8 to propose episode return variance and
 deadzone fraction as lightweight diagnostics for configuration selection in
 new applications, reducing the need for a full grid search.
+\end{document}
