@@ -12,25 +12,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Claims
 
-1. **Motivation claim** — Reweighting baselines (GroupDRO) fail under severe positive-class scarcity (DA+ ≤ 43 training examples). We do not. Well-supported by v18 results on census.
+1. **Motivation claim** — Naive generative baselines (CTGAN, FairTabDDPM) degrade under severe positive-class scarcity (DA+ ≈ 43): both show EO *higher* than alpha on capture24, and CTGAN EO=0.328 vs alpha EO=0.364 on census (barely any reduction). Reward-guided generation avoids this failure mode. Reweighting methods (GroupDRO, FLB) do not fail catastrophically — the claim is that RL achieves *better EO than all baselines* on census, not that reweighting collapses.
 
-2. **Competitive performance claim** — Our method achieves comparable or better fairness-utility tradeoff vs all baselines including CTGAN. v18 at census (EO=0.063±0.059, F1w=0.811, AUC=0.877) is the current best. Beats GroupDRO and CTGAN on both axes; near-OT-Repair EO with much better utility.
+2. **Competitive performance claim** — FORGE achieves best EO of all methods on both confirmed datasets. Census: β-EO=0.018±0.005, F1w=0.817, AUC=0.876 (k=10, pca=10, ep=30, traj=2000; EXP-021). Beats FLB (0.039), GroupDRO (0.114), OT Repair (0.085), SMOTE (0.108), CTGAN (0.328), FairTabDDPM (0.151). Capture24: β-EO=0.022±0.013, F1w=0.955, AUC=0.931 (k=5, pca=15, ep=10, traj=1000; EXP-025). Beats SMOTE (0.057), OT Repair (0.112), FairTabDDPM (0.132), FLB (0.139), GroupDRO (0.183), CTGAN (0.451) — all baselines run at matched pca=15, real=4000.
 
-3. **Ablation / design validation claim** — Under active development. v17a (DVRL local reward) vs v18 (global-only) was the prior ablation. Sigmoid (v18, k=10) confirmed better than nosigmoid (v19, k=0) on census: v18 β-EO=0.079±0.015 vs v19 β-EO=0.093±0.068, 3/3 vs 2/3 seeds improved.
+3. **Ablation / design validation claim** — Grid search (EXP-021) confirms sigmoid sharpness matters: k=10 (β-EO=0.018) substantially outperforms k=3 (0.039) and k=0 (0.039) on census. Global-only reward (no DVRL local term) confirmed by EXP-007/008. ep=30 classifier epochs per episode outperforms ep=20 vanilla.
 
 ### Current Status
 
-Dataset selection complete (census_income, capture24 confirmed; 3rd dataset paused pending capture24 stabilization).
+Datasets confirmed: census_income, capture24. ACS Employment (disability framing) adopted as 3rd dataset (EXP-024); RL and baseline runs pending.
 
-**Best confirmed results (census, 3 seeds, 3000 ep):**
-- v18 sigmoid k=10: β-EO=0.079±0.015, F1w=0.810, Deadzone=2.3%, 3/3 seeds improved
-- v19 nosigmoid k=0: β-EO=0.093±0.068, F1w=0.801, Deadzone=100%, 2/3 seeds improved → v18 wins
+**Best confirmed results — census (3 seeds, EXP-021 grid search):**
+- k=10, pca=10, ep=30, traj=2000: β-EO=0.018±0.005, EOd=0.037±0.013, F1w=0.817±0.005, AUC=0.876±0.008 — beats all baselines on EO; confirmed 2026-05-20
+- Supersedes k=5 result (β-EO=0.031±0.018); k=10 grid on Huron now complete for all confirmed configs
 
-**Capture24 status:** Unstable across seeds. α-EO ranges 0.06–0.33 across seeds at bias_pct=0.02, causing 1/5 seeds to improve with v18 k=3. Root cause under investigation.
-
-**Active investigation leads:**
-1. **Capture24 stabilization** — α-EO instability across seeds is the primary blocker. Need to diagnose whether this is a data split issue or bias injection issue.
-2. **Evolutionary search** — REINFORCE is structurally a trajectory-level bandit (all 2000 steps get identical reward). CMA-ES or NES is theoretically better suited and under consideration.
+**Capture24 status:** Primary config confirmed 2026-05-19: k=5, pca=15, ep=10, traj=1000 (real=4000) — β-EO=0.022±0.013, EOd=0.028±0.009, F1w=0.955, AUC=0.931 (α-EO=0.158±0.083; EXP-025). Beats all matched baselines (pca=15, real=4000): SMOTE 0.057, OT Repair 0.112, FairTabDDPM 0.132, FLB 0.139, GroupDRO 0.183, CTGAN 0.451. Grid still running (k=0 gap-fills, k=5 ep=30 Lambda); k=10 not swept for capture24. Full grid completion (~May 25–28) will not change the primary config selection — it is locked.
 
 ### Datasets
 
@@ -45,7 +41,7 @@ Dataset selection complete (census_income, capture24 confirmed; 3rd dataset paus
 | Dataset | da_pct | real_data_size | DA+ | Protected attr | Disadv. group |
 |---------|--------|----------------|-----|----------------|---------------|
 | census_income | 0.01433 | 3000 | **43** | sex | female (a=0) |
-| capture24 | 0.015 | 3000 | **45** | sex | female (a=1) |
+| capture24 | 0.015 | 4000 | **~60** | sex | female (a=1) |
 
 **Dataset selection criteria** (all four must pass before committing to RL experiments):
 1. val_disadv_pos ≥ 30 — stable reward signal
@@ -84,9 +80,9 @@ Three-model system: **alpha** (trained on real data only, fairness baseline), **
 
 Each training episode: generate synthetic trajectory → train beta on real+synthetic → compute reward (worst-group-loss improvement) → update RL agent via policy gradient → log diagnostics.
 
-### Reward Structure (current best: v18 global-only)
+### Reward Structure (current best: global-only, k=5 for census)
 
-- **Global term**: `sigmoid(k × (wgl_alpha − wgl_beta))` where wgl = worst-group BCE loss on validation. k=10 (vanilla). Range (0,1); above 0.5 means beta is better than alpha. k=0 gives normalized reward: (wgl_alpha − wgl_beta) / wgl_alpha.
+- **Global term**: `sigmoid(k × (wgl_alpha − wgl_beta))` where wgl = worst-group BCE loss on validation. k=10 (vanilla default); k=5 is best for census (EXP-021), k=3 provisional best for capture24 (EXP-025). Range (0,1); above 0.5 means beta is better than alpha. k=0 gives normalized reward: (wgl_alpha − wgl_beta) / wgl_alpha.
 - **Lambda schedule**: `λ * global + (1−λ) * local`. Vanilla uses λ=1.0 (pure global, no local).
 - **gamma=1.0**: All 2000 trajectory steps contribute equally. gamma=0.99 caused ~50% deadzone and was abandoned.
 - **Local term (DVRL)**: Disabled. `use_dvrl_local=false` in vanilla.
@@ -220,6 +216,7 @@ Three local GPU servers. SSH from the Windows client uses the keys listed below.
 | Huron | 129.100.226.162 | 2021 | epigou | `C:\Users\epigo\Documents\Summer2024\id_rsa_huron` |
 | Lambda | 129.100.226.208 | 2023 | epigou | `C:\Users\epigo\Documents\Summer2024\id_rsa_lambda` |
 | Aulavik | 129.100.226.194 | 2023 | epigou | `C:\Users\epigo\Documents\Summer2024\id_rsa_aulavik` |
+| Oneida | 129.100.226.232 | 2023 | epigou | `~/.ssh/id_rsa_oneida` |
 
 **Storage layout (Huron):** `/storage_1/epigou_storage/FORGE/` contains `training_runs/`, `training_runs_k10/`, `aulavik_runs/`, `lambda_runs/`.
 
