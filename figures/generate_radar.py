@@ -35,7 +35,7 @@ METHOD_STYLES = {
     "Alpha":     {"color": "tab:red",    "ls": "-",  "label": "Alpha"},
     "RL (ours)": {"color": "tab:blue",   "ls": "-",  "label": "FORGE"},
     "OT Repair": {"color": "tab:green",  "ls": "--", "label": "OTR"},
-    "GroupDRO":  {"color": "tab:orange", "ls": "--", "label": "GDRO"},
+    "FLB":       {"color": "tab:orange", "ls": "--", "label": "FLB"},
 }
 
 # ── helpers ──────────────────────────────────────────────────────────────────
