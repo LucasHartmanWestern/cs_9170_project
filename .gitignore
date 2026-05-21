@@ -16,3 +16,10 @@ paper_figures/
 paper_figures_v2/
 *.out
 *.err
+figs/
+archive_figures/
+*.png
+*.pdf
+*.svg
+*.eps
+.claude/

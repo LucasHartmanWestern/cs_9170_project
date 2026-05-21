@@ -1,0 +1,36 @@
+baseline: gaussian_ot_repair
+dataset_name: acs_employment
+multiclass: false
+bias_pct: null
+da_pct: null
+dp_protected_col: disability
+minority_id: 0
+majority_id: 1
+third_id: null
+acs_states:
+- CA
+- TX
+- NY
+- FL
+- PA
+- OH
+- IL
+- GA
+- NC
+- MI
+real_data_size: 3000
+seeds:
+- 0
+- 1
+- 2
+- 3
+- 42
+use_pca: true
+pca_components: 10
+ffnn:
+  hidden_sizes:
+  - 32
+  - 16
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 20

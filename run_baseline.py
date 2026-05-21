@@ -72,6 +72,7 @@ def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
         win_seconds=float(spec.get("win_seconds", 5.0)),
         step_seconds=float(spec.get("step_seconds", 2.5)),
         **({"dp_protected_col": dp_col} if dp_col is not None else {}),
+        **({"acs_states": spec.get("acs_states")} if spec.get("acs_states") is not None else {}),
     )
 
     ffnn_cfg   = spec.get("ffnn", {})
@@ -157,6 +158,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
+                acs_states=spec.get("acs_states"),
             )
         elif baseline == "gaussian_ot_repair":
             from benchmarks.gaussian_ot_repair import GaussianOTRepairTrainer
@@ -180,6 +182,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
+                acs_states=spec.get("acs_states"),
             )
         elif baseline == "ctgan":
             from benchmarks.ctgan_baseline import CTGANBaselineTrainer
@@ -203,6 +206,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
+                acs_states=spec.get("acs_states"),
             )
         elif baseline == "fairness_loss_balancing":
             from benchmarks.fairness_loss_balancing import FairnessLossBalancingTrainer
@@ -226,6 +230,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
+                acs_states=spec.get("acs_states"),
             )
         elif baseline == "smote":
             from benchmarks.smote_baseline import SMOTEBaselineTrainer
@@ -249,6 +254,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
+                acs_states=spec.get("acs_states"),
             )
         elif baseline == "gaussian_augment":
             from benchmarks.gaussian_augment import GaussianAugmentTrainer
@@ -272,6 +278,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
+                acs_states=spec.get("acs_states"),
             )
         elif baseline == "fairtabddpm":
             from benchmarks.fairtabddpm_baseline import FairTabDDPMTrainer
@@ -295,6 +302,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
+                acs_states=spec.get("acs_states"),
             )
         else:
             raise ValueError(

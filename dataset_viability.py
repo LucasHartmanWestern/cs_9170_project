@@ -79,6 +79,8 @@ def parse_args():
                    help="Covertype: cover type id (1-7) to treat as y=1 (default=5 Aspen)")
     p.add_argument("--acs-states", nargs="+", default=None,
                    help="ACS Employment: list of state codes to load (e.g. CA TX NY FL)")
+    p.add_argument("--ffnn-epochs", type=int, default=20,
+                   help="Epochs to train alpha FFNN for EO baseline (default: 20)")
     return p.parse_args()
 
 
@@ -120,8 +122,6 @@ def make_dataset(args, seed, bias_pct=None, da_pct=None):
         kwargs["minority_area"] = args.minority_id  # original wilderness area ID
         kwargs["majority_area"] = args.majority_id
     if args.dataset == "acs_employment":
-        # drop_protected so DIS is not visible as a feature during the alpha-EO check
-        kwargs["drop_protected"] = True
         if args.acs_states is not None:
             kwargs["acs_states"] = args.acs_states
     if args.dp_col is not None:
@@ -133,29 +133,22 @@ def make_dataset(args, seed, bias_pct=None, da_pct=None):
 
 
 def train_alpha(x_train, y_train, seed, args):
-    from torch.utils.data import WeightedRandomSampler
     agent = FFNNAgent(
         input_size=x_train.shape[1],
         hidden_sizes=[32, 16],
         output_size=1,
         learning_rate=0.001,
         batch_size=64,
-        epochs=50,
+        epochs=args.ffnn_epochs,
         device=args.device,
         seed=seed,
     )
-    # Balanced sampling when positive rate is low (avoids collapse to all-negative)
-    y_np = y_train.cpu().numpy() if torch.is_tensor(y_train) else np.array(y_train)
-    pos_rate = y_np.mean()
-    if pos_rate < 0.3:
-        n = len(y_np)
-        weights = np.where(y_np == 1, (1 - pos_rate) / pos_rate, 1.0)
-        sampler = WeightedRandomSampler(weights, num_samples=n, replacement=True)
-        loader = DataLoader(TensorDataset(x_train, y_train.float()),
-                            batch_size=64, sampler=sampler)
-    else:
-        loader = DataLoader(TensorDataset(x_train, y_train.float()),
-                            batch_size=64, shuffle=True)
+    # Plain shuffle — matches training.py's train_predictor_model exactly.
+    # No class weighting: the alpha model is intentionally trained on the biased
+    # distribution so it under-detects minority positives, producing the EO gap
+    # that FORGE is designed to close.
+    loader = DataLoader(TensorDataset(x_train, y_train.float()),
+                        batch_size=64, shuffle=True)
     agent.train(loader)
     return agent
 

@@ -298,10 +298,16 @@ class Training:
         #asymmetric phase episodes (gen_both_classes only)
         self.phase2_episodes=spec.get("phase2_episodes", None)  # None = use total_episodes for both phases
 
-        #reward shaping — check top-level first (permutation format sets it there)
+        #reward shaping — check top-level, then reward_shaping subdict, then local_weights
+        _rs = spec.get("reward_shaping") or {}
         _k = spec.get("global_sigmoid_k")
+        if _k is None:
+            _k = _rs.get("global_sigmoid_k")
         self.global_sigmoid_k = float(_k if _k is not None else lw.get("global_sigmoid_k", 10.0))
-        self.utility_guard_min_factor=float(lw.get("utility_guard_min_factor", 1.0))
+        _ugmf = lw.get("utility_guard_min_factor")
+        if _ugmf is None:
+            _ugmf = _rs.get("utility_guard_min_factor")
+        self.utility_guard_min_factor = float(_ugmf if _ugmf is not None else 1.0)
         self.roc_eo_lambda=float(lw.get("roc_eo_lambda", 0.5))
 
         #CMA-ES optimizer (replaces REINFORCE when use_cmaes=True)

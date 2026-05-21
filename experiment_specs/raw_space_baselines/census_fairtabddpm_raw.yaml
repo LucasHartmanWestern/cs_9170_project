@@ -1,0 +1,23 @@
+baseline: fairtabddpm
+dataset_name: census_income
+multiclass: false
+bias_pct: null
+da_pct: 0.01433
+minority_id: 0
+majority_id: 1
+third_id: null
+real_data_size: 3000
+seeds:
+- 42
+- 0
+- 1
+use_pca: false
+ffnn:
+  hidden_sizes:
+  - 32
+  - 16
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 20
+fairtabddpm:
+  n_synthetic: 2000

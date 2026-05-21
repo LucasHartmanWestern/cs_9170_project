@@ -64,6 +64,7 @@ class GroupDROTrainer:
         win_seconds: float = 5.0,
         step_seconds: float = 2.5,
         dp_protected_col: str | None = None,
+        acs_states: list = None,
     ):
         self.exp_group = exp_group
         self.spec_name = spec_name
@@ -80,6 +81,7 @@ class GroupDROTrainer:
         self.win_seconds = win_seconds
         self.step_seconds = step_seconds
         self.dp_protected_col = dp_protected_col
+        self.acs_states = acs_states
         self.project_root = _PROJECT_ROOT
 
         torch.manual_seed(seed)
@@ -136,6 +138,7 @@ class GroupDROTrainer:
             win_seconds=self.win_seconds,
             step_seconds=self.step_seconds,
             **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
+            **({"acs_states": self.acs_states} if self.acs_states is not None else {}),
         )
         feature_dim = x_train.shape[1]
 

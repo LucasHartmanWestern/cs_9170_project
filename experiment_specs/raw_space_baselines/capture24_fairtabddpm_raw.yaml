@@ -1,0 +1,25 @@
+baseline: fairtabddpm
+dataset_name: capture24
+multiclass: false
+bias_pct: null
+da_pct: 0.015
+minority_id: 1
+majority_id: 0
+third_id: null
+real_data_size: 3000
+seeds:
+- 42
+- 0
+- 1
+use_pca: false
+win_seconds: 1.0
+step_seconds: 0.5
+ffnn:
+  hidden_sizes:
+  - 32
+  - 16
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 20
+fairtabddpm:
+  n_synthetic: 2000

@@ -38,8 +38,10 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-021 | census-hparam-grid | PARAM-TUNING | IN PROGRESS | census | EXP-001 |
 | EXP-022 | census-hparam-random | PARAM-TUNING | PLANNED | census | EXP-021 |
 | EXP-025 | capture24-hparam-grid | PARAM-TUNING | IN PROGRESS | capture24 | EXP-002 |
-| EXP-027 | acs-employment-rl-main | PAPER-FINAL | IN PROGRESS | acs_employment | EXP-024 |
-| EXP-028 | acs-employment-baselines | PAPER-FINAL | IN PROGRESS | acs_employment | EXP-024 |
+| EXP-027 | acs-employment-rl-main | PAPER-FINAL | DROPPED | acs_employment | EXP-024 |
+| EXP-028 | acs-employment-baselines | PAPER-FINAL | DROPPED | acs_employment | EXP-024 |
+| EXP-029 | meps-sex-rl-3rd-dataset | PAPER-FINAL | IN PROGRESS | meps | — |
+| EXP-030 | acs-income-race-rl-3rd-dataset | PAPER-FINAL | IN PROGRESS | acs_income | — |
 
 ---
 
@@ -1389,3 +1391,106 @@ Injected scarcity (DA+=43) is the correct framing. Baseline degradation pattern 
 - Pull full wave 3 results from Aulavik logs once EXP-027 phase 3 FORGE is running
 - Compare FORGE da43 vs FairTabDDPM 0.061 benchmark
 - Update paper results table with ACS Employment column
+
+---
+
+### EXP-029 | meps-sex-rl-3rd-dataset
+
+**Type:** PAPER-FINAL
+**Status:** IN PROGRESS
+**Dataset(s):** meps (sex framing, da_pct=0.01433, DA+=43)
+**Seeds:** 0, 1, 42
+**Spec:** `experiment_specs/Experiment3/meps_forge_gpu0.yaml`
+**Follows from:** —
+
+---
+
+**Purpose:**
+3rd dataset candidate for the paper. MEPS HC-243 (Medical Expenditure Panel Survey 2022), sex framing: male (SEX=1, a=0) disadvantaged vs female (SEX=2, a=1) advantaged. Outcome: any prescribed medicine event (RXTOT22 ≥ 1). Healthcare domain — distinct from census (income) and capture24 (wearables).
+
+**Config delta from vanilla:**
+- dataset_name: meps
+- da_pct: 0.01433 (DA+=43, consistent with census)
+- dp_protected_col: sex, minority_id=0 (male), majority_id=1
+- total_episodes: 5000
+- global_sigmoid_k: 5.0 (at top level — k=10 upgrade after first-pass confirmation)
+- ffnn.epochs: 30
+
+**Viability (2026-05-21, drop_protected=False, plain shuffle):**
+| Criterion | Value | Status |
+|-----------|-------|--------|
+| val_disadv_pos | 1,163–1,181 | PASS |
+| test_disadv_pos | 1,117–1,147 | PASS |
+| best val α-EO | 0.267 (seed 0) | PASS |
+| sep_ratio | 2.31 | PASS |
+
+Natural rates: Male rx+=54.8%, Female rx+=65.9%. AA+/DA+ ratio ≈ 32x — similar to ACS Employment failure case. Key differentiators: sep_ratio=2.31 (vs ACS Employment 1.71), large repair gap (α-EO=0.267). Monitor for WGL-EO disconnect.
+
+**Launch command:**
+```
+source ~/envs/rl/bin/activate && python main.py --spec experiment_specs/Experiment3/meps_forge_gpu0.yaml --device cuda:0
+```
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- Monitor seed 42 first 1000 episodes for WGL-EO tracking
+- If β-EO < α-EO on ≥2/3 seeds: confirm as 3rd dataset and run baselines
+- If WGL-EO disconnect appears: drop, pivot to ACS Income (EXP-030) or other candidate
+- If reward signal is weak or improvement is slow: try traj_length=4000 (raises post-aug DA+/AA+ from 1.49x → ~3.0x, matching census). Keep real_data_size=3000 fixed so comparison remains clean; accept ~2x wall time or halve episode budget.
+
+---
+
+### EXP-030 | acs-income-race-rl-3rd-dataset
+
+**Type:** PAPER-FINAL
+**Status:** IN PROGRESS
+**Dataset(s):** acs_income (race framing, da_pct=0.01433, DA+=43)
+**Seeds:** 0, 1, 42
+**Spec:** `experiment_specs/Experiment3/acs_income_race_gpu1.yaml`
+**Follows from:** —
+
+---
+
+**Purpose:**
+3rd dataset candidate, running in parallel with EXP-029 (MEPS). ACS Income (folktables, 10 states: CA TX NY FL PA OH IL GA NC MI), race as protected attribute, minority_id=0 (non-white) disadvantaged. Well-known fairness benchmark dataset; distinct from MEPS (tabular income vs healthcare).
+
+**Config delta from vanilla:**
+- dataset_name: acs_income
+- da_pct: 0.01433 (DA+=43)
+- dp_protected_col: race, minority_id=0, majority_id=1
+- acs_states: CA, TX, NY, FL, PA, OH, IL, GA, NC, MI
+- total_episodes: 5000
+- global_sigmoid_k: 5.0 (top level)
+- ffnn.epochs: 30
+
+**Viability (2026-05-21, drop_protected=False, plain shuffle):**
+| Criterion | Value | Status |
+|-----------|-------|--------|
+| val_disadv_pos | 5,276–5,496 | PASS |
+| test_disadv_pos | 5,243–5,307 | PASS |
+| best val α-EO | 0.131 (seed 42) | PASS |
+| sep_ratio | ~2.29 (prior run) | PASS |
+
+Note: drop_protected=False means RAC1P column stays in features (consistent with all existing FORGE results). Earlier viability with drop_protected=True showed α-EO→0.007 and sep_ratio→0.92 — the race signal relies on RAC1P being present, which is a known reviewer concern.
+
+**Launch command:**
+```
+source ~/envs/rl/bin/activate && python main.py --spec experiment_specs/Experiment3/acs_income_race_gpu1.yaml --device cuda:1
+```
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- Compare against EXP-029 (MEPS) — select the stronger result as 3rd paper dataset
+- If both succeed: use MEPS as primary (healthcare domain more distinct); ACS Income as supplementary
+- If race framing raises reviewer concern: drop; MEPS is the preferred fallback
+- If reward signal is weak: try traj_length=4000 (post-aug DA+/AA+ ~2.27x → ~4.5x). ACS Income race is closer to census ratio at traj_length=2000 so this is lower priority than for MEPS.

@@ -1293,6 +1293,7 @@ class Dataset:
         self,
         train_size=None,
         bias_pct=None,
+        da_pct=None,
         val_frac=0.20,
         test_frac=0.20,
         pca_components=2,
@@ -1306,38 +1307,48 @@ class Dataset:
         """
         MEPS Full Year Consolidated 2022 (HC-243).
 
-        Target: received any dental visit in 2022 (DVTOT22 >= 1, y=1).
-        Protected attr: race (0=Black non-Hispanic/disadvantaged, 1=White non-Hispanic).
-        Bias: group-specific -- only Black Americans' positives are reduced, mirroring
-              split_compas. White Americans' dental-visit rate is preserved at its
-              natural level so the classifier can learn the positive class.
+        Protected attribute options:
+          "race"      — Black non-Hispanic (a=0) vs White non-Hispanic (a=1).
+                        Target: any dental visit (DVTOT22 >= 1).
+          "sex"       — Male (SEX=1, a=0) disadvantaged vs Female (SEX=2, a=1).
+                        Target: any prescription drug fill (RXTOT22 >= 1).
+                        Men significantly underutilise prescription drugs.
+          "race_cond" — Black vs White, target: any office visit (OBTOTV22 >= 1).
+          "ethnicity" — Hispanic (a=0) vs non-Hispanic (a=1), outpatient visits.
 
-        Natural positive-class rates (pre-bias): ~30% Black, ~49% White.
-        At real_data_size=3000 with bias injection, DA+≈43 is achievable for Black group.
-
-        Expected file: datasets/meps/h243.csv  (pre-converted from SAS transport)
-        Fallback:      datasets/meps/h243.ssp  (SAS transport, read via pandas.read_sas)
+        da_pct: group-specific scarcity (same semantics as ACS employment).
+        Expected file: datasets/meps/h243.csv
         Download from: https://meps.ahrq.gov/data_stats/download_data_files.jsp (HC-243)
         """
         assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
 
         if protected_cols is None:
-            protected_cols = ["ethnicity"] if dp_protected_col == "ethnicity" else ["race"]
+            if dp_protected_col == "ethnicity":
+                protected_cols = ["ethnicity"]
+            elif dp_protected_col == "sex":
+                protected_cols = ["SEX"]
+            else:
+                protected_cols = ["race"]
 
         data_dir = Path(self.data_path)
 
         # ---- 1) Load ----
         csv_path = data_dir / "h243.csv"
         sas_path = data_dir / "h243.ssp"
+        dta_path = data_dir / "h243.dta"
         if csv_path.exists():
             df = pd.read_csv(csv_path, low_memory=False)
+        elif dta_path.exists():
+            df = pd.read_stata(str(dta_path))
+            df.to_csv(csv_path, index=False)
         elif sas_path.exists():
-            df = pd.read_sas(str(sas_path), encoding="iso-8859-1")
+            df = pd.read_sas(str(sas_path), format="xport", encoding="iso-8859-1")
             df.to_csv(csv_path, index=False)
         else:
             raise FileNotFoundError(
-                f"MEPS HC-243 not found. Expected:\n  {csv_path}\n  {sas_path}\n"
-                "Download HC-243 from https://meps.ahrq.gov/data_stats/download_data_files.jsp"
+                f"MEPS HC-243 not found. Expected one of:\n  {csv_path}\n  {dta_path}\n  {sas_path}\n"
+                "Download HC-243 Stata format from:\n"
+                "  https://meps.ahrq.gov/mepsweb/data_files/pufs/h243/h243dta.zip"
             )
 
         df.columns = [c.upper() for c in df.columns]
@@ -1370,6 +1381,24 @@ class Dataset:
                 print(f"  [{group_name}] n={n}, outpatient+= {n1} ({100.*n1/n:.1f}%)")
 
             A_df_raw = df[["RACETHX"]].rename(columns={"RACETHX": "ethnicity"}).copy()
+        elif dp_protected_col == "sex":
+            # ---- 2) Keep all respondents with SEX in {1, 2} ----
+            df["SEX"] = _meps_code(df["SEX"])
+            df = df[df["SEX"].isin([1, 2])].copy().reset_index(drop=True)
+
+            # ---- 3) Target: any prescribed medicine event (RXTOT22 >= 1) ----
+            df["RXTOT22"] = _meps_code(df["RXTOT22"]).fillna(0).clip(lower=0)
+            y_raw = (df["RXTOT22"] >= 1).astype(int).to_numpy()
+
+            vals, cnts = np.unique(y_raw, return_counts=True)
+            print("[meps/sex] Label distribution (pre-bias):", dict(zip(vals.tolist(), cnts.tolist())))
+            for sex_code, sex_name in [(1, "Male"), (2, "Female")]:
+                mask = df["SEX"] == sex_code
+                n = int(mask.sum())
+                n1 = int((y_raw[mask.to_numpy()] == 1).sum())
+                print(f"  [{sex_name}] n={n}, rx+= {n1} ({100.*n1/n if n else 0:.1f}%)")
+
+            A_df_raw = df[["SEX"]].rename(columns={"SEX": "sex"}).copy()
         else:
             # ---- 2) Filter to Black non-Hispanic (RACETHX=3) and White non-Hispanic (RACETHX=2) ----
             df = df[df["RACETHX"].isin([2, 3])].copy().reset_index(drop=True)
@@ -1428,7 +1457,10 @@ class Dataset:
 
         # ---- 5) Optional: drop protected ----
         if drop_protected:
-            drop_c = [c for c in protected_cols + ["RACETHX"] if c in X_df_raw.columns]
+            if dp_protected_col == "sex":
+                drop_c = [c for c in protected_cols if c in X_df_raw.columns]
+            else:
+                drop_c = [c for c in protected_cols + ["RACETHX"] if c in X_df_raw.columns]
             if drop_c:
                 X_df_raw = X_df_raw.drop(columns=drop_c)
 
@@ -1458,6 +1490,12 @@ class Dataset:
                 return (a_df["ethnicity"] != 1).astype(np.int64).to_numpy()
             _a_col = "ethnicity"
             _disadv_code = 1  # Hispanic
+        elif dp_protected_col == "sex":
+            # 0 = Male (disadvantaged, SEX=1); 1 = Female (advantaged, SEX=2)
+            def _map_protected(a_df):
+                return (a_df["sex"] != 1).astype(np.int64).to_numpy()
+            _a_col = "sex"
+            _disadv_code = 1  # Male
         else:
             # 0 = Black non-Hispanic (disadvantaged, RACETHX=3)
             # 1 = White non-Hispanic (advantaged, RACETHX=2)
@@ -1467,6 +1505,29 @@ class Dataset:
             _disadv_code = 3  # Black non-Hisp
 
         # ---- 7) Bias injection (group-specific: reduce only disadvantaged-group positives) ----
+        def apply_da_pct_bias(df_split, y_split, a_split_df, da_p, n_total):
+            dfb = df_split.copy()
+            dfb["__y__"] = y_split
+            dfb["__a__"] = a_split_df[_a_col].to_numpy()
+            target_da_plus = max(1, round(da_p * n_total))
+            is_dpos = (dfb["__a__"] == _disadv_code) & (dfb["__y__"] == 1)
+            idx_dpos = dfb[is_dpos].index.to_numpy()
+            idx_rest = dfb[~is_dpos].index.to_numpy()
+            keep = min(len(idx_dpos), target_da_plus)
+            if keep < target_da_plus:
+                print(f"  [da_pct WARNING] Only {len(idx_dpos)} disadvantaged positives available; target was {target_da_plus}.")
+            rng = np.random.RandomState(self.seed)
+            kept_dpos = rng.choice(idx_dpos, size=keep, replace=False)
+            n_rest = n_total - keep
+            kept_rest = rng.choice(idx_rest, size=min(len(idx_rest), n_rest), replace=False)
+            sel = np.sort(np.concatenate([kept_dpos, kept_rest]))
+            sel = np.random.RandomState(self.seed).permutation(sel)
+            out = dfb.loc[sel].reset_index(drop=True)
+            y_out = out["__y__"].to_numpy(dtype=int)
+            a_out = _map_protected(out[["__a__"]].rename(columns={"__a__": _a_col}))
+            X_out = out.drop(columns=["__y__", "__a__"])
+            return X_out, y_out, a_out
+
         def apply_bias(df_split, y_split, a_split_df, target_minority_pct):
             dfb = df_split.copy()
             dfb["__y__"] = y_split
@@ -1495,7 +1556,14 @@ class Dataset:
             X_out = out.drop(columns=["__y__", "__a__"])
             return X_out, y_out, a_out
 
-        if bias_pct is not None:
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(X_train_df)
+            X_train_biased_df, y_train_biased, a_train = apply_da_pct_bias(
+                X_train_df, y_train, A_train_df, float(da_pct), n_total)
+            X_val_biased_df = X_val_df.copy().reset_index(drop=True)
+            y_val_biased = y_val.copy()
+            a_val = _map_protected(A_val_df)
+        elif bias_pct is not None:
             X_train_biased_df, y_train_biased, a_train = apply_bias(
                 X_train_df, y_train, A_train_df, float(bias_pct))
             if bias_val:
@@ -1533,6 +1601,8 @@ class Dataset:
             print(f"[meps/TRAIN] DA+ (Hispanic, outpatient=1): {da_plus} of {n_disadv} Hispanic train examples")
         elif dp_protected_col == "race_cond":
             print(f"[meps/TRAIN] DA+ (Black, office=1): {da_plus} of {n_disadv} Black train examples")
+        elif dp_protected_col == "sex":
+            print(f"[meps/TRAIN] DA+ (male, rx=1): {da_plus} of {n_disadv} male train examples")
         else:
             print(f"[meps/TRAIN] DA+ (Black, dental=1): {da_plus} of {n_disadv} Black train examples")
 
@@ -1574,7 +1644,14 @@ class Dataset:
         self.a_test  = torch.tensor(a_test,  dtype=torch.long, device=self.device)
         self.dp_protected_col = dp_protected_col
 
-        outcome_label = "outpatient+" if dp_protected_col == "ethnicity" else ("office+" if dp_protected_col == "race_cond" else "dental+")
+        if dp_protected_col == "ethnicity":
+            outcome_label = "outpatient+"
+        elif dp_protected_col == "race_cond":
+            outcome_label = "office+"
+        elif dp_protected_col == "sex":
+            outcome_label = "rx+"
+        else:
+            outcome_label = "dental+"
         def log_dist(name, y_split):
             n = len(y_split); n1 = int(np.sum(y_split == 1))
             print(f"[meps/{name}] size={n}, {outcome_label} {n1} ({100.*n1/n if n else 0:.2f}%)")
@@ -1582,7 +1659,10 @@ class Dataset:
         log_dist("VAL",   y_val_biased)
         log_dist("TEST",  y_test_biased)
 
-        label_col = "OPTOTV22_binary" if dp_protected_col == "ethnicity" else ("OBTOTV22_binary" if dp_protected_col == "race_cond" else "DVTOT22_binary")
+        label_col = ("OPTOTV22_binary" if dp_protected_col == "ethnicity"
+                     else "OBTOTV22_binary" if dp_protected_col == "race_cond"
+                     else "RXTOT22_binary" if dp_protected_col == "sex"
+                     else "DVTOT22_binary")
         try:
             self._gan_view_cache = {
                 "supported": True,
@@ -1626,22 +1706,23 @@ class Dataset:
         bias_val: bool = False,
         dp_protected_col: str = "sex",
         acs_state: str = "CA",
+        acs_states: list = None,
         acs_year: str = "2018",
+        drop_protected: bool = True,
     ):
         """
         ACS Income (Ding et al. NeurIPS 2021 / folktables).
 
-        Protected attribute: sex. Female (SEX=2, a=0) is disadvantaged;
-        male (SEX=1, a=1) is advantaged. Matches census_income convention
-        (minority_id=0 = disadvantaged female).
+        Protected attribute options:
+          "sex"  — Female (SEX=2, a=0) disadvantaged; male (SEX=1, a=1) advantaged.
+          "race" — Non-white (RAC1P != 1, a=0) disadvantaged; white (RAC1P=1, a=1) advantaged.
 
-        Bias injection is group-specific: only female positives are reduced
-        in the training split (and optionally val). Male positives are kept
-        at their natural rate.
-
+        acs_states: list of state codes; if None, falls back to [acs_state].
         Data is downloaded on first call to datasets/acs_income/ via folktables.
         """
         from folktables import ACSDataSource, ACSIncome
+
+        states = acs_states if acs_states is not None else [acs_state]
 
         data_dir = Path(self.data_path)
         data_dir.mkdir(parents=True, exist_ok=True)
@@ -1650,26 +1731,34 @@ class Dataset:
             survey_year=acs_year, horizon="1-Year", survey="person",
             root_dir=str(data_dir),
         )
-        acs_data = data_source.get_data(states=[acs_state], download=True)
+        acs_data = data_source.get_data(states=states, download=True)
         features, label, _ = ACSIncome.df_to_pandas(acs_data)
 
         # Fix label — folktables returns tuples (True,)/(False,)
         y_raw = np.array([int(bool(v[0])) if isinstance(v, tuple) else int(bool(v))
                           for v in label.values], dtype=int)
 
-        # All ACSIncome features are numeric; no categorical encoding needed
+        # Build group variable
+        if dp_protected_col == "race":
+            rac_vals = features["RAC1P"].values
+            a_raw = (rac_vals == 1).astype(np.int64)  # RAC1P=1 (white) → a=1; non-white → a=0
+            if drop_protected:
+                features = features.drop(columns=["RAC1P"])
+            g0_name, g1_name = "non_white", "white"
+        else:  # sex
+            sex_vals = features["SEX"].values
+            a_raw = (sex_vals == 1).astype(np.int64)  # SEX=1 (male) → a=1; female → a=0
+            if drop_protected:
+                features = features.drop(columns=["SEX"])
+            g0_name, g1_name = "female", "male"
+
         X_raw = features.values.astype(float)
-        col_names = list(features.columns)
 
-        # Protected attribute: SEX column (1=male, 2=female)
-        sex_vals = features["SEX"].values
-        a_raw = (sex_vals == 1).astype(np.int64)  # 1=male (adv), 0=female (disadv)
-
-        print(f"[acs_income] Total: {len(y_raw)}, pos_rate={y_raw.mean():.3f}")
-        print(f"[acs_income] Female (a=0): n={int((a_raw==0).sum())}, "
+        print(f"[acs_income] Total: {len(y_raw)}, pos_rate={y_raw.mean():.3f}, states={states}")
+        print(f"[acs_income] {g0_name} (a=0): n={int((a_raw==0).sum())}, "
               f"pos_rate={y_raw[a_raw==0].mean():.3f}, "
               f"pos_total={int(np.sum((a_raw==0)&(y_raw==1)))}")
-        print(f"[acs_income] Male   (a=1): n={int((a_raw==1).sum())}, "
+        print(f"[acs_income] {g1_name} (a=1): n={int((a_raw==1).sum())}, "
               f"pos_rate={y_raw[a_raw==1].mean():.3f}, "
               f"pos_total={int(np.sum((a_raw==1)&(y_raw==1)))}")
 
@@ -1706,7 +1795,7 @@ class Dataset:
             idx_rest = np.where(~((a == 0) & (y == 1)))[0]
             keep = min(len(idx_dpos), target_da_plus)
             if keep < target_da_plus:
-                print(f"  [da_pct WARNING] Only {len(idx_dpos)} female positives available; "
+                print(f"  [da_pct WARNING] Only {len(idx_dpos)} disadvantaged positives available; "
                       f"target was {target_da_plus}.")
             rng = np.random.RandomState(seed)
             kept_dpos = rng.choice(idx_dpos, size=keep, replace=False)
@@ -1730,7 +1819,7 @@ class Dataset:
         da_plus = int(np.sum((y_tr==1) & (a_tr==0)))
         aa_plus = int(np.sum((y_tr==1) & (a_tr==1)))
         n_disadv_tr = int((a_tr==0).sum())
-        print(f"[acs_income/TRAIN] DA+ (female, income>50k): {da_plus} of {n_disadv_tr} female train examples")
+        print(f"[acs_income/TRAIN] DA+ ({g0_name}, income>50k): {da_plus} of {n_disadv_tr} {g0_name} train examples")
 
         # Cap train_size after bias (only needed for bias_pct mode; da_pct integrates this)
         if da_pct is None and train_size is not None and train_size < len(y_tr):
@@ -1800,6 +1889,14 @@ class Dataset:
           "disability" — Disabled (DIS=1, a=0) disadvantaged; not disabled (DIS=2, a=1)
                          advantaged. Natural gap: 18% vs 50% employment rate. DA+(disabled)
                          ≈ 43 at da_pct=0.01433 with train_size=3000.
+          "age"      — Older workers (AGEP ≥ 55, a=0) disadvantaged; younger (AGEP < 55,
+                         a=1) advantaged. Age discrimination framing.
+          "nativity" — Foreign-born (NATIVITY=2, a=0) disadvantaged; native-born (a=1)
+                         advantaged. Immigration/nativity framing.
+          "race"     — Non-white (RAC1P != 1, a=0) disadvantaged; white (RAC1P=1, a=1)
+                         advantaged. Racial framing.
+          "veteran"  — Veterans (MIL=2, separated from service, a=0) disadvantaged;
+                         never served (MIL=0 or 4, a=1) advantaged.
 
         acs_states: list of 2-letter state codes (default ["CA"]). Pass multiple states for
             a larger pool; data will be loaded from datasets/acs_employment/ cache.
@@ -1830,6 +1927,31 @@ class Dataset:
             if drop_protected:
                 features = features.drop(columns=["DIS"])
             g0_name, g1_name = "disabled", "not_disabled"
+        elif dp_protected_col == "age":
+            age_vals = features["AGEP"].values
+            a_raw = (age_vals < 55).astype(np.int64)  # AGEP ≥ 55 → a=0 (older), AGEP < 55 → a=1
+            if drop_protected:
+                features = features.drop(columns=["AGEP"])
+            g0_name, g1_name = "older_55plus", "younger_under55"
+        elif dp_protected_col == "nativity":
+            nat_vals = features["NATIVITY"].values
+            a_raw = (nat_vals == 1).astype(np.int64)  # NATIVITY=2 → foreign-born → a=0
+            g0_name, g1_name = "foreign_born", "native_born"
+        elif dp_protected_col == "race":
+            rac_vals = features["RAC1P"].values
+            a_raw = (rac_vals == 1).astype(np.int64)  # RAC1P != 1 → non-white → a=0
+            if drop_protected:
+                features = features.drop(columns=["RAC1P"])
+            g0_name, g1_name = "non_white", "white"
+        elif dp_protected_col == "veteran":
+            mil_vals = features["MIL"].values
+            # MIL=2: separated veteran (a=0); never served (MIL=0 or 4) → a=1
+            a_raw = np.where(mil_vals == 2, 0, np.where((mil_vals == 0) | (mil_vals == 4), 1, -1)).astype(np.int64)
+            mask = a_raw != -1  # exclude currently serving (MIL=1) and reserves (MIL=3)
+            features = features[mask]
+            a_raw = a_raw[mask]
+            y_raw = y_raw[mask]
+            g0_name, g1_name = "veteran", "never_served"
         else:
             sex_vals = features["SEX"].values
             a_raw = (sex_vals == 1).astype(np.int64)  # SEX=1 (male) → a=1, SEX=2 (female) → a=0
@@ -4213,10 +4335,10 @@ class Dataset:
             kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
             return self.split_compas(**kw)
         elif self.dataset_name == "meps":
-            kw = {k: v for k, v in kwargs.items() if k not in (*_tabular_drop, "da_pct")}
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
             return self.split_meps(**kw)
         elif self.dataset_name == "acs_income":
-            _acs_drop = ("drop_protected", "protected_cols", "win_seconds", "step_seconds")
+            _acs_drop = ("protected_cols", "win_seconds", "step_seconds")
             kw = {k: v for k, v in kwargs.items() if k not in _acs_drop}
             return self.split_acs_income(**kw)
         elif self.dataset_name == "acs_employment":

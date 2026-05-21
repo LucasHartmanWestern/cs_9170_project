@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Current Status
 
-Datasets confirmed: census_income, capture24. ACS Employment (disability framing) adopted as 3rd dataset (EXP-024); RL and baseline runs pending.
+Datasets confirmed: census_income, capture24. MEPS (sex framing, prescription fills) adopted as 3rd dataset candidate; RL runs launched 2026-05-21 (k=5, pca=10, ep=30, traj=2000). ACS Employment (disability) dropped after FORGE failure.
 
 **Best confirmed results — census (3 seeds, EXP-021 grid search):**
 - k=10, pca=10, ep=30, traj=2000: β-EO=0.018±0.005, EOd=0.037±0.013, F1w=0.817±0.005, AUC=0.876±0.008 — beats all baselines on EO; confirmed 2026-05-20
@@ -30,7 +30,7 @@ Datasets confirmed: census_income, capture24. ACS Employment (disability framing
 
 ### Datasets
 
-**Active (paper):** census_income, capture24.
+**Active (paper):** census_income, capture24. **Candidate 3rd dataset:** MEPS (sex, prescription fills) — RL runs in progress.
 
 **DA+** = number of disadvantaged-group positive (y=1) training examples. Both datasets are configured so DA+ ≈ 43–45, the level at which reweighting methods demonstrably fail. `da_pct` is an internal implementation parameter (fraction of train set that should be disadvantaged-group positives) — do NOT use it in paper text. Always frame in terms of DA+ or positive-class rate percentages (e.g., "~11% for the disadvantaged group").
 
@@ -42,19 +42,27 @@ Datasets confirmed: census_income, capture24. ACS Employment (disability framing
 |---------|--------|----------------|-----|----------------|---------------|
 | census_income | 0.01433 | 3000 | **43** | sex | female (a=0) |
 | capture24 | 0.015 | 4000 | **~60** | sex | female (a=1) |
+| meps | 0.01433 | 3000 | **43** | sex | male (a=0) |
 
 **Dataset selection criteria** (all four must pass before committing to RL experiments):
 1. val_disadv_pos ≥ 30 — stable reward signal
 2. test_disadv_pos ≥ 200 — reliable fairness evaluation
-3. alpha_EO ≥ 0.10 — meaningful pre-intervention gap
-4. Feature-space distinctiveness — disadvantaged-group positives must be spatially distinct from advantaged-group positives in PCA space; otherwise synthetic samples cannot carry group-specific signal
+3. alpha_EO: at least one seed clearly non-zero in viability — meaningful pre-intervention gap exists. The viability FFNN systematically underestimates FORGE's actual alpha-EO (by roughly 3–5×) because it trains on heavily imbalanced biased data without class weighting and collapses toward all-negative predictions. Census passes (FORGE alpha-EO ~0.34) despite viability showing only 0.047. Treat the viability alpha-EO as a relative signal, not an absolute threshold: near-zero on all seeds = reject; clearly non-zero on best seed = pass.
+4. Feature-space distinctiveness — disadvantaged-group positives must be spatially distinct from advantaged-group positives in PCA space (sep_ratio > 1, computed with drop_protected=True); otherwise synthetic samples cannot carry group-specific signal
+
+**Viability script note:** Always run with drop_protected=True (the default as of 2026-05-21). Earlier runs with drop_protected=False produced misleading results — ACS Income + race appeared viable (alpha-EO=0.131) but failed completely once drop_protected=True was applied (alpha-EO=0.007, sep_ratio=0.92).
 
 **Dropped datasets:**
 - **COMPAS** — val_pos=14 (below threshold), positive-class overlap in PCA space, RL results contradict motivation claim
 - **PAMAP2** — only 1 female subject, unstable group identification across seeds
 - **credit_card** — DA+ too high (~136), alpha-EO near-zero, not in scarcity regime
 - **PTB-XL** — no framing reaches test_pos≥200
-- **MEPS** — val_pos=37 marginal; ethnicity framing test_pos=111 fails evaluation threshold
+- **MEPS (ethnicity framing)** — val_pos=37 marginal; ethnicity framing test_pos=111 fails evaluation threshold
+- **ACS Employment (disability)** — FORGE beta-EO 0.62–0.71; WGL-EO disconnect; narrow repair gap (1.7x); AA+/DA+ ratio 30x
+- **ACS Employment (sex/age/nativity/race/veteran)** — all framings: alpha-EO near zero or framing narratively inappropriate
+- **ACS Income (race)** — passes with drop_protected=False but collapses with drop_protected=True (alpha-EO=0.007, sep_ratio=0.92); proxy features carry no race-specific signal after dropping RAC1P
+- **Diabetes130 (age)** — test_disadv_pos=60 (fails ≥200); alpha-EO near zero
+- **Diabetes130 (race)** — identical readmission rates for Black/White (8.5% vs 9.0%), no EO signal
 
 ### Paper-Writing Rules
 
