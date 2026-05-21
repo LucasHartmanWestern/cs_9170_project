@@ -48,6 +48,10 @@ class Dataset:
             "data_path": "datasets/acs_employment",
             "protected_attributes": ["sex", "disability"]
         },
+        "acs_public_coverage": {
+            "data_path": "datasets/acs_public_coverage",
+            "protected_attributes": ["sex", "race"]
+        },
         "fairjob": {
             "data_path": "datasets/fairjob",
             "protected_attributes": ["protected_attribute"]
@@ -2035,6 +2039,175 @@ class Dataset:
             g0_pos = int(np.sum((y_split==1) & (a_split==0)))
             g1_pos = int(np.sum((y_split==1) & (a_split==1)))
             print(f"[acs_employment/{name}] n={n}, employed={n1} ({100.*n1/n:.1f}%), "
+                  f"DA+({g0_name})={g0_pos}, AA+({g1_name})={g1_pos}")
+
+        _log("TRAIN", y_tr, a_tr)
+        _log("VAL",   y_va, a_va)
+        _log("TEST",  y_te, a_te)
+
+        scaler = StandardScaler().fit(X_tr_raw)
+        X_tr_sc = scaler.transform(X_tr_raw)
+        X_va_sc = scaler.transform(X_va_raw)
+        X_te_sc = scaler.transform(X_te_raw)
+
+        X_tr_theta, X_va_theta, X_te_theta, pca_obj = self._to_theta(
+            X_tr_sc, X_va_sc, X_te_sc, pca_components=pca_components)
+
+        X_train_theta = torch.tensor(X_tr_theta, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_va_theta, dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_te_theta, dtype=torch.float32, device=self.device)
+        y_train_theta = torch.tensor(y_tr, dtype=torch.long, device=self.device)
+        y_val_theta   = torch.tensor(y_va, dtype=torch.long, device=self.device)
+        y_test_theta  = torch.tensor(y_te, dtype=torch.long, device=self.device)
+
+        self.a_train = torch.tensor(a_tr, dtype=torch.long, device=self.device)
+        self.a_val   = torch.tensor(a_va, dtype=torch.long, device=self.device)
+        self.a_test  = torch.tensor(a_te, dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+
+        self._gan_view_cache = {"supported": False}
+
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
+
+    def split_acs_public_coverage(
+        self,
+        train_size=None,
+        da_pct=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        bias_val: bool = False,
+        dp_protected_col: str = "sex",
+        acs_states: list = None,
+        acs_state: str = "CA",
+        acs_year: str = "2018",
+        drop_protected: bool = True,
+    ):
+        """
+        ACS Public Coverage (Ding et al. NeurIPS 2021 / folktables).
+
+        Task: predict whether individual has public health insurance coverage (PUBCOV=1).
+        Filter: individuals under 65 not covered by military insurance.
+
+        Protected attribute options:
+          "sex"  — Male (SEX=1, a=0) disadvantaged; female (SEX=2, a=1) advantaged.
+                   Women tend to have higher public coverage rates (Medicaid eligibility).
+          "race" — Non-white (RAC1P != 1, a=0) disadvantaged; white (RAC1P=1, a=1) advantaged.
+
+        acs_states: list of state codes; if None, falls back to [acs_state].
+        Data is downloaded on first call to datasets/acs_public_coverage/ via folktables.
+        """
+        from folktables import ACSDataSource, ACSPublicCoverage
+
+        states = acs_states if acs_states is not None else [acs_state]
+
+        data_dir = Path(self.data_path)
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        data_source = ACSDataSource(
+            survey_year=acs_year, horizon="1-Year", survey="person",
+            root_dir=str(data_dir),
+        )
+        acs_data = data_source.get_data(states=states, download=True)
+        features, label, _ = ACSPublicCoverage.df_to_pandas(acs_data)
+
+        y_raw = np.array([int(bool(v[0])) if isinstance(v, tuple) else int(bool(v))
+                          for v in label.values], dtype=int)
+
+        if dp_protected_col == "race":
+            rac_vals = features["RAC1P"].values
+            a_raw = (rac_vals == 1).astype(np.int64)  # white → a=1; non-white → a=0
+            if drop_protected:
+                features = features.drop(columns=["RAC1P"])
+            g0_name, g1_name = "non_white", "white"
+        else:  # sex — male disadvantaged (lower public coverage rate)
+            sex_vals = features["SEX"].values
+            a_raw = (sex_vals == 2).astype(np.int64)  # SEX=2 (female) → a=1; male → a=0
+            if drop_protected:
+                features = features.drop(columns=["SEX"])
+            g0_name, g1_name = "male", "female"
+
+        X_raw = features.values.astype(float)
+
+        print(f"[acs_public_coverage] Total: {len(y_raw)}, pos_rate={y_raw.mean():.3f}, states={states}")
+        print(f"[acs_public_coverage] {g0_name} (a=0): n={int((a_raw==0).sum())}, "
+              f"pos_rate={y_raw[a_raw==0].mean():.3f}, "
+              f"pos_total={int(np.sum((a_raw==0)&(y_raw==1)))}")
+        print(f"[acs_public_coverage] {g1_name} (a=1): n={int((a_raw==1).sum())}, "
+              f"pos_rate={y_raw[a_raw==1].mean():.3f}, "
+              f"pos_total={int(np.sum((a_raw==1)&(y_raw==1)))}")
+
+        idx_all = np.arange(len(y_raw))
+        idx_tr, idx_temp = train_test_split(
+            idx_all, test_size=(val_frac + test_frac),
+            random_state=self.seed, stratify=y_raw)
+        rel_test = test_frac / (val_frac + test_frac)
+        idx_va, idx_te = train_test_split(
+            idx_temp, test_size=rel_test,
+            random_state=self.seed, stratify=y_raw[idx_temp])
+
+        X_tr_raw, y_tr, a_tr = X_raw[idx_tr], y_raw[idx_tr], a_raw[idx_tr]
+        X_va_raw, y_va, a_va = X_raw[idx_va], y_raw[idx_va], a_raw[idx_va]
+        X_te_raw, y_te, a_te = X_raw[idx_te], y_raw[idx_te], a_raw[idx_te]
+
+        def apply_group_bias_bp(X, y, a, bp, seed):
+            idx_adv  = np.where(a == 1)[0]
+            idx_dneg = np.where((a==0) & (y==0))[0]
+            idx_dpos = np.where((a==0) & (y==1))[0]
+            keep = max(1, int(np.floor(bp * len(idx_dneg) / (1 - bp))))
+            keep = min(len(idx_dpos), keep)
+            rng2 = np.random.RandomState(seed)
+            kept = rng2.choice(idx_dpos, size=keep, replace=False)
+            sel  = np.concatenate([idx_adv, idx_dneg, kept])
+            perm = np.random.RandomState(seed).permutation(len(sel))
+            return X[sel[perm]], y[sel[perm]], a[sel[perm]]
+
+        disadv_id = self.MINORITY_ID
+        disadv_name = g0_name if disadv_id == 0 else g1_name
+
+        def apply_da_pct_bias(X, y, a, da_p, n_total, seed):
+            target_da_plus = max(1, round(da_p * n_total))
+            idx_dpos = np.where((a == disadv_id) & (y == 1))[0]
+            idx_rest = np.where(~((a == disadv_id) & (y == 1)))[0]
+            keep = min(len(idx_dpos), target_da_plus)
+            if keep < target_da_plus:
+                print(f"  [da_pct WARNING] Only {len(idx_dpos)} disadvantaged positives available; "
+                      f"target was {target_da_plus}.")
+            rng = np.random.RandomState(seed)
+            kept_dpos = rng.choice(idx_dpos, size=keep, replace=False)
+            n_rest = n_total - keep
+            if len(idx_rest) >= n_rest:
+                kept_rest = rng.choice(idx_rest, size=n_rest, replace=False)
+            else:
+                kept_rest = idx_rest
+            sel = np.sort(np.concatenate([kept_dpos, kept_rest]))
+            sel = np.random.RandomState(seed).permutation(sel)
+            return X[sel], y[sel], a[sel]
+
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(y_tr)
+            X_tr_raw, y_tr, a_tr = apply_da_pct_bias(X_tr_raw, y_tr, a_tr, da_pct, n_total, self.seed)
+        elif bias_pct is not None:
+            X_tr_raw, y_tr, a_tr = apply_group_bias_bp(X_tr_raw, y_tr, a_tr, bias_pct, self.seed)
+            if bias_val:
+                X_va_raw, y_va, a_va = apply_group_bias_bp(X_va_raw, y_va, a_va, bias_pct, self.seed)
+
+        da_plus = int(np.sum((y_tr==1) & (a_tr==disadv_id)))
+        n_disadv_tr = int((a_tr==disadv_id).sum())
+        print(f"[acs_public_coverage/TRAIN] DA+ ({disadv_name}, public_cov): {da_plus} of {n_disadv_tr} train examples")
+
+        if da_pct is None and train_size is not None and train_size < len(y_tr):
+            X_tr_raw, _, y_tr, _, a_tr, _ = train_test_split(
+                X_tr_raw, y_tr, a_tr,
+                train_size=train_size, random_state=self.seed, stratify=y_tr)
+
+        def _log(name, y_split, a_split):
+            n = len(y_split); n1 = int(np.sum(y_split==1))
+            g0_pos = int(np.sum((y_split==1) & (a_split==0)))
+            g1_pos = int(np.sum((y_split==1) & (a_split==1)))
+            print(f"[acs_public_coverage/{name}] n={n}, public_cov={n1} ({100.*n1/n:.1f}%), "
                   f"DA+({g0_name})={g0_pos}, AA+({g1_name})={g1_pos}")
 
         _log("TRAIN", y_tr, a_tr)
@@ -4345,6 +4518,10 @@ class Dataset:
             _acs_drop = ("protected_cols", "win_seconds", "step_seconds")
             kw = {k: v for k, v in kwargs.items() if k not in _acs_drop}
             return self.split_acs_employment(**kw)
+        elif self.dataset_name == "acs_public_coverage":
+            _acs_drop = ("protected_cols", "win_seconds", "step_seconds")
+            kw = {k: v for k, v in kwargs.items() if k not in _acs_drop}
+            return self.split_acs_public_coverage(**kw)
         elif self.dataset_name == "fairjob":
             kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
             return self.split_fairjob(**kw)

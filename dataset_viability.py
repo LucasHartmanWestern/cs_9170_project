@@ -91,6 +91,9 @@ def parse_args():
                    help="ACS Employment: list of state codes to load (e.g. CA TX NY FL)")
     p.add_argument("--ffnn-epochs", type=int, default=20,
                    help="Epochs to train alpha FFNN for EO baseline (default: 20)")
+    p.add_argument("--drop-protected", type=lambda x: x.lower() in ("true", "1", "yes"),
+                   default=True,
+                   help="Drop protected attribute column from features (default: True)")
     return p.parse_args()
 
 
@@ -120,7 +123,7 @@ def make_dataset(args, seed, bias_pct=None, da_pct=None):
         bias_pct=bias_pct,
         da_pct=da_pct,
         pca_components=args.pca_components,
-        drop_protected=False,
+        drop_protected=args.drop_protected,
         protected_cols=ds.protected_attributes,
         win_seconds=args.win_seconds,
         step_seconds=args.step_seconds,
@@ -131,7 +134,7 @@ def make_dataset(args, seed, bias_pct=None, da_pct=None):
         kwargs["positive_cover_type"] = args.covertype_positive
         kwargs["minority_area"] = args.minority_id  # original wilderness area ID
         kwargs["majority_area"] = args.majority_id
-    if args.dataset == "acs_employment":
+    if args.dataset in ("acs_employment", "acs_public_coverage"):
         if args.acs_states is not None:
             kwargs["acs_states"] = args.acs_states
     if args.dp_col is not None:

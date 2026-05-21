@@ -44,6 +44,8 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-030 | acs-income-race-rl-3rd-dataset | PAPER-FINAL | DROPPED | acs_income | — |
 | EXP-031 | acs-employment-sex-rl-3rd-dataset | PAPER-FINAL | DROPPED | acs_employment | — |
 | EXP-032 | 3rd-dataset-viability-search-2 | EXPLORATORY | PLANNED | tbd | — |
+| EXP-033 | meps-sex-k10 | PAPER-FINAL | IN PROGRESS | meps | EXP-029 |
+| EXP-034 | meps-sex-traj4000 | PAPER-FINAL | IN PROGRESS | meps | EXP-029 |
 
 ---
 
@@ -1623,3 +1625,310 @@ python dataset_viability.py --dataset <name> --dp_protected_col <col> --minority
 - Start with candidate A (ACS Public Coverage) — lowest implementation cost, folktables already integrated
 - Implement Taiwan Credit Default (candidate B) if A fails — strongest domain contrast
 - Run MEPS alternative outcome (candidate C) in parallel with A if EXP-029 looks like dropping
+
+---
+
+### EXP-033 | meps-sex-k10
+
+**Status:** IN PROGRESS
+**Type:** PAPER-FINAL
+**Dataset:** meps (sex, prescription fills)
+**Follows from:** EXP-029
+
+**Purpose:**
+EXP-029 (k=5) showed seed_0 improving β-EO from 0.611 to 0.512, but reward was noisy (0.35–0.94 range at ep ~2186). Hypothesis: k=10 provides a sharper sigmoid boundary around the reward neutral point, reducing noise and making the gradient signal cleaner — same mechanism by which k=10 outperformed k=5 on census (EXP-021). Tests whether MEPS follows the same k-sensitivity as census.
+
+**Config delta from vanilla:**
+- dataset_name: meps
+- da_pct: 0.01433
+- dp_protected_col: sex
+- minority_id: 0 (male disadvantaged)
+- majority_id: 1
+- global_sigmoid_k: 10.0
+- traj_length: 2000
+- real_data_size: 3000
+- total_episodes: 5000
+- ffnn.epochs: 30
+- seeds: [0, 1, 42]
+
+**Spec file:** `experiment_specs/Experiment3/meps_forge_k10_gpu1.yaml`
+
+**Launch command (Huron GPU1):**
+```bash
+cd ~/cs_9170_project && source ~/envs/rl/bin/activate && \
+nohup python main.py --spec experiment_specs/Experiment3/meps_forge_k10_gpu1.yaml --device cuda:1 > /tmp/meps_k10_gpu1.log 2>&1 &
+```
+Launched 2026-05-21. PID 39755 (Huron). Confirmed training at ep ~19, reward ~0.68.
+
+**Result:**
+*(pending — check at ep ~500 for β-EO vs α-EO tracking)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- If β-EO tracks α-EO improvement by ep 500: continue to completion
+- If WGL-EO disconnect (WGL improves but β-EO does not reduce): drop; MEPS not viable
+- Compare with EXP-034 (traj=4000) — whichever shows better β-EO improvement at ep 500 is the stronger config
+
+---
+
+### EXP-034 | meps-sex-traj4000
+
+**Status:** IN PROGRESS
+**Type:** PAPER-FINAL
+**Dataset:** meps (sex, prescription fills)
+**Follows from:** EXP-029
+
+**Purpose:**
+EXP-029 (traj=2000) generates ~43+2000=2043 DA+ post-augmentation vs ~1390 AA+ positives, giving a post-aug DA+/AA+ ratio of ~1.49x. Census uses traj=2000 but has ~43+2000=2043 DA+ vs ~710 AA+, giving ratio ~2.88x. Hypothesis: MEPS suffers from insufficient DA+ dominance post-augmentation; increasing traj=4000 raises the ratio to ~3.0x, matching the census regime. Tests whether volume (rather than reward sharpness) is the bottleneck.
+
+**Config delta from vanilla:**
+- dataset_name: meps
+- da_pct: 0.01433
+- dp_protected_col: sex
+- minority_id: 0 (male disadvantaged)
+- majority_id: 1
+- global_sigmoid_k: 5.0
+- traj_length: 4000
+- real_data_size: 3000
+- total_episodes: 5000
+- ffnn.epochs: 30
+- seeds: [0, 1, 42]
+
+**Spec file:** `experiment_specs/Experiment3/meps_forge_traj4000_lambda.yaml`
+
+**Launch command (Lambda GPU0):**
+```bash
+cd ~/cs_9170_project && source ~/envs/rl/bin/activate && \
+nohup python main.py --spec experiment_specs/Experiment3/meps_forge_traj4000_lambda.yaml --device cuda:0 > /tmp/meps_traj4000.log 2>&1 &
+```
+Launched 2026-05-21. Lambda GPU0. Initially failed (MEPS data missing on Lambda — h243.csv transferred via scp before relaunch). Relaunched; confirmed training at ep ~18, reward ~0.75.
+
+**Result:**
+*(pending — check at ep ~500 for β-EO vs α-EO tracking)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- If β-EO tracks α-EO improvement by ep 500: continue to completion
+- If WGL-EO disconnect: drop; MEPS not viable; escalate to EXP-032 candidates
+- Compare with EXP-033 (k=10, traj=2000) at ep 500 — whichever shows cleaner EO reduction proceeds
+
+---
+
+### EXP-035 | meps-sex-k3-traj4000-ep30
+
+**Status:** IN PROGRESS
+**Type:** PAPER-FINAL
+**Dataset:** meps (sex, prescription fills)
+**Follows from:** EXP-034
+
+**Purpose:**
+Tests whether a softer sigmoid (k=3) with high synthetic volume (traj=4000) improves over EXP-034 (k=5, traj=4000). MEPS has alpha_EO=0.611, much higher than census (~0.34) or capture24 (~0.16). Hypothesis: the large WGL differences in MEPS cause k=5 to saturate the sigmoid (reward oscillates 0.09–0.99), producing noisy gradients; k=3 gives a softer boundary and more proportional reward signal. Combined with traj=4000 for volume.
+
+**Config delta from vanilla:**
+- dataset_name: meps
+- da_pct: 0.01433
+- dp_protected_col: sex
+- minority_id: 0 (male disadvantaged)
+- majority_id: 1
+- global_sigmoid_k: 3.0
+- traj_length: 4000
+- real_data_size: 3000
+- total_episodes: 5000
+- ffnn.epochs: 30
+- seeds: [0, 1, 42]
+
+**Spec file:** `experiment_specs/Experiment3/meps_k3_traj4000_ep30_lambda_gpu1.yaml`
+
+**Launch command (Lambda GPU1):**
+```bash
+cd ~/cs_9170_project && source ~/envs/rl/bin/activate && \
+nohup python main.py --spec experiment_specs/Experiment3/meps_k3_traj4000_ep30_lambda_gpu1.yaml --device cuda:1 > /tmp/meps_k3_traj4000_ep30.log 2>&1 &
+```
+Launched 2026-05-21. Lambda GPU1. Confirmed training at ep ~89, reward ~0.41.
+
+**Result:**
+*(pending — check at ep ~500)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- Compare β-EO vs α-EO at ep ~500 against EXP-034 (k=5, traj=4000)
+
+---
+
+### EXP-036 | meps-sex-k5-ep50
+
+**Status:** IN PROGRESS
+**Type:** PAPER-FINAL
+**Dataset:** meps (sex, prescription fills)
+**Follows from:** EXP-029
+
+**Purpose:**
+Tests whether 50 FFNN epochs per episode stabilises the noisy reward signal seen in EXP-029 (k=5, ep=30, traj=2000). Hypothesis: the FFNN underconverges per episode at 30 epochs given MEPS's larger dataset (3000 real + 2000 synthetic), producing an unstable beta and hence a noisy reward. Controlled comparison: only epochs change from EXP-029.
+
+**Config delta from vanilla:**
+- dataset_name: meps
+- da_pct: 0.01433
+- dp_protected_col: sex
+- minority_id: 0 (male disadvantaged)
+- majority_id: 1
+- global_sigmoid_k: 5.0
+- traj_length: 2000
+- real_data_size: 3000
+- total_episodes: 5000
+- ffnn.epochs: 50
+- seeds: [0, 1, 42]
+
+**Spec file:** `experiment_specs/Experiment3/meps_k5_ep50_aulavik_gpu0.yaml`
+
+**Launch command (Aulavik GPU0):**
+```bash
+cd ~/cs_9170_project && source ~/envs/rl/bin/activate && \
+nohup python main.py --spec experiment_specs/Experiment3/meps_k5_ep50_aulavik_gpu0.yaml --device cuda:0 > /tmp/meps_k5_ep50.log 2>&1 &
+```
+Launched 2026-05-21. Aulavik GPU0 (RTX 3090). Confirmed training at ep ~69, reward ~0.48.
+
+**Result:**
+*(pending — check at ep ~500)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- Compare reward variance and β-EO at ep ~500 against EXP-029 (ep=30)
+
+---
+
+### EXP-037 | meps-sex-k3-ep50
+
+**Status:** IN PROGRESS
+**Type:** PAPER-FINAL
+**Dataset:** meps (sex, prescription fills)
+**Follows from:** EXP-029, EXP-035, EXP-036
+
+**Purpose:**
+Tests softer sigmoid (k=3) combined with more FFNN epochs (ep=50) at baseline volume (traj=2000). Combines the two hypothesised fixes for MEPS reward noise: softer gradient signal and more stable per-episode classifier. Controlled on traj to isolate the k+epoch interaction from volume effects.
+
+**Config delta from vanilla:**
+- dataset_name: meps
+- da_pct: 0.01433
+- dp_protected_col: sex
+- minority_id: 0 (male disadvantaged)
+- majority_id: 1
+- global_sigmoid_k: 3.0
+- traj_length: 2000
+- real_data_size: 3000
+- total_episodes: 5000
+- ffnn.epochs: 50
+- seeds: [0, 1, 42]
+
+**Spec file:** `experiment_specs/Experiment3/meps_k3_ep50_aulavik_gpu1.yaml`
+
+**Launch command (Aulavik GPU1):**
+```bash
+cd ~/cs_9170_project && source ~/envs/rl/bin/activate && \
+nohup python main.py --spec experiment_specs/Experiment3/meps_k3_ep50_aulavik_gpu1.yaml --device cuda:1 > /tmp/meps_k3_ep50.log 2>&1 &
+```
+Launched 2026-05-21. Aulavik GPU1 (RTX 3090). Confirmed training at ep ~50, reward ~0.50.
+
+**Result:**
+*(pending — check at ep ~500)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- If β-EO beats EXP-036 (k=5, ep=50): k=3 is better than k=5 for MEPS; continue
+- If similar to EXP-036: epoch increase is the driver, not k
+
+---
+
+### EXP-038 | meps-sex-k0
+
+**Status:** IN PROGRESS
+**Type:** PAPER-FINAL
+**Dataset:** meps (sex, prescription fills)
+**Follows from:** EXP-029
+
+**Purpose:**
+Tests normalised reward (k=0: reward = (wgl_alpha − wgl_beta) / wgl_alpha) on MEPS. No sigmoid — purely proportional signal. If k=5 saturates due to large WGL differences, k=0 provides the cleanest possible gradient. Controlled on traj=2000 and ep=30 to isolate the reward shape effect.
+
+**Config delta from vanilla:**
+- dataset_name: meps
+- da_pct: 0.01433
+- dp_protected_col: sex
+- minority_id: 0 (male disadvantaged)
+- majority_id: 1
+- global_sigmoid_k: 0.0
+- traj_length: 2000
+- real_data_size: 3000
+- total_episodes: 5000
+- ffnn.epochs: 30
+- seeds: [0, 1, 42]
+
+**Spec file:** `experiment_specs/Experiment3/meps_k0_oneida_gpu0.yaml`
+
+**Launch command (Oneida GPU0):**
+```bash
+cd ~/cs_9170_project && source ~/envs/rl/bin/activate && \
+nohup python main.py --spec experiment_specs/Experiment3/meps_k0_oneida_gpu0.yaml --device cuda:0 > /tmp/meps_k0.log 2>&1 &
+```
+Launched 2026-05-21. Oneida GPU0 (RTX 3090). Confirmed training at ep ~28, reward ~0.02 (expected: k=0 return is raw WGL difference, centred near 0).
+
+**Result:**
+*(pending — check at ep ~500)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- Monitor whether β-EO tracks downward more consistently than sigmoid runs
+
+---
+
+### EXP-039 | meps-sex-k3-traj4000-ep50
+
+**Status:** IN PROGRESS
+**Type:** PAPER-FINAL
+**Dataset:** meps (sex, prescription fills)
+**Follows from:** EXP-035, EXP-036, EXP-037
+
+**Purpose:**
+Maximum-effort MEPS configuration: k=3 (softer sigmoid), traj=4000 (high synthetic volume), ep=50 (more stable FFNN per episode). Combines all three hypothesised improvements simultaneously. Will be significantly slower than other runs (especially on Oneida's RTX 3090) but provides the strongest possible test of whether FORGE can converge on MEPS under ideal hyperparameters. k=3 chosen as the most credible k value for MEPS given the high alpha_EO saturation concern.
+
+**Config delta from vanilla:**
+- dataset_name: meps
+- da_pct: 0.01433
+- dp_protected_col: sex
+- minority_id: 0 (male disadvantaged)
+- majority_id: 1
+- global_sigmoid_k: 3.0
+- traj_length: 4000
+- real_data_size: 3000
+- total_episodes: 5000
+- ffnn.epochs: 50
+- seeds: [0, 1, 42]
+
+**Spec file:** `experiment_specs/Experiment3/meps_k3_traj4000_ep50_oneida_gpu1.yaml`
+
+**Launch command (Oneida GPU1):**
+```bash
+cd ~/cs_9170_project && source ~/envs/rl/bin/activate && \
+nohup python main.py --spec experiment_specs/Experiment3/meps_k3_traj4000_ep50_oneida_gpu1.yaml --device cuda:1 > /tmp/meps_k3_traj4000_ep50.log 2>&1 &
+```
+Launched 2026-05-21. Oneida GPU1 (RTX 3090). Confirmed training at ep ~5, reward ~0.62.
+
+**Result:**
+*(pending — check at ep ~300–500 given slower per-episode time)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- If β-EO is cleanly below α-EO by ep ~300: k=3 + traj=4000 + ep=50 is the MEPS winner; run full 3-seed evaluation
+- Compare against EXP-035 (k=3, traj=4000, ep=30) to isolate epoch contribution
