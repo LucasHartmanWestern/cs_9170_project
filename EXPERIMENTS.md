@@ -41,8 +41,9 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-027 | acs-employment-rl-main | PAPER-FINAL | DROPPED | acs_employment | EXP-024 |
 | EXP-028 | acs-employment-baselines | PAPER-FINAL | DROPPED | acs_employment | EXP-024 |
 | EXP-029 | meps-sex-rl-3rd-dataset | PAPER-FINAL | IN PROGRESS | meps | — |
-| EXP-030 | acs-income-race-rl-3rd-dataset | PAPER-FINAL | IN PROGRESS | acs_income | — |
-| EXP-031 | acs-employment-sex-rl-3rd-dataset | PAPER-FINAL | IN PROGRESS | acs_employment | — |
+| EXP-030 | acs-income-race-rl-3rd-dataset | PAPER-FINAL | DROPPED | acs_income | — |
+| EXP-031 | acs-employment-sex-rl-3rd-dataset | PAPER-FINAL | DROPPED | acs_employment | — |
+| EXP-032 | 3rd-dataset-viability-search-2 | EXPLORATORY | PLANNED | tbd | — |
 
 ---
 
@@ -1433,16 +1434,16 @@ source ~/envs/rl/bin/activate && python main.py --spec experiment_specs/Experime
 ```
 
 **Result:**
-*(pending)*
+Mid-run check (seed 0, ep 2186/5000, 2026-05-21): α-EO=0.611, β-EO_last=0.671, β-EO_best=0.512, AUC=0.708, mean_reward(last10)=0.943. Reward is strong (beta consistently beating alpha on WGL) but EO is not tracking consistently — current episode has beta WORSE than alpha (0.671 > 0.611), though best-ever β-EO of 0.512 is below alpha. Seeds 1 and 42 not yet started. Pattern is mixed: occasional improvement but no sustained reduction. Early signal from ep ~302 showed weak reward (0.23–0.46); reward has strengthened to 0.943 by ep 2186, suggesting the reward mechanism is working but the EO improvement is not stable.
 
 **Takeaway:**
-*(pending)*
+*(pending — continue monitoring, need seeds 1 and 42)*
 
 **Next steps:**
-- Monitor seed 42 first 1000 episodes for WGL-EO tracking
-- If β-EO < α-EO on ≥2/3 seeds: confirm as 3rd dataset and run baselines
-- If WGL-EO disconnect appears: drop, pivot to ACS Income (EXP-030) or other candidate
-- If reward signal is weak or improvement is slow: try traj_length=4000 (raises post-aug DA+/AA+ from 1.49x → ~3.0x, matching census). Keep real_data_size=3000 fixed so comparison remains clean; accept ~2x wall time or halve episode budget.
+- Wait for seeds 1 and 42 to start and reach ep ~1000 before deciding
+- If ≥2/3 seeds show β-EO_best < α-EO: keep as candidate; run check_run.py at completion
+- If only seed 0 occasionally beats alpha and seeds 1/42 do not: treat as marginal/failing; consider traj_length=4000 (raises post-aug DA+/AA+ from 1.49x → ~3.0x)
+- If WGL-EO disconnect confirmed across all seeds: drop; pivot to EXP-032 candidates
 
 ---
 
@@ -1485,16 +1486,13 @@ source ~/envs/rl/bin/activate && python main.py --spec experiment_specs/Experime
 ```
 
 **Result:**
-*(pending)*
+Mid-run check (seed 0, ep 1295/5000, 2026-05-21): α-EO=0.357, β-EO_last=0.037, β-EO_best=0.000, AUC=0.824, mean_reward(last10)=0.996. Numbers look spectacular but are trivially explained: RAC1P (the race column) is in the features (drop_protected=False), so the classifier can read group membership directly. β-EO→0 is consistent with the model exploiting RAC1P rather than learning a meaningful fairness-aware representation. This is the same reason ACS Income race was dropped in viability — with drop_protected=True the α-EO collapses to 0.007, confirming the race signal is entirely carried by RAC1P. Run stopped; dataset dropped.
 
 **Takeaway:**
-*(pending)*
+DROPPED — results are an artifact of the protected attribute (RAC1P) being present in the feature space. Any β-EO improvement is trivially explained by the classifier reading race directly. Consistent with prior viability findings (alpha-EO=0.007, sep_ratio=0.92 with drop_protected=True).
 
 **Next steps:**
-- Compare against EXP-029 (MEPS) — select the stronger result as 3rd paper dataset
-- If both succeed: use MEPS as primary (healthcare domain more distinct); ACS Income as supplementary
-- If race framing raises reviewer concern: drop; MEPS is the preferred fallback
-- If reward signal is weak: try traj_length=4000 (post-aug DA+/AA+ ~2.27x → ~4.5x). ACS Income race is closer to census ratio at traj_length=2000 so this is lower priority than for MEPS.
+— (Dropped; pivoting to EXP-032 viability candidates)
 
 ---
 
@@ -1548,13 +1546,80 @@ source ~/envs/rl/bin/activate && python main.py --spec experiment_specs/Experime
 Note: ACS Employment data auto-downloads via folktables on first run if not cached locally. Requires internet access on Lambda.
 
 **Result:**
+Mid-run check (seed 0, ep 2918/5000, 2026-05-21): α-EO=0.623, β-EO_last=0.735, β-EO_best=0.691, AUC=0.806, mean_reward(last10)=0.963. Beta has NEVER beaten alpha on EO across 2918 episodes — β-EO_best=0.691 > α-EO=0.623. Reward is strong (0.963) while EO is moving in the wrong direction. This is the exact WGL-EO disconnect pattern seen in EXP-027 (ACS Employment disability): WGL improves but EO gap grows. Value range (0.62–0.74) matches the disability failure (beta-EO 0.62–0.71 noted in CLAUDE.md). Run stopped; dataset dropped.
+
+**Takeaway:**
+DROPPED — same WGL-EO disconnect as EXP-027 (disability framing). ACS Employment has now failed across two structurally different protected attributes (disability and sex); the dataset is ruled out entirely. The high cosine similarity between groups (0.976) noted in viability likely explains the disconnect: PCA separation is not driven by employment-relevant feature differences between groups, so the reward-guided generation cannot produce samples that meaningfully target the fairness gap.
+
+**Next steps:**
+— (Dropped; ACS Employment ruled out entirely; pivoting to EXP-032 viability candidates)
+
+---
+
+### EXP-032 | 3rd-dataset-viability-search-2
+
+**Type:** EXPLORATORY
+**Status:** PLANNED
+**Dataset(s):** tbd — see candidates below
+**Seeds:** 0, 1, 42
+**Spec:** tbd
+**Follows from:** EXP-024 (first search), EXP-029/030/031 (all dropped or uncertain)
+
+---
+
+**Purpose:**
+Second viability search for a 3rd paper dataset. EXP-029 (MEPS sex) is still active but uncertain; EXP-030 (ACS Income race) and EXP-031 (ACS Employment sex) are dropped. ACS Employment is ruled out entirely (two framings failed). Need a dataset with a distinct domain from census (income), capture24 (wearables), and MEPS (healthcare/prescriptions), with genuine group-level disparities and DA+ ≈ 43.
+
+All four viability criteria must pass (drop_protected=True):
+1. val_disadv_pos ≥ 30
+2. test_disadv_pos ≥ 200
+3. α-EO clearly non-zero on at least one seed
+4. sep_ratio > 1
+
+**Candidates (priority order):**
+
+**A. ACS Public Coverage — sex framing (folktables, easy to add)**
+- Task: predict whether individual has public health insurance (PUBCOV=1)
+- Protected attr: sex; female disadvantaged (lower coverage rate in some states)
+- Data: folktables 10-state pool, 2018 ACS 1-Year; already implemented infrastructure
+- Domain: health insurance — different from census (income), MEPS (prescriptions), capture24
+- Concern: natural coverage gap may be small; check α-EO before launching RL
+
+**B. Taiwan Credit Default — sex or age framing (UCI)**
+- Task: predict credit card default payment next month
+- Protected attr: sex (female=2 disadvantaged) or age group (young/old)
+- Data: 30,000 samples (doi.org/10.24432/C55S3H); tabular financial features; needs dataset.py implementation
+- Domain: financial credit — distinct from all confirmed datasets
+- Concern: need to check natural group-level default rate differences
+
+**C. MEPS alternative outcome — hospitalization or unmet need**
+- Task: predict hospitalization (IPNGTD22 > 0) or unmet medical need (UNMET22)
+- Protected attr: sex (same as EXP-029); reuse existing meps dataset implementation
+- Rationale: if MEPS sex fails for prescription fills, a different outcome may have better EO characteristics and lower AA+/DA+ ratio
+- Concern: hospitalization is rarer outcome; check val_disadv_pos threshold
+
+**D. Bank Marketing — age framing (UCI)**
+- Task: predict term deposit subscription (y/n)
+- Protected attr: age group (middle-aged 30–50 vs elderly 60+)
+- Data: ~45,000 samples; binary outcome; Portuguese bank data
+- Domain: financial marketing — distinct
+- Concern: age requires binning; outcome (term deposit subscription) is marketing not fairness-critical; weaker narrative
+
+**Config plan (once candidate passes viability):**
+Same as EXP-029: k=5, pca=10, ep=30, traj=2000, real=3000, seeds=0/1/42. Upgrade to k=10 if first-pass confirms viable.
+
+**Viability commands (once dataset.py implementation exists):**
+```
+python dataset_viability.py --dataset <name> --dp_protected_col <col> --minority_id <id> --majority_id <id> --da_pct 0.01433 --seeds 0 1 42 --drop_protected True
+```
+
+**Result:**
 *(pending)*
 
 **Takeaway:**
 *(pending)*
 
 **Next steps:**
-- Monitor seed 42 first 1000 episodes for WGL-EO tracking
-- If β-EO < α-EO on ≥2/3 seeds: confirm as 3rd dataset candidate; compare to EXP-029/030
-- If this and EXP-027 both fail: rule out ACS Employment entirely
-- If reward signal weak: try traj_length=4000 or pca_components=15 as ablations
+- Start with candidate A (ACS Public Coverage) — lowest implementation cost, folktables already integrated
+- Implement Taiwan Credit Default (candidate B) if A fails — strongest domain contrast
+- Run MEPS alternative outcome (candidate C) in parallel with A if EXP-029 looks like dropping
