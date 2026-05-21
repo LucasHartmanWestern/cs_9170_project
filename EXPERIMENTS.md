@@ -42,6 +42,7 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-028 | acs-employment-baselines | PAPER-FINAL | DROPPED | acs_employment | EXP-024 |
 | EXP-029 | meps-sex-rl-3rd-dataset | PAPER-FINAL | IN PROGRESS | meps | — |
 | EXP-030 | acs-income-race-rl-3rd-dataset | PAPER-FINAL | IN PROGRESS | acs_income | — |
+| EXP-031 | acs-employment-sex-rl-3rd-dataset | PAPER-FINAL | IN PROGRESS | acs_employment | — |
 
 ---
 
@@ -1494,3 +1495,66 @@ source ~/envs/rl/bin/activate && python main.py --spec experiment_specs/Experime
 - If both succeed: use MEPS as primary (healthcare domain more distinct); ACS Income as supplementary
 - If race framing raises reviewer concern: drop; MEPS is the preferred fallback
 - If reward signal is weak: try traj_length=4000 (post-aug DA+/AA+ ~2.27x → ~4.5x). ACS Income race is closer to census ratio at traj_length=2000 so this is lower priority than for MEPS.
+
+---
+
+### EXP-031 | acs-employment-sex-rl-3rd-dataset
+
+**Type:** PAPER-FINAL
+**Status:** IN PROGRESS
+**Dataset(s):** acs_employment (sex framing, da_pct=0.01433, DA+=43)
+**Seeds:** 0, 1, 42
+**Spec:** `experiment_specs/Experiment3/acs_employment_sex_lambda.yaml`
+**Server:** Lambda (cuda:0)
+**Follows from:** —
+
+---
+
+**Purpose:**
+3rd dataset candidate, running on Lambda as fallback to EXP-029 (MEPS) and EXP-030 (ACS Income race). ACS Employment (folktables, 10 states), sex framing: female (SEX=2, a=0) disadvantaged vs male (SEX=1, a=1) advantaged. Outcome: employment (y=1). Employment domain is distinct from income (census), wearables (capture24), and healthcare (MEPS). ACS Employment disability framing (EXP-027) was dropped — sex framing is structurally different and passes all viability criteria.
+
+**Config delta from vanilla:**
+- dataset_name: acs_employment
+- da_pct: 0.01433 (DA+=43)
+- dp_protected_col: sex, minority_id=0 (female), majority_id=1 (male)
+- acs_states: CA, TX, NY, FL, PA, OH, IL, GA, NC, MI
+- total_episodes: 5000
+- global_sigmoid_k: 5.0 (top level)
+- ffnn.epochs: 30
+- pca_components: 10 (dataset has 16 features; 10 is conservative first pass)
+
+**Config rationale:**
+- traj_length=2000: post-aug DA+/AA+ = 2043/894 = 2.29x — comparable to census (2.89x), no augmentation increase needed for first pass
+- k=5: conservative first pass; upgrade to k=10 if dataset confirms viable (consistent with MEPS/ACS Income)
+- pca=10: same as census; pca=15 is an ablation option given 16 input features
+
+**Viability (2026-05-21, drop_protected=False, plain shuffle):**
+| Criterion | Seed 42 | Seed 0 | Seed 1 | Status |
+|-----------|---------|--------|--------|--------|
+| val_disadv_pos | 75,083 | 75,176 | 75,420 | PASS |
+| test_disadv_pos | 75,112 | 75,343 | 75,239 | PASS |
+| val α-EO | 0.127 | 0.113 | 0.092 | PASS (best=0.127) |
+| sep_ratio | — | — | 2.33 | PASS |
+| cosine similarity | — | — | 0.976 | note: high (groups similar structure) |
+
+Natural rates: female employment 42.6%, male 48.5%. After bias injection train positive rate ~31%. Training AA+/DA+ = ~21x; post-aug = 2.29x.
+
+Note: sep_ratio is strong (2.33) but cosine similarity is high (0.976) — PCA separation is partially driven by the SEX feature. Groups have genuine employment-characteristic differences (education, occupation, hours) beyond just SEX column, so this is less of a concern than ACS Income race (where sep_ratio collapses without RAC1P).
+
+**Launch command (Lambda):**
+```
+source ~/envs/rl/bin/activate && python main.py --spec experiment_specs/Experiment3/acs_employment_sex_lambda.yaml --device cuda:0
+```
+Note: ACS Employment data auto-downloads via folktables on first run if not cached locally. Requires internet access on Lambda.
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- Monitor seed 42 first 1000 episodes for WGL-EO tracking
+- If β-EO < α-EO on ≥2/3 seeds: confirm as 3rd dataset candidate; compare to EXP-029/030
+- If this and EXP-027 both fail: rule out ACS Employment entirely
+- If reward signal weak: try traj_length=4000 or pca_components=15 as ablations
