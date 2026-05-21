@@ -44,11 +44,14 @@ Datasets confirmed: census_income, capture24. MEPS (sex framing, prescription fi
 | capture24 | 0.015 | 4000 | **~60** | sex | female (a=1) |
 | meps | 0.01433 | 3000 | **43** | sex | male (a=0) |
 
-**Dataset selection criteria** (all four must pass before committing to RL experiments):
+**Dataset selection criteria** (all must pass before committing to RL experiments):
 1. val_disadv_pos ≥ 30 — stable reward signal
 2. test_disadv_pos ≥ 200 — reliable fairness evaluation
 3. alpha_EO: at least one seed clearly non-zero in viability — meaningful pre-intervention gap exists. The viability FFNN systematically underestimates FORGE's actual alpha-EO (by roughly 3–5×) because it trains on heavily imbalanced biased data without class weighting and collapses toward all-negative predictions. Census passes (FORGE alpha-EO ~0.34) despite viability showing only 0.047. Treat the viability alpha-EO as a relative signal, not an absolute threshold: near-zero on all seeds = reject; clearly non-zero on best seed = pass.
 4. Feature-space distinctiveness — disadvantaged-group positives must be spatially distinct from advantaged-group positives in PCA space (sep_ratio > 1, computed with drop_protected=True); otherwise synthetic samples cannot carry group-specific signal
+5. Targeted augmentation probe (Step 4 of viability script) — inject synthetic DA+ near centroid, train beta, check delta EO > 0. Hard FAIL if delta ≤ 0: even perfect RL targeting cannot help. PASS does not guarantee RL success (ACS Employment sex passed at delta=+0.10 yet failed in practice).
+
+**WGL-EO alignment — no reliable pre-flight test exists.** The viability script now computes: (a) cosine similarity of discriminant vectors (WARN if > 0.95 — both census at 0.97 and ACS Employment sex at 0.98 trigger this; not a hard threshold); (b) WGL group dominance ratio — informational only, commonly inverted even for working datasets. The only reliable WGL-EO check is monitoring β-EO vs α-EO at ep ~500 in the actual RL run. If β-EO is not tracking below α-EO on at least one seed by ep ~1000, the run should be terminated.
 
 **Viability script note:** Always run with drop_protected=True (the default as of 2026-05-21). Earlier runs with drop_protected=False produced misleading results — ACS Income + race appeared viable (alpha-EO=0.131) but failed completely once drop_protected=True was applied (alpha-EO=0.007, sep_ratio=0.92).
 
@@ -59,7 +62,7 @@ Datasets confirmed: census_income, capture24. MEPS (sex framing, prescription fi
 - **PTB-XL** — no framing reaches test_pos≥200
 - **MEPS (ethnicity framing)** — val_pos=37 marginal; ethnicity framing test_pos=111 fails evaluation threshold
 - **ACS Employment (disability)** — FORGE beta-EO 0.62–0.71; WGL-EO disconnect; narrow repair gap (1.7x); AA+/DA+ ratio 30x
-- **ACS Employment (sex/age/nativity/race/veteran)** — all framings: alpha-EO near zero or framing narratively inappropriate
+- **ACS Employment (sex/age/nativity/race/veteran)** — sex framing: WGL-EO disconnect (beta-EO never beats alpha across 2918 eps, same pattern as disability); other framings: alpha-EO near zero or narratively inappropriate. ACS Employment ruled out entirely.
 - **ACS Income (race)** — passes with drop_protected=False but collapses with drop_protected=True (alpha-EO=0.007, sep_ratio=0.92); proxy features carry no race-specific signal after dropping RAC1P
 - **Diabetes130 (age)** — test_disadv_pos=60 (fails ≥200); alpha-EO near zero
 - **Diabetes130 (race)** — identical readmission rates for Black/White (8.5% vs 9.0%), no EO signal
