@@ -205,8 +205,8 @@ def main():
     ax1.plot(common_eps, dist_mean, color="steelblue", lw=2.0,
              label=f"Mean $\\pm$ std ({n_seeds} seeds)")
     ax1.set_xlabel("Training episode")
-    ax1.set_ylabel("L2 distance (PCA space)")
-    ax1.set_title("Centroid distance to\ndisadv.-positive cluster")
+    ax1.set_ylabel("L2 distance")
+    ax1.set_title("Centroid distance")
     ax1.legend(fontsize=9)
     ax1.grid(alpha=0.25)
 
@@ -218,14 +218,10 @@ def main():
     ax2.axhline(0, color="black", lw=0.8, ls="--", alpha=0.5)
     ax2.set_xlabel("Training episode")
     ax2.set_ylabel("Cosine similarity")
-    ax2.set_title("Directional alignment with\ndisadv.-positive cluster")
+    ax2.set_title("Directional alignment")
     ax2.legend(fontsize=9)
     ax2.grid(alpha=0.25)
 
-    fig.suptitle(
-        f"{dataset_name} — Synthetic generation drift toward disadvantaged-positive cluster",
-        fontsize=11
-    )
     plt.tight_layout()
 
     out_dir = run_dir / "analysis"

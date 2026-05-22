@@ -8,7 +8,7 @@ majority_id: 0
 third_id: null
 use_pca: true
 pca_components: 10
-traj_length: 2000
+traj_length: 4000
 real_data_size: 3000
 total_episodes: 5000
 phase2_episodes: null
@@ -23,7 +23,7 @@ seeds:
 - 0
 - 1
 - 42
-global_sigmoid_k: 10.0
+global_sigmoid_k: 3.0
 reward_mode: wgl
 lambda_schedule:
 - 1.0

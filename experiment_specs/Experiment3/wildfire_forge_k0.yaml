@@ -23,7 +23,7 @@ seeds:
 - 0
 - 1
 - 42
-global_sigmoid_k: 10.0
+global_sigmoid_k: 0.0
 reward_mode: wgl
 lambda_schedule:
 - 1.0

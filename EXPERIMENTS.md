@@ -46,6 +46,11 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-032 | 3rd-dataset-viability-search-2 | EXPLORATORY | PLANNED | tbd | — |
 | EXP-033 | meps-sex-k10 | PAPER-FINAL | IN PROGRESS | meps | EXP-029 |
 | EXP-034 | meps-sex-traj4000 | PAPER-FINAL | IN PROGRESS | meps | EXP-029 |
+| EXP-040 | wildfire-viability | DATASET-VIABILITY | COMPLETE | wildfire | — |
+| EXP-041 | wildfire-baselines | BASELINE | IN PROGRESS | wildfire | EXP-040 |
+| EXP-042 | wildfire-forge-k10 | PAPER-FINAL | TERMINATED | wildfire | EXP-040, EXP-041 |
+| EXP-044 | wildfire-forge-k10-blm | PAPER-FINAL | IN PROGRESS | wildfire | EXP-040, EXP-041, EXP-042 |
+| EXP-043 | bank-marketing-viability | DATASET-VIABILITY | COMPLETE | bank_marketing | — |
 
 ---
 
@@ -2032,21 +2037,56 @@ Alpha-EO reference: seed 42 = 0.040, seed 0 = 0.011, seed 1 = 0.063 (mean ≈ 0.
 
 ### EXP-042 | wildfire-forge-k10
 
-**Status:** IN PROGRESS
+**Status:** TERMINATED
 **Type:** PAPER-FINAL
 **Dataset:** wildfire (FPA-FOD, large-fire prediction, PRIVATE vs BLM)
 **Date launched:** 2026-05-21
 **Follows from:** EXP-040, EXP-041
 
 **Purpose:**
-Primary FORGE RL run on wildfire. Census best config (k=10, pca=10, ep=30, traj=2000) applied directly. Key question: can FORGE achieve β-EO < 0.017 (beat OT Repair) while FLB (0.107) and SMOTE (0.102) fail? WGL-EO inversion warning noted (ratio=0.974) — monitor at ep ~500.
+Primary FORGE RL run on wildfire with PRIVATE as the disadvantaged group (minority_id=0). Terminated after 2072 episodes due to structural WGL-EO disconnect.
 
 **Config delta from vanilla:**
 - dataset_name: wildfire
 - da_pct: 0.01433
 - dp_protected_col: owner_descr
-- minority_id: 0 (PRIVATE disadvantaged)
+- minority_id: 0 (PRIVATE disadvantaged — WRONG framing, see EXP-044)
 - majority_id: 1 (BLM)
+- global_sigmoid_k: 10.0
+- traj_length: 2000
+- real_data_size: 3000
+- total_episodes: 5000
+- ffnn.epochs: 30
+- seeds: [0, 1, 42] (seed 0 only reached ~2072 eps)
+
+**Result:**
+Terminated. soft_eo_alpha=0.049 (weak signal). worst_group_beta=BLM (g1) 100% of 2072 episodes — WGL-EO disconnect total. BLM has ~55% val positive rate, so BLM is always the worst group by loss regardless of RL actions. beta_eo (val, tpr_diff) ≈ 0.006 but is degenerate (both groups collapse to near-all-negative at threshold; f1_minority_beta ≈ 0.010). soft_eo_beta ≈ 0.040 ≈ soft_eo_alpha — no real improvement.
+
+**Takeaway:**
+PRIVATE-as-disadvantaged is the wrong framing for wildfire. BLM's high val positive rate (~55%) means BLM is always the WGL worst group, permanently misaligning the RL reward with the augmentation target. Fix: swap to BLM as the disadvantaged group (EXP-044). No code changes required — just minority_id/majority_id swap in YAML.
+
+**Next steps:**
+- See EXP-044
+
+---
+
+### EXP-044 | wildfire-forge-k10-blm
+
+**Status:** IN PROGRESS
+**Type:** PAPER-FINAL
+**Dataset:** wildfire (FPA-FOD, large-fire prediction, BLM vs PRIVATE)
+**Date launched:** 2026-05-22
+**Follows from:** EXP-040, EXP-041, EXP-042
+
+**Purpose:**
+Re-framed wildfire run with BLM as the disadvantaged (biased, augmented) group. Motivation: BLM has ~55% val positive rate, so it is structurally the worst group by WGL loss. Making BLM the minority_id aligns the WGL reward with the augmentation target, resolving the disconnect that caused EXP-042 to fail. Narrative: fires on remote BLM-managed federal land are underrepresented in biased training data, leading to systematically worse detection. FORGE repairs this gap.
+
+**Config delta from vanilla:**
+- dataset_name: wildfire
+- da_pct: 0.01433
+- dp_protected_col: owner_descr
+- minority_id: 1 (BLM disadvantaged)
+- majority_id: 0 (PRIVATE)
 - global_sigmoid_k: 10.0
 - traj_length: 2000
 - real_data_size: 3000
@@ -2059,9 +2099,9 @@ Primary FORGE RL run on wildfire. Census best config (k=10, pca=10, ep=30, traj=
 **Launch command (Huron GPU0):**
 ```bash
 source ~/envs/rl/bin/activate && \
-nohup python main.py --spec experiment_specs/Experiment3/wildfire_forge_k10.yaml --device cuda:0 > /tmp/wildfire_forge_k10.log 2>&1 &
+nohup python main.py --spec experiment_specs/Experiment3/wildfire_forge_k10.yaml --device cuda:0 > /tmp/wildfire_forge_k10_blm.log 2>&1 &
 ```
-Launched 2026-05-21. Huron GPU0 (RTX 3090). soft_eo_alpha=0.049 at ep start (reward signal active).
+Launched 2026-05-22. Huron GPU0 (RTX 3090). PID 70404. soft_eo_alpha=0.1284 at ep start (strong signal — 2.6× higher than EXP-042). worst_4g=3.6691 now correctly points to BLM (minority group). BLM DA+=43 confirmed (Anchors: 43 disadv=1).
 
 **Result:**
 *(pending — check at ep ~500)*
@@ -2069,8 +2109,75 @@ Launched 2026-05-21. Huron GPU0 (RTX 3090). soft_eo_alpha=0.049 at ep start (rew
 **Takeaway:**
 *(pending)*
 
+**All wildfire specs updated to minority_id=1 (BLM) and restarted 2026-05-22. Full grid running:**
+
+| Spec | k | traj | Server | GPU | Status |
+|------|---|------|--------|-----|--------|
+| wildfire_forge_k10.yaml | 10 | 2000 | Huron | cuda:0 | IN PROGRESS (PID 70405) |
+| wildfire_forge_k5.yaml | 5 | 2000 | Lambda | cuda:0 | IN PROGRESS (PID 36685) |
+| wildfire_forge_k5_traj4000.yaml | 5 | 4000 | Lambda | cuda:1 | IN PROGRESS (PID 37113) |
+| wildfire_forge_k3.yaml | 3 | 2000 | Aulavik | cuda:0 | IN PROGRESS (PID 38154) |
+| wildfire_forge_k3_traj4000.yaml | 3 | 4000 | Aulavik | cuda:1 | IN PROGRESS (PID 38678) |
+| wildfire_forge_k0.yaml | 0 | 2000 | Oneida | cuda:0 | IN PROGRESS (PID 7184) |
+| wildfire_forge_k10_traj4000.yaml | 10 | 4000 | Oneida | cuda:1 | IN PROGRESS (PID 7366) |
+
 **Next steps:**
-- Check at ep ~500: is β-EO tracking below α-EO (0.040) on at least one seed?
-- If β-EO < 0.017 by ep ~2000: wildfire confirmed for paper; EXP-042 is the final wildfire result
-- If β-EO not improving by ep ~1000: try k=5 (EXP-043, `wildfire_forge_k5.yaml`)
-- If EO goes wrong direction (β > α): investigate WGL-EO disconnect, may need to terminate
+- Check at ep ~500: is worst_group_beta=1 (BLM) consistently, and is β-EO tracking below α-EO (~0.128)?
+- Primary config to beat: k=10, traj=2000 (mirrors census best config). Bar is OT Repair β-EO from EXP-041 baselines — but note EXP-041 baselines used PRIVATE framing so new baselines will be needed under BLM framing before finalising results.
+- If β-EO improving by ep ~1000 on k=10: EXP-044 is the primary wildfire result; other k values provide ablation.
+
+---
+
+### EXP-043 | bank-marketing-viability
+
+**Status:** COMPLETE
+**Type:** DATASET-VIABILITY
+**Dataset:** bank_marketing (UCI Portuguese Bank Telemarketing, 41k rows)
+**Date:** 2026-05-21
+
+**Purpose:**
+Evaluate bank_marketing as a BACKUP 3rd dataset candidate (in addition to wildfire which is already adopted). Task: predict term deposit subscription (y). Protected attr: age group. Disadvantaged (a=0): working-age 30–55 (natural subscription rate ~9.3%). Advantaged (a=1): young adults 20–29 (rate ~15.9%). DA+=43 (da_pct=0.01433, real_data_size=3000). Duration column excluded (post-hoc leakage). Dataset: `datasets/bank_marketing/bank-additional-full.csv` (41,188 rows, semicolon-delimited).
+
+**Viability command:**
+```bash
+python dataset_viability.py \
+  --dataset bank_marketing \
+  --minority-id 0 --majority-id 1 \
+  --dp-col age \
+  --da-pcts 0.01433 \
+  --real-data-size 3000 \
+  --seeds 0 1 42 \
+  --ffnn-epochs 30 \
+  --device cpu
+```
+
+**Result:**
+
+| Criterion | Value | Status |
+|-----------|-------|--------|
+| val_disadv_pos (best) | 595 | PASS |
+| test_disadv_pos (best) | 596 | PASS |
+| best val alpha-EO | 0.1396 (seed 42) | PASS |
+| best test alpha-EO | 0.1726 (seed 1) | — |
+| sep_ratio | 1.1299 | PASS |
+| targeted aug delta EO | +0.010 | WARN (marginal; technically >0) |
+| cosine_sim | 0.9709 | WARN |
+| WGL dominance (DA/AA) | 0.993 (inverted) | WARN |
+| 6th criterion (natural pos rate) | 9.3% | PASS |
+
+Alpha-EO by seed: seed 0 = 0.114, seed 1 = 0.064, seed 42 = 0.140. AUC: seed 0 = 0.624, seed 1 = 0.639, seed 42 = 0.580.
+
+**Key concern:** Targeted aug delta = +0.010 is technically above the >0 hard threshold, but is 10× weaker than wildfire (+0.097) and much weaker than census. This means even perfectly targeted centroid injection provides only marginal EO improvement. FORGE may still work (RL can find better strategies than centroid injection), but the a priori signal is weak.
+
+**Cosine sim = 0.9709:** Same level as census (0.97), which works. However, combined with the weak targeted aug delta, there is meaningful WGL-EO disconnect risk — monitor carefully at ep ~500 if RL run is launched.
+
+**6th criterion check:** Working-age 30–55 natural subscription rate = 9.3% in unbiased val/test — below 15-20% threshold. FLB cannot trivially equalize.
+
+**Narrative:** Direct marketing models trained on biased historical data may disadvantage working-age adults (30–55) if the model learns that this cohort is less responsive (under-represented in training positives). Fairness framing: equal treatment regardless of age in bank product targeting.
+
+**Takeaway:** MARGINAL PASS. All hard criteria pass, but targeted aug delta is very weak (+0.010). Dataset is acceptable as a backup if wildfire fails. Proceed to baselines + RL only if wildfire FORGE run fails to beat OT Repair (0.017) by ep ~2000. Do not run RL unless wildfire does not pan out.
+
+**Next steps:**
+- HOLD — do not run FORGE on bank_marketing unless wildfire EXP-042 fails
+- If wildfire fails: run baselines first, then launch bank_marketing FORGE with k=10 config
+- Spec not yet created — create only if needed

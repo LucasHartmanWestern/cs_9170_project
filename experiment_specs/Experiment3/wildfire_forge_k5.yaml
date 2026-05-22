@@ -3,8 +3,8 @@ multiclass: false
 bias_pct: null
 da_pct: 0.01433
 dp_protected_col: owner_descr
-minority_id: 0
-majority_id: 1
+minority_id: 1
+majority_id: 0
 third_id: null
 use_pca: true
 pca_components: 10

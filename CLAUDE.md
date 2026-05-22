@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Current Status
 
-Datasets confirmed: census_income, capture24. **Wildfire (FPA-FOD, PRIVATE vs BLM land, large-fire prediction) adopted as 3rd dataset candidate 2026-05-21** — passes all 5 viability criteria (alpha-EO=0.136–0.147, sep_ratio=3.30, targeted aug delta=+0.097). MEPS dropped (see Datasets section). RL runs pending. ACS Employment (disability) dropped after FORGE failure.
+Datasets confirmed: census_income, capture24. **Wildfire (FPA-FOD, BLM vs PRIVATE land, large-fire prediction) adopted as 3rd dataset candidate 2026-05-21; re-framed 2026-05-22** — passes all 5 viability criteria (alpha-EO=0.136–0.147, sep_ratio=3.30, targeted aug delta=+0.097). Framing corrected: BLM is disadvantaged (minority_id=1), PRIVATE is reference (majority_id=0). EXP-042 (PRIVATE-as-disadvantaged) terminated due to WGL-EO disconnect; EXP-044 (BLM-as-disadvantaged) launched — soft_eo_alpha=0.1284, WGL now correctly points to BLM. MEPS dropped (see Datasets section). ACS Employment (disability) dropped after FORGE failure.
 
 **Best confirmed results — census (3 seeds, EXP-021 grid search):**
 - k=10, pca=10, ep=30, traj=2000: β-EO=0.018±0.005, EOd=0.037±0.013, F1w=0.817±0.005, AUC=0.876±0.008 — beats all baselines on EO; confirmed 2026-05-20
@@ -30,7 +30,7 @@ Datasets confirmed: census_income, capture24. **Wildfire (FPA-FOD, PRIVATE vs BL
 
 ### Datasets
 
-**Active (paper):** census_income, capture24. **Candidate 3rd dataset:** wildfire (FPA-FOD, PRIVATE vs BLM land, large-fire prediction) — viability confirmed 2026-05-21, RL runs pending.
+**Active (paper):** census_income, capture24. **Candidate 3rd dataset:** wildfire (FPA-FOD, BLM vs PRIVATE land, large-fire prediction) — viability confirmed 2026-05-21, re-framed 2026-05-22 (BLM as disadvantaged group, minority_id=1). EXP-044 in progress. **Backup candidate:** bank_marketing (UCI Portuguese bank, working-age 30–55 vs young adults 20–29, term deposit subscription) — marginal pass (EXP-043): targeted aug delta=+0.010 (10x weaker than wildfire), hold until wildfire EXP-044 outcome known.
 
 **DA+** = number of disadvantaged-group positive (y=1) training examples. Both datasets are configured so DA+ ≈ 43–60, the level at which reweighting methods demonstrably fail. `da_pct` is an internal implementation parameter (fraction of train set that should be disadvantaged-group positives) — do NOT use it in paper text. Always frame in terms of DA+ or positive-class rate percentages (e.g., "~11% for the disadvantaged group").
 
@@ -42,9 +42,9 @@ Datasets confirmed: census_income, capture24. **Wildfire (FPA-FOD, PRIVATE vs BL
 |---------|--------|----------------|-----|----------------|---------------|
 | census_income | 0.01433 | 3000 | **43** | sex | female (a=0) |
 | capture24 | 0.015 | 4000 | **~60** | sex | female (a=1) |
-| wildfire | 0.01433 | 3000 | **43** | owner_descr | PRIVATE (a=0) |
+| wildfire | 0.01433 | 3000 | **43** | owner_descr | BLM (a=1) |
 
-**New viability criterion (6th):** Disadvantaged group natural positive-class rate in unbiased val/test must be <~15-20%. This ensures reweighting methods (FLB) cannot trivially equalize TPRs. census (11% ✓), capture24 (5.6% ✓), wildfire (3.3% ✓). MEPS failed this criterion (male rx+ = 54.8%) — FLB achieves β-EO≈0.033 vs FORGE 0.575, which is structural not addressable by more training.
+**New viability criterion (6th):** Disadvantaged group natural positive-class rate in unbiased val/test must be <~15-20%. This ensures reweighting methods (FLB) cannot trivially equalize TPRs. census (11% ✓), capture24 (5.6% ✓). MEPS failed this criterion (male rx+ = 54.8%) — FLB achieves β-EO≈0.033 vs FORGE 0.575, which is structural not addressable by more training. **Wildfire (BLM framing):** BLM val positive rate is ~55%, which nominally fails this criterion. However wildfire differs from MEPS structurally: BLM is biased to DA+=43, meaning FLB has only 43 BLM positives to reweight from — the same scarcity that prevents CTGAN/FairTabDDPM from working. Whether FLB can trivially equalize under this constraint must be verified by running baselines under the BLM-as-disadvantaged framing (baselines from EXP-041 used PRIVATE framing and cannot be reused).
 
 **Dataset selection criteria** (all must pass before committing to RL experiments):
 1. val_disadv_pos ≥ 30 — stable reward signal

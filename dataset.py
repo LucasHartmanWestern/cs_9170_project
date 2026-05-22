@@ -76,6 +76,10 @@ class Dataset:
             "data_path": "datasets/wildfire/Data/FPA_FOD_20221014.sqlite",
             "protected_attributes": ["owner_descr"],
         },
+        "bank_marketing": {
+            "data_path": "datasets/bank_marketing/bank-additional-full.csv",
+            "protected_attributes": ["age"],
+        },
     }
     def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
         self.dataset_name = dataset_name
@@ -4481,6 +4485,206 @@ class Dataset:
                     X_test_biased_df.copy(), y_test_biased.copy())
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
+    def split_bank_marketing(
+        self,
+        train_size=None,
+        da_pct=None,
+        bias_pct=None,
+        val_frac=0.20,
+        test_frac=0.20,
+        pca_components=10,
+        bias_val=False,
+        dp_protected_col="age",
+        drop_protected=False,
+        protected_cols=None,
+        return_test_df=False,
+        return_raw=False,
+        disadv_age_low=30,
+        disadv_age_high=55,
+        adv_age_low=20,
+        adv_age_high=29,
+    ):
+        """
+        UCI Bank Marketing (Moro et al. 2014). 41k rows, semicolon-delimited.
+
+        Task: predict whether a client subscribes to a term deposit (y=1).
+        Protected attr: age group.
+          Disadvantaged (a=0): working-age adults [disadv_age_low, disadv_age_high]
+                              (default 30-55, natural subscription rate ~9%).
+          Advantaged    (a=1): young adults     [adv_age_low, adv_age_high]
+                              (default 20-29, natural subscription rate ~16%).
+        Rows outside both age bands are dropped.
+
+        'duration' (last-call length) is excluded — it is post-hoc and leaks the target.
+
+        Data: datasets/bank_marketing/bank-additional-full.csv
+        """
+        assert 0 < val_frac < 1 and 0 < test_frac < 1 and (val_frac + test_frac) < 1
+
+        df = pd.read_csv(self.data_path, sep=";")
+
+        # ---- 1) Target ----
+        df["y_bin"] = (df["y"] == "yes").astype(int)
+
+        # ---- 2) Filter to the two age groups ----
+        disadv_mask = (df["age"] >= disadv_age_low) & (df["age"] <= disadv_age_high)
+        adv_mask    = (df["age"] >= adv_age_low)    & (df["age"] <= adv_age_high)
+        df = df[disadv_mask | adv_mask].copy().reset_index(drop=True)
+        df["a"] = np.where(disadv_mask[disadv_mask | adv_mask].values, 0, 1)
+
+        n_disadv = int((df["a"] == 0).sum())
+        n_adv    = int((df["a"] == 1).sum())
+        pos_rate_disadv = float(df.loc[df["a"] == 0, "y_bin"].mean())
+        pos_rate_adv    = float(df.loc[df["a"] == 1, "y_bin"].mean())
+        print(f"[bank_marketing] disadv(age {disadv_age_low}-{disadv_age_high}): "
+              f"n={n_disadv}, sub_rate={pos_rate_disadv:.3f}")
+        print(f"[bank_marketing] adv  (age {adv_age_low}-{adv_age_high}):    "
+              f"n={n_adv}, sub_rate={pos_rate_adv:.3f}")
+
+        # ---- 3) Features ----
+        CAT_COLS = ["job", "marital", "education", "default", "housing", "loan",
+                    "contact", "month", "day_of_week", "poutcome"]
+        # 'duration' excluded (post-hoc leakage); 'age' handled separately
+        NUM_COLS = ["campaign", "pdays", "previous",
+                    "emp.var.rate", "cons.price.idx", "cons.conf.idx",
+                    "euribor3m", "nr.employed"]
+        if not drop_protected:
+            NUM_COLS = ["age"] + NUM_COLS
+
+        if protected_cols is None:
+            protected_cols = ["age"]
+
+        X_df = pd.get_dummies(df[CAT_COLS], drop_first=False).astype(float)
+        X_df = pd.concat([df[NUM_COLS].astype(float), X_df], axis=1)
+
+        y_raw = df["y_bin"].to_numpy(dtype=int)
+        a_raw = df["a"].to_numpy(dtype=np.int64)
+
+        # ---- 4) Stratified split ----
+        from sklearn.model_selection import train_test_split as _tts
+        idx = np.arange(len(y_raw))
+        strat = y_raw * 2 + a_raw  # 4-way stratify (group × label)
+        idx_tr, idx_tmp = _tts(idx, test_size=(val_frac + test_frac),
+                                random_state=self.seed, stratify=strat)
+        rel_test = test_frac / (val_frac + test_frac)
+        idx_va, idx_te = _tts(idx_tmp, test_size=rel_test,
+                               random_state=self.seed, stratify=strat[idx_tmp])
+
+        X_tr_df = X_df.iloc[idx_tr].reset_index(drop=True)
+        y_tr    = y_raw[idx_tr]; a_tr = a_raw[idx_tr]
+        X_va_df = X_df.iloc[idx_va].reset_index(drop=True)
+        y_va    = y_raw[idx_va]; a_va = a_raw[idx_va]
+        X_te_df = X_df.iloc[idx_te].reset_index(drop=True)
+        y_te    = y_raw[idx_te]; a_te = a_raw[idx_te]
+
+        # ---- 5) Group-specific bias (da_pct mode): keep exactly
+        #         target_da_plus = round(da_pct * n_total) disadvantaged positives,
+        #         fill rest of n_total from all other rows.  Matches census da_pct logic.
+        n_total = train_size if train_size is not None else len(X_tr_df)
+
+        if da_pct is not None:
+            target_da_plus = max(1, round(da_pct * n_total))
+            dpos_mask  = (a_tr == 0) & (y_tr == 1)
+            dpos_idx   = np.where(dpos_mask)[0]
+            rest_idx   = np.where(~dpos_mask)[0]
+            keep_n     = min(len(dpos_idx), target_da_plus)
+            rng = np.random.RandomState(self.seed)
+            kept_dpos  = rng.choice(dpos_idx, size=keep_n, replace=False)
+            n_rest     = n_total - keep_n
+            rest_sel   = rng.choice(rest_idx, size=min(n_rest, len(rest_idx)), replace=False)
+            sel        = np.sort(np.concatenate([kept_dpos, rest_sel]))
+            sel        = np.random.RandomState(self.seed).permutation(sel)
+            X_tr_df    = X_tr_df.iloc[sel].reset_index(drop=True)
+            y_tr       = y_tr[sel]
+            a_tr       = a_tr[sel]
+        elif bias_pct is not None:
+            # legacy path: fraction-based bias on full training pool + subsample
+            idx_dneg = np.where((a_tr == 0) & (y_tr == 0))[0]
+            idx_dpos = np.where((a_tr == 0) & (y_tr == 1))[0]
+            keep = max(1, int(np.floor(bias_pct * len(idx_dneg) / (1.0 - bias_pct))))
+            keep = min(len(idx_dpos), keep)
+            rng  = np.random.RandomState(self.seed)
+            kept = rng.choice(idx_dpos, size=keep, replace=False)
+            sel  = np.sort(np.concatenate([np.where(a_tr == 1)[0], idx_dneg, kept]))
+            sel  = np.random.RandomState(self.seed).permutation(sel)
+            X_tr_df = X_tr_df.iloc[sel].reset_index(drop=True)
+            y_tr    = y_tr[sel]; a_tr = a_tr[sel]
+            if train_size is not None and train_size < len(X_tr_df):
+                from sklearn.model_selection import train_test_split as _tts2
+                ki, _ = _tts2(np.arange(len(X_tr_df)), train_size=train_size,
+                              random_state=self.seed, stratify=y_tr)
+                X_tr_df = X_tr_df.iloc[np.sort(ki)].reset_index(drop=True)
+                y_tr = y_tr[np.sort(ki)]; a_tr = a_tr[np.sort(ki)]
+        elif train_size is not None and train_size < len(X_tr_df):
+            from sklearn.model_selection import train_test_split as _tts2
+            ki, _ = _tts2(np.arange(len(X_tr_df)), train_size=train_size,
+                          random_state=self.seed, stratify=y_tr)
+            X_tr_df = X_tr_df.iloc[np.sort(ki)].reset_index(drop=True)
+            y_tr = y_tr[np.sort(ki)]; a_tr = a_tr[np.sort(ki)]
+
+        da_plus  = int(np.sum((y_tr == 1) & (a_tr == 0)))
+        n_disadv_tr = int(np.sum(a_tr == 0))
+        print(f"[bank_marketing/TRAIN] size={len(y_tr)}, "
+              f"subscribed={int(y_tr.sum())} ({100.*y_tr.mean():.2f}%), "
+              f"disadv_pos(working-age)={da_plus}")
+
+        for name, y_s, a_s in [("VAL", y_va, a_va), ("TEST", y_te, a_te)]:
+            n = len(y_s)
+            n1 = int(y_s.sum())
+            n_dp = int(np.sum((a_s == 0) & (y_s == 1)))
+            print(f"[bank_marketing/{name}] size={n}, subscribed={n1} "
+                  f"({100.*n1/n:.2f}%), disadv_pos={n_dp}")
+
+        # ---- 7) Scale + PCA ----
+        scaler = StandardScaler()
+        Xtr_z = scaler.fit_transform(X_tr_df.values)
+        Xva_z = scaler.transform(X_va_df.values)
+        Xte_z = scaler.transform(X_te_df.values)
+
+        X_tr_th, X_va_th, X_te_th, pca = self._to_theta(
+            Xtr_z, Xva_z, Xte_z, pca_components=pca_components)
+
+        # ---- 8) Tensors ----
+        def _t(arr, dt): return torch.tensor(arr, dtype=dt, device=self.device)
+        X_train_theta = _t(X_tr_th, torch.float32)
+        X_val_theta   = _t(X_va_th, torch.float32)
+        X_test_theta  = _t(X_te_th, torch.float32)
+        y_train_theta = _t(y_tr, torch.long)
+        y_val_theta   = _t(y_va, torch.long)
+        y_test_theta  = _t(y_te, torch.long)
+
+        self.a_train = _t(a_tr, torch.long)
+        self.a_val   = _t(a_va, torch.long)
+        self.a_test  = _t(a_te, torch.long)
+        self.dp_protected_col = dp_protected_col
+        self.pca_transform = pca
+
+        self._gan_view_cache = {
+            "supported": True,
+            "X_train_unbiased_df": X_tr_df.copy(),
+            "y_train_unbiased": y_tr.astype(int).copy(),
+            "encoder": None,
+            "scaler": scaler,
+            "pca": pca,
+            "use_pca": self.use_pca,
+            "pca_components": int(pca_components),
+            "cat_cols": [],
+            "num_cols": list(X_tr_df.columns),
+            "drop_protected": bool(drop_protected),
+            "protected_cols": list(protected_cols),
+            "label_col": "y_bin",
+            "dp_protected_col": dp_protected_col,
+        }
+
+        if return_test_df:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta, X_te_df.copy())
+        if return_raw:
+            return (X_train_theta, X_val_theta, X_test_theta,
+                    y_train_theta, y_val_theta, y_test_theta,
+                    X_te_df.copy(), y_te.copy())
+        return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
+
     def get_data_splits(self, **kwargs):
         _tabular_drop = ("win_seconds", "step_seconds")
         if self.dataset_name == "census_income":
@@ -4540,6 +4744,9 @@ class Dataset:
         elif self.dataset_name == "wildfire":
             kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
             return self.split_wildfire(**kw)
+        elif self.dataset_name == "bank_marketing":
+            kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}
+            return self.split_bank_marketing(**kw)
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 
