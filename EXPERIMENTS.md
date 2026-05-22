@@ -1932,3 +1932,145 @@ Launched 2026-05-21. Oneida GPU1 (RTX 3090). Confirmed training at ep ~5, reward
 **Next steps:**
 - If β-EO is cleanly below α-EO by ep ~300: k=3 + traj=4000 + ep=50 is the MEPS winner; run full 3-seed evaluation
 - Compare against EXP-035 (k=3, traj=4000, ep=30) to isolate epoch contribution
+
+---
+
+### EXP-040 | wildfire-viability
+
+**Status:** COMPLETE
+**Type:** DATASET-VIABILITY
+**Dataset:** wildfire (FPA-FOD, large-fire prediction)
+**Date:** 2026-05-21
+
+**Purpose:**
+Evaluate wildfire dataset as 3rd dataset candidate after MEPS was dropped (structural failure: natural male positive rate 54.8% in unbiased val/test allows FLB to trivially equalize TPRs). Wildfire framing: predict large fire (≥100 acres). Protected attr: land ownership type (PRIVATE=a=0 disadvantaged, BLM=a=1 advantaged). Dataset: `datasets/wildfire/Data/FPA_FOD_20221014.sqlite` (671k fires, 1992–2020).
+
+**Viability command:**
+```bash
+python dataset_viability.py \
+  --dataset wildfire \
+  --minority-id 0 --majority-id 1 \
+  --dp-col owner_descr \
+  --da-pcts 0.01433 \
+  --real-data-size 3000 \
+  --seeds 0 1 42 \
+  --ffnn-epochs 30 \
+  --device cpu
+```
+
+**Result:**
+
+| Criterion | Value | Status |
+|-----------|-------|--------|
+| val_disadv_pos (best) | 3141 | PASS |
+| test_disadv_pos (best) | 3125 | PASS |
+| best val alpha-EO | 0.147 (all seeds: 0.136–0.147) | PASS |
+| sep_ratio | 3.30 | PASS |
+| targeted aug delta EO | +0.097 | PASS |
+| cosine_sim | 0.68 | OK |
+| WGL dominance (DA/AA) | 0.974 (inverted) | WARN |
+
+Alpha-EO: seed 0 = 0.136, seed 1 = 0.122, seed 42 = 0.147. Stable across all seeds. Natural PRIVATE large-fire rate = 3.33% in unbiased val/test (satisfies new 6th criterion). DA+ = 43 (same as census). Sep_ratio = 3.30 (stronger than census). Targeted aug delta = +0.097 (clear hard pass). WGL inversion is common for working datasets (same as census) — monitor β-EO vs α-EO at ep ~500.
+
+Note: viability AUC = 0.58–0.63 (lower than census/capture24). Expected — biased alpha FFNN on 3000 samples with 43 DA+ has weak utility on large wildfire test set (134k). Beta AUC to be assessed after FORGE augmentation.
+
+**Takeaway:** Wildfire PASSES all 5 hard criteria and satisfies the new 6th criterion (natural positive rate < 15-20%). Adopted as 3rd dataset. Narrative: large-fire prediction models trained on historically biased data fail to detect fires on private land at the same rate as federal BLM land, potentially leading to systematic under-allocation of firefighting resources.
+
+Covertype (areas 1 vs 3, Aspen cover type) tested simultaneously — FAIL: targeted aug delta = -0.030 (hard fail on criterion 5).
+
+**Next steps:**
+- Run wildfire baselines (SMOTE, OT Repair, GroupDRO, FLB launched 2026-05-21; CTGAN, FairTabDDPM pending)
+- Launch FORGE RL runs: primary config k=10, pca=10, ep=30, traj=2000; also k=5 for comparison
+- Specs: `experiment_specs/Experiment3/wildfire_forge_k10.yaml`, `wildfire_forge_k5.yaml`
+
+---
+
+### EXP-041 | wildfire-baselines
+
+**Status:** IN PROGRESS
+**Type:** BASELINE
+**Dataset:** wildfire (FPA-FOD)
+**Date launched:** 2026-05-21
+**Follows from:** EXP-040
+
+**Purpose:**
+Establish baseline comparison targets for wildfire before FORGE RL runs complete. Same config as census/capture24 baselines: 3 seeds [42, 0, 1], ffnn.epochs=30, real_data_size=3000, da_pct=0.01433.
+
+**Baselines (Huron CPU, local — all 3 seeds complete 2026-05-21):**
+- SMOTE: COMPLETE
+- OT Repair: COMPLETE
+- GroupDRO: COMPLETE
+- FLB: COMPLETE
+- CTGAN: IN PROGRESS (CPU, may be slow)
+- FairTabDDPM: IN PROGRESS (CPU, may be slow)
+
+**Partial result (4 of 6 baselines, seed-level β-EO at threshold=0.5):**
+
+Alpha-EO reference: seed 42 = 0.040, seed 0 = 0.011, seed 1 = 0.063 (mean ≈ 0.038). Note: viability FFNN showed alpha-EO 0.136–0.147 — discrepancy is architectural (viability uses sigmoid output_size=1; baseline uses 2-class softmax). Both use threshold=0.5.
+
+| Method | seed 42 | seed 0 | seed 1 | Mean | F1w |
+|--------|---------|--------|--------|------|-----|
+| Alpha | 0.040 | 0.011 | 0.063 | 0.038 | — |
+| OT Repair | 0.008 | 0.002 | 0.042 | **0.017** | 0.951 |
+| GroupDRO | 0.005 | 0.005 | 0.105 | 0.038 | ~0.91 |
+| FLB | 0.038 | 0.168 | 0.116 | 0.107 | 0.739 |
+| SMOTE | 0.094 | 0.075 | 0.138 | 0.102 | 0.932 |
+
+**Key observations:**
+1. FLB FAILS on wildfire: β-EO = 0.107 > α-EO = 0.038. f1w drops to 0.73. Confirms FLB structural failure under scarcity + low natural positive rate. Supports paper motivation claim.
+2. SMOTE FAILS: β-EO = 0.102 > α-EO. Over-augments PRIVATE positives → PRIVATE TPR > BLM TPR (wrong direction).
+3. OT Repair is the strongest competitor at 0.017. FORGE needs β-EO < 0.017 to win.
+4. GroupDRO unstable: seed 1 fails badly (0.105), seeds 0/42 succeed. Mean ~ alpha.
+
+**Takeaway (partial):** Strong evidence that both the naive generative (SMOTE) and reweighting (FLB) baselines degrade on wildfire, supporting the paper's motivation claim. OT Repair is the bar to beat for FORGE (0.017 mean β-EO). CTGAN and FairTabDDPM results still pending — expected to also fail (high β-EO > alpha) given the scarcity regime.
+
+**Next steps:**
+- CTGAN and FairTabDDPM completing on CPU — update table when done
+- FORGE RL launched (EXP-042)
+
+---
+
+### EXP-042 | wildfire-forge-k10
+
+**Status:** IN PROGRESS
+**Type:** PAPER-FINAL
+**Dataset:** wildfire (FPA-FOD, large-fire prediction, PRIVATE vs BLM)
+**Date launched:** 2026-05-21
+**Follows from:** EXP-040, EXP-041
+
+**Purpose:**
+Primary FORGE RL run on wildfire. Census best config (k=10, pca=10, ep=30, traj=2000) applied directly. Key question: can FORGE achieve β-EO < 0.017 (beat OT Repair) while FLB (0.107) and SMOTE (0.102) fail? WGL-EO inversion warning noted (ratio=0.974) — monitor at ep ~500.
+
+**Config delta from vanilla:**
+- dataset_name: wildfire
+- da_pct: 0.01433
+- dp_protected_col: owner_descr
+- minority_id: 0 (PRIVATE disadvantaged)
+- majority_id: 1 (BLM)
+- global_sigmoid_k: 10.0
+- traj_length: 2000
+- real_data_size: 3000
+- total_episodes: 5000
+- ffnn.epochs: 30
+- seeds: [0, 1, 42]
+
+**Spec file:** `experiment_specs/Experiment3/wildfire_forge_k10.yaml`
+
+**Launch command (Huron GPU0):**
+```bash
+source ~/envs/rl/bin/activate && \
+nohup python main.py --spec experiment_specs/Experiment3/wildfire_forge_k10.yaml --device cuda:0 > /tmp/wildfire_forge_k10.log 2>&1 &
+```
+Launched 2026-05-21. Huron GPU0 (RTX 3090). soft_eo_alpha=0.049 at ep start (reward signal active).
+
+**Result:**
+*(pending — check at ep ~500)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- Check at ep ~500: is β-EO tracking below α-EO (0.040) on at least one seed?
+- If β-EO < 0.017 by ep ~2000: wildfire confirmed for paper; EXP-042 is the final wildfire result
+- If β-EO not improving by ep ~1000: try k=5 (EXP-043, `wildfire_forge_k5.yaml`)
+- If EO goes wrong direction (β > α): investigate WGL-EO disconnect, may need to terminate

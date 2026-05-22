@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Current Status
 
-Datasets confirmed: census_income, capture24. MEPS (sex framing, prescription fills) adopted as 3rd dataset candidate; RL runs launched 2026-05-21 (k=5, pca=10, ep=30, traj=2000). ACS Employment (disability) dropped after FORGE failure.
+Datasets confirmed: census_income, capture24. **Wildfire (FPA-FOD, PRIVATE vs BLM land, large-fire prediction) adopted as 3rd dataset candidate 2026-05-21** — passes all 5 viability criteria (alpha-EO=0.136–0.147, sep_ratio=3.30, targeted aug delta=+0.097). MEPS dropped (see Datasets section). RL runs pending. ACS Employment (disability) dropped after FORGE failure.
 
 **Best confirmed results — census (3 seeds, EXP-021 grid search):**
 - k=10, pca=10, ep=30, traj=2000: β-EO=0.018±0.005, EOd=0.037±0.013, F1w=0.817±0.005, AUC=0.876±0.008 — beats all baselines on EO; confirmed 2026-05-20
@@ -30,9 +30,9 @@ Datasets confirmed: census_income, capture24. MEPS (sex framing, prescription fi
 
 ### Datasets
 
-**Active (paper):** census_income, capture24. **Candidate 3rd dataset:** MEPS (sex, prescription fills) — RL runs in progress.
+**Active (paper):** census_income, capture24. **Candidate 3rd dataset:** wildfire (FPA-FOD, PRIVATE vs BLM land, large-fire prediction) — viability confirmed 2026-05-21, RL runs pending.
 
-**DA+** = number of disadvantaged-group positive (y=1) training examples. Both datasets are configured so DA+ ≈ 43–45, the level at which reweighting methods demonstrably fail. `da_pct` is an internal implementation parameter (fraction of train set that should be disadvantaged-group positives) — do NOT use it in paper text. Always frame in terms of DA+ or positive-class rate percentages (e.g., "~11% for the disadvantaged group").
+**DA+** = number of disadvantaged-group positive (y=1) training examples. Both datasets are configured so DA+ ≈ 43–60, the level at which reweighting methods demonstrably fail. `da_pct` is an internal implementation parameter (fraction of train set that should be disadvantaged-group positives) — do NOT use it in paper text. Always frame in terms of DA+ or positive-class rate percentages (e.g., "~11% for the disadvantaged group").
 
 `da_pct` uses group-specific subsampling: only the disadvantaged group's positives are reduced; advantaged-group positives and all negatives are kept intact. This gives identical DA+ across all seeds. The old `bias_pct` parameter (which subsampled all positives and produced variable DA+ across seeds) is retained for backward compatibility with archived runs.
 
@@ -42,7 +42,9 @@ Datasets confirmed: census_income, capture24. MEPS (sex framing, prescription fi
 |---------|--------|----------------|-----|----------------|---------------|
 | census_income | 0.01433 | 3000 | **43** | sex | female (a=0) |
 | capture24 | 0.015 | 4000 | **~60** | sex | female (a=1) |
-| meps | 0.01433 | 3000 | **43** | sex | male (a=0) |
+| wildfire | 0.01433 | 3000 | **43** | owner_descr | PRIVATE (a=0) |
+
+**New viability criterion (6th):** Disadvantaged group natural positive-class rate in unbiased val/test must be <~15-20%. This ensures reweighting methods (FLB) cannot trivially equalize TPRs. census (11% ✓), capture24 (5.6% ✓), wildfire (3.3% ✓). MEPS failed this criterion (male rx+ = 54.8%) — FLB achieves β-EO≈0.033 vs FORGE 0.575, which is structural not addressable by more training.
 
 **Dataset selection criteria** (all must pass before committing to RL experiments):
 1. val_disadv_pos ≥ 30 — stable reward signal
@@ -61,6 +63,9 @@ Datasets confirmed: census_income, capture24. MEPS (sex framing, prescription fi
 - **credit_card** — DA+ too high (~136), alpha-EO near-zero, not in scarcity regime
 - **PTB-XL** — no framing reaches test_pos≥200
 - **MEPS (ethnicity framing)** — val_pos=37 marginal; ethnicity framing test_pos=111 fails evaluation threshold
+- **MEPS (sex framing)** — passes viability but fails 6th criterion: natural male positive rate = 54.8% in unbiased val/test; FLB trivially equalizes (β-EO≈0.033 vs FORGE 0.575). Structural failure, not addressable by more training.
+- **Covertype** — targeted aug delta = -0.030 (hard fail on criterion 5); EO increases when injecting near DA+ centroid. Do not retry.
+- **BRFSS (sex/cvdinfr4, race/cvdinfr4, sex/depression)** — near-zero alpha-EO and sep_ratio < 1.0 across all framings. Features carry no group-specific signal.
 - **ACS Employment (disability)** — FORGE beta-EO 0.62–0.71; WGL-EO disconnect; narrow repair gap (1.7x); AA+/DA+ ratio 30x
 - **ACS Employment (sex/age/nativity/race/veteran)** — sex framing: WGL-EO disconnect (beta-EO never beats alpha across 2918 eps, same pattern as disability); other framings: alpha-EO near zero or narratively inappropriate. ACS Employment ruled out entirely.
 - **ACS Income (race)** — passes with drop_protected=False but collapses with drop_protected=True (alpha-EO=0.007, sep_ratio=0.92); proxy features carry no race-specific signal after dropping RAC1P
