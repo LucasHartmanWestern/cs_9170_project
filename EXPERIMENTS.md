@@ -51,7 +51,7 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-042 | wildfire-forge-k10 | PAPER-FINAL | TERMINATED | wildfire | EXP-040, EXP-041 |
 | EXP-044 | wildfire-forge-k10-blm | PAPER-FINAL | IN PROGRESS | wildfire | EXP-040, EXP-041, EXP-042 |
 | EXP-043 | bank-marketing-viability | DATASET-VIABILITY | COMPLETE | bank_marketing | — |
-| EXP-046 | capture24-kfold-grid | PARAM-TUNING | READY | capture24 | EXP-025 |
+| EXP-046 | capture24-kfold-grid | PARAM-TUNING | RUNNING | capture24 | EXP-025 |
 | EXP-047 | capture24-kfold-final | PAPER-FINAL | PLANNED | capture24 | EXP-046 |
 
 ---
@@ -2230,12 +2230,28 @@ Alpha-EO by seed: seed 0 = 0.114, seed 1 = 0.064, seed 42 = 0.140. AUC: seed 0 =
 ### EXP-046 | capture24-kfold-grid
 
 **Type:** PARAM-TUNING
-**Status:** PLANNED
+**Status:** RUNNING (2026-05-25)
 **Dataset(s):** capture24 (da_pct=0.015, DA+=60)
 **Folds:** k=3 (fold_idx 0,1,2)
 **Reference config:** vanilla_config.json
 **Config delta:** Full cartesian grid — same axes as EXP-025, plus fold_idx sweep
 **Follows from:** EXP-025
+
+**Server assignment (2026-05-25):**
+
+| Fold | Server | GPU | Launch script | Output location |
+|------|--------|-----|---------------|-----------------|
+| fold0 | Oneida (129.100.226.232) | cuda:0 | `experiment_specs/capture24_kfold_grid/run_fold0_oneida.sh` | `~/cs_9170_project/training_runs/` |
+| fold1 | Aulavik (129.100.226.194) | cuda:0 | `experiment_specs/capture24_kfold_grid/run_fold1_aulavik.sh` | `~/cs_9170_project/training_runs/` |
+| fold2 | Lambda (129.100.226.208) | cuda:1 | `experiment_specs/capture24_kfold_grid/run_fold2_lambda.sh` | `~/cs_9170_project/training_runs/` |
+
+Run directories on each server are named `training_runs/SPEC_fold{N}_{hash}__G{timestamp}/`. After completion, sync to Huron with:
+```bash
+rsync -avz --progress epigou@129.100.226.232:~/cs_9170_project/training_runs/ /storage_1/epigou_storage/FORGE/oneida_kfold_runs/
+rsync -avz --progress epigou@129.100.226.194:~/cs_9170_project/training_runs/ /storage_1/epigou_storage/FORGE/aulavik_kfold_runs/
+rsync -avz --progress epigou@129.100.226.208:~/cs_9170_project/training_runs/ /storage_1/epigou_storage/FORGE/lambda_kfold_runs/
+```
+Then run `analyze_kfold.py all` pointing to each fold's result directories.
 
 ---
 
@@ -2287,8 +2303,9 @@ Then add the hyperparameter permutations block (k × pca × ratio × epochs = 81
 *(pending)*
 
 **Next steps:**
-- Generate specs (see above).
-- Run on available GPUs (Huron/Lambda/Aulavik).
+- Specs generated: `experiment_specs/capture24_kfold_grid/fold{0,1,2}.yaml` ✓
+- Launched: fold0 → Oneida cuda:0, fold1 → Aulavik cuda:0, fold2 → Lambda cuda:1 ✓
+- After ~3-4 days: rsync results to Huron (see rsync commands above).
 - Analyse with `analyze_kfold.py` — select config with lowest mean val EO across 3 folds.
 - Feed selected config into EXP-047.
 
