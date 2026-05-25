@@ -1,7 +1,7 @@
 #!/bin/bash
 # EXP-046 fold 0/3 — Oneida cuda:0
 # Launch: bash experiment_specs/capture24_kfold_grid/run_fold0_oneida.sh
-set -euo pipefail
+set -eo pipefail
 
 cd ~/cs_9170_project
 
