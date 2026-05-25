@@ -2828,6 +2828,234 @@ class Dataset:
         return (X_train_theta, X_val_theta, X_test_theta,
                 y_train_theta, y_val_theta, y_test_theta)
 
+    # ------------------------------------------------------------------
+    # Subject-level k-fold helpers for capture24
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _c24_kfold_assignments(cache, k: int):
+        """
+        Build a deterministic stratified subject-level fold assignment.
+
+        Subjects are split into female and male pools. Within each pool they
+        are sorted ascending by per-subject MVPA rate, then assigned to folds
+        0..k-1 in round-robin order (interleaving low and high MVPA subjects
+        across folds). The result is a list of k lists, each containing the
+        subject IDs (integer indices into cache["subject_ids"]) assigned to
+        that fold.
+
+        The assignment is deterministic (no randomness) so every method —
+        FORGE, alpha, and all baselines — sees the identical partitioning.
+        """
+        y_all   = cache["y"].astype(int)
+        a_all   = cache["a"].astype(int)
+        sid_all = cache["subject_ids"].astype(int)
+        n_subjects = int(sid_all.max()) + 1
+
+        subject_sex  = np.array([int(np.bincount(a_all[sid_all == s]).argmax())
+                                  for s in range(n_subjects)])
+        subject_mvpa = np.array([(y_all[sid_all == s] == 1).mean()
+                                  for s in range(n_subjects)])
+
+        female_subs = np.where(subject_sex == 1)[0]
+        male_subs   = np.where(subject_sex == 0)[0]
+
+        # Sort each pool ascending by MVPA rate, then round-robin into folds
+        f_sorted = female_subs[np.argsort(subject_mvpa[female_subs])]
+        m_sorted = male_subs[np.argsort(subject_mvpa[male_subs])]
+
+        folds = [[] for _ in range(k)]
+        for i, s in enumerate(f_sorted):
+            folds[i % k].append(int(s))
+        for i, s in enumerate(m_sorted):
+            folds[i % k].append(int(s))
+
+        return folds  # list of k lists
+
+    def split_capture24_kfold(
+        self,
+        fold_idx: int,
+        n_folds: int = 5,
+        train_size=None,
+        da_pct=None,
+        pca_components: int = 10,
+        dp_protected_col: str = "sex",
+    ):
+        """
+        Subject-level k-fold split for capture24.
+
+        Fold assignment is deterministic (stratified by per-subject female-MVPA
+        rate, round-robin). For each rotation:
+          test   = fold fold_idx
+          val    = fold (fold_idx + 1) % n_folds
+          train  = remaining n_folds - 2 folds
+
+        Scarcity injection (da_pct) is applied to training windows only.
+        Val and test retain the natural class distribution.
+        Val is capped at train_size windows (same as split_capture24) so the
+        reward signal is not dominated by large unbiased windows.
+        Test is NOT subsampled — full subject windows for stable EO estimation.
+        """
+        data_dir   = Path(self.data_path)
+        cache_path = data_dir / "capture24_features_cache.npz"
+        if not cache_path.exists():
+            raise FileNotFoundError(
+                f"CAPTURE-24 feature cache not found at {cache_path}.\n"
+                "Run: python scripts/download_capture24.py --data-dir datasets/capture24"
+            )
+
+        cache   = np.load(cache_path, allow_pickle=True)
+        X_all   = cache["X"]
+        y_all   = cache["y"].astype(int)
+        a_all   = cache["a"].astype(int)
+        sid_all = cache["subject_ids"].astype(int)
+
+        n_subjects = int(sid_all.max()) + 1
+        print(f"[capture24-kfold] Cache: {len(X_all):,} windows, {n_subjects} subjects, "
+              f"fold {fold_idx}/{n_folds}")
+
+        folds = Dataset._c24_kfold_assignments(cache, n_folds)
+
+        test_fold  = fold_idx
+        val_fold   = (fold_idx + 1) % n_folds
+        train_folds = [f for f in range(n_folds) if f not in (test_fold, val_fold)]
+
+        test_subs  = np.array(folds[test_fold])
+        val_subs   = np.array(folds[val_fold])
+        train_subs = np.concatenate([folds[f] for f in train_folds])
+
+        tr_mask = np.isin(sid_all, train_subs)
+        va_mask = np.isin(sid_all, val_subs)
+        te_mask = np.isin(sid_all, test_subs)
+
+        feature_names = [
+            f"{ax}_{stat}"
+            for ax in ("x", "y", "z", "vm")
+            for stat in ("mean", "std", "min", "max", "rms", "p25", "p75", "iqr")
+        ] + ["sex"]
+
+        X_train_df = pd.DataFrame(
+            np.column_stack([X_all[tr_mask], a_all[tr_mask]]), columns=feature_names)
+        X_val_df   = pd.DataFrame(
+            np.column_stack([X_all[va_mask], a_all[va_mask]]), columns=feature_names)
+        X_test_df  = pd.DataFrame(
+            np.column_stack([X_all[te_mask], a_all[te_mask]]), columns=feature_names)
+
+        y_train = y_all[tr_mask]
+        y_val   = y_all[va_mask]
+        y_test  = y_all[te_mask]
+
+        A_train = pd.Series(a_all[tr_mask], name="sex")
+        A_val   = pd.Series(a_all[va_mask], name="sex")
+        A_test  = pd.Series(a_all[te_mask], name="sex")
+
+        # Bias injection: training only
+        def apply_da_pct_bias_c24(df_split, y_split, a_split, da_pct, n_total):
+            df = df_split.copy()
+            df["__y__"] = y_split
+            df["__a__"] = (a_split.to_numpy(dtype=np.int64)
+                           if hasattr(a_split, "to_numpy") else np.array(a_split, dtype=np.int64))
+            target_da_plus = max(1, round(da_pct * n_total))
+            disadv_pos_mask = (df["__a__"] == 1) & (df["__y__"] == 1)
+            disadv_pos = df[disadv_pos_mask]
+            rest       = df[~disadv_pos_mask]
+            keep_n = min(len(disadv_pos), target_da_plus)
+            if keep_n < target_da_plus:
+                print(f"  [da_pct WARNING] Only {len(disadv_pos)} disadvantaged positives "
+                      f"available; target was {target_da_plus}.")
+            disadv_pos_kept = disadv_pos.sample(n=keep_n, random_state=self.seed, replace=False)
+            n_rest_needed = n_total - keep_n
+            rest_kept = (rest.sample(n=n_rest_needed, random_state=self.seed, replace=False)
+                         if len(rest) >= n_rest_needed else rest)
+            result = (pd.concat([disadv_pos_kept, rest_kept])
+                      .sample(frac=1.0, random_state=self.seed)
+                      .reset_index(drop=True))
+            y_out = result["__y__"].to_numpy(dtype=int)
+            a_out = result["__a__"].to_numpy(dtype=np.int64)
+            return result.drop(columns=["__y__", "__a__"]), y_out, a_out
+
+        if da_pct is not None:
+            n_total = train_size if train_size is not None else len(X_train_df)
+            X_train_b, y_train_b, a_train = apply_da_pct_bias_c24(
+                X_train_df, y_train, A_train, da_pct, n_total)
+        else:
+            X_train_b = X_train_df.copy().reset_index(drop=True)
+            y_train_b = y_train.copy()
+            a_train   = A_train.to_numpy(dtype=np.int64)
+
+        # Val: unbiased, capped at train_size for stable reward
+        X_val_b  = X_val_df.copy().reset_index(drop=True)
+        y_val_b  = y_val.copy()
+        a_val    = A_val.to_numpy(dtype=np.int64)
+        _val_cap = train_size if train_size is not None else None
+        if _val_cap is not None and _val_cap < len(X_val_b):
+            X_val_b, _, y_val_b, _, a_val, _ = train_test_split(
+                X_val_b, y_val_b, a_val,
+                train_size=_val_cap, random_state=self.seed, stratify=y_val_b,
+            )
+
+        # Test: full natural distribution (no subsampling)
+        X_test_b = X_test_df.copy().reset_index(drop=True)
+        y_test_b = y_test.copy()
+        a_test   = A_test.to_numpy(dtype=np.int64)
+
+        # Scaler fit on train only
+        scaler = StandardScaler()
+        Xtr_z  = scaler.fit_transform(X_train_b.values)
+        Xva_z  = scaler.transform(X_val_b.values)
+        Xte_z  = scaler.transform(X_test_b.values)
+
+        X_tr_th, X_va_th, X_te_th, pca = self._to_theta(
+            Xtr_z, Xva_z, Xte_z, pca_components=pca_components
+        )
+
+        X_train_theta = torch.tensor(X_tr_th, dtype=torch.float32, device=self.device)
+        X_val_theta   = torch.tensor(X_va_th, dtype=torch.float32, device=self.device)
+        X_test_theta  = torch.tensor(X_te_th, dtype=torch.float32, device=self.device)
+        y_train_theta = torch.tensor(y_train_b, dtype=torch.long,  device=self.device)
+        y_val_theta   = torch.tensor(y_val_b,   dtype=torch.long,  device=self.device)
+        y_test_theta  = torch.tensor(y_test_b,  dtype=torch.long,  device=self.device)
+
+        self.a_train          = torch.tensor(a_train, dtype=torch.long, device=self.device)
+        self.a_val            = torch.tensor(a_val,   dtype=torch.long, device=self.device)
+        self.a_test           = torch.tensor(a_test,  dtype=torch.long, device=self.device)
+        self.dp_protected_col = dp_protected_col
+        self.pca_transform    = pca
+
+        def _log(tag, ys, as_):
+            n = len(ys); n1 = int((ys == 1).sum())
+            nf = int((as_ == 1).sum())
+            nfp = int(((ys == 1) & (as_ == 1)).sum())
+            nmp = int(((ys == 1) & (as_ == 0)).sum())
+            print(f"[{tag}] size={n:,}, MVPA={n1:,} ({100.*n1/n:.1f}%), "
+                  f"female={nf:,}, female_MVPA={nfp:,}, male_MVPA={nmp:,}")
+
+        _log("TRAIN", y_train_b, a_train)
+        _log("VAL",   y_val_b,   a_val)
+        _log("TEST",  y_test_b,  a_test)
+        print(f"train_folds={train_folds} val_fold={val_fold} test_fold={test_fold} "
+              f"| theta_dim={X_train_theta.shape[1]}")
+
+        # GAN view for CTGAN/FairTabDDPM baselines
+        try:
+            self._gan_view_cache = {
+                "supported":           True,
+                "X_train_unbiased_df": X_train_df.copy(),
+                "y_train_unbiased":    y_train.astype(int).copy(),
+                "encoder":             None,
+                "scaler":              scaler,
+                "pca":                 pca,
+                "use_pca":             self.use_pca,
+                "pca_components":      int(pca_components),
+                "cat_cols":            [],
+                "num_cols":            feature_names,
+            }
+        except Exception:
+            pass
+
+        return (X_train_theta, X_val_theta, X_test_theta,
+                y_train_theta, y_val_theta, y_test_theta)
+
     def split_fairjob(
         self,
         train_size=None,
@@ -4707,6 +4935,11 @@ class Dataset:
             c24_kwargs = {k: v for k, v in kwargs.items()
                           if k not in ("drop_protected", "protected_cols",
                                        "win_seconds", "step_seconds")}
+            if "fold_idx" in c24_kwargs:
+                kfold_keys = ("fold_idx", "n_folds", "train_size", "da_pct",
+                              "pca_components", "dp_protected_col")
+                kfold_kwargs = {k: v for k, v in c24_kwargs.items() if k in kfold_keys}
+                return self.split_capture24_kfold(**kfold_kwargs)
             return self.split_capture24(**c24_kwargs)
         elif self.dataset_name == "compas":
             kw = {k: v for k, v in kwargs.items() if k not in _tabular_drop}

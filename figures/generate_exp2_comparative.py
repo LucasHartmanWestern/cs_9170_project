@@ -29,8 +29,8 @@ METHOD_MAP = {
 }
 
 PANELS = [
-    {"col": "roc_auc",      "title": "ROC-AUC",   "ylabel": "ROC-AUC",   "invert": False},
     {"col": "eo_tpr_diff",  "title": "EO' Score",  "ylabel": "EO' Score", "invert": True},
+    {"col": "roc_auc",      "title": "ROC-AUC",   "ylabel": "ROC-AUC",   "invert": False},
 ]
 
 EPS = 1e-8
@@ -77,6 +77,13 @@ for ax, panel in zip(axes, PANELS):
 for ax in axes:
     ax.set_xlabel("Dataset", fontsize=11)
 
+# Ensure EO' Score axis shows 1.0 as an upper reference tick
+ax_eo = axes[0]
+lo, _ = ax_eo.get_ylim()
+ax_eo.set_ylim(lo, 1.04)
+ticks = sorted(set(list(ax_eo.get_yticks()) + [1.0]))
+ax_eo.set_yticks([t for t in ticks if lo <= t <= 1.04])
+
 # shared legend below the plot
 handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels,
@@ -86,7 +93,7 @@ fig.legend(handles, labels,
            title="Method",
            title_fontsize=9,
            ncol=4,
-           bbox_to_anchor=(0.5, 0.00))
+           bbox_to_anchor=(0.5, -0.03))
 
 plt.tight_layout(rect=[0, 0.1, 1, 1])
 plt.savefig(OUT_PATH, dpi=150, bbox_inches="tight")

@@ -68,6 +68,8 @@ class FairnessLossBalancingTrainer:
         step_seconds: float = 2.5,
         dp_protected_col: str | None = None,
         acs_states: list = None,
+        fold_idx: int = None,
+        n_folds: int = 5,
     ):
         self.exp_group      = exp_group
         self.spec_name      = spec_name
@@ -85,6 +87,8 @@ class FairnessLossBalancingTrainer:
         self.step_seconds   = step_seconds
         self.dp_protected_col = dp_protected_col
         self.acs_states     = acs_states
+        self.fold_idx       = fold_idx
+        self.n_folds        = n_folds
         self.project_root   = _PROJECT_ROOT
 
         torch.manual_seed(seed)
@@ -136,6 +140,7 @@ class FairnessLossBalancingTrainer:
             step_seconds   = self.step_seconds,
             **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
             **({"acs_states": self.acs_states} if self.acs_states is not None else {}),
+            **({"fold_idx": self.fold_idx, "n_folds": self.n_folds} if self.fold_idx is not None else {}),
         )
         feature_dim = x_train.shape[1]
 

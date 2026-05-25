@@ -60,7 +60,9 @@ def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
         use_pca=True,
     )
 
-    dp_col = spec.get("dp_protected_col")
+    dp_col   = spec.get("dp_protected_col")
+    fold_idx = spec.get("fold_idx")
+    n_folds  = spec.get("n_folds", 5)
     x_tr, x_val, _, y_tr, y_val, _ = ds.get_data_splits(
         train_size=spec.get("real_data_size"),
         bias_pct=spec.get("bias_pct"),
@@ -73,6 +75,7 @@ def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
         step_seconds=float(spec.get("step_seconds", 2.5)),
         **({"dp_protected_col": dp_col} if dp_col is not None else {}),
         **({"acs_states": spec.get("acs_states")} if spec.get("acs_states") is not None else {}),
+        **({"fold_idx": fold_idx, "n_folds": n_folds} if fold_idx is not None else {}),
     )
 
     ffnn_cfg   = spec.get("ffnn", {})
@@ -114,7 +117,13 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
     print(f"[run_baseline] spec={spec_path}")
     print(f"[run_baseline] device={device}")
     print(f"[run_baseline] exp_group={exp_group}")
+    fold_idx = spec.get("fold_idx")
+    n_folds  = int(spec.get("n_folds", 5))
+    fold_kwargs = {"fold_idx": fold_idx, "n_folds": n_folds} if fold_idx is not None else {}
+
     print(f"[run_baseline] seeds={seeds}")
+    if fold_idx is not None:
+        print(f"[run_baseline] k-fold mode: fold_idx={fold_idx}, n_folds={n_folds}")
     if eo_guard_threshold > 0.0:
         print(f"[run_baseline] eo_guard_threshold={eo_guard_threshold} (fallback pool: {fallback_pool[:5]}...)")
 
@@ -159,6 +168,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
                 acs_states=spec.get("acs_states"),
+                **fold_kwargs,
             )
         elif baseline == "gaussian_ot_repair":
             from benchmarks.gaussian_ot_repair import GaussianOTRepairTrainer
@@ -183,6 +193,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
                 acs_states=spec.get("acs_states"),
+                **fold_kwargs,
             )
         elif baseline == "ctgan":
             from benchmarks.ctgan_baseline import CTGANBaselineTrainer
@@ -207,6 +218,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
                 acs_states=spec.get("acs_states"),
+                **fold_kwargs,
             )
         elif baseline == "fairness_loss_balancing":
             from benchmarks.fairness_loss_balancing import FairnessLossBalancingTrainer
@@ -231,6 +243,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
                 acs_states=spec.get("acs_states"),
+                **fold_kwargs,
             )
         elif baseline == "smote":
             from benchmarks.smote_baseline import SMOTEBaselineTrainer
@@ -255,6 +268,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
                 acs_states=spec.get("acs_states"),
+                **fold_kwargs,
             )
         elif baseline == "gaussian_augment":
             from benchmarks.gaussian_augment import GaussianAugmentTrainer
@@ -278,7 +292,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 win_seconds=win_seconds,
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
-                acs_states=spec.get("acs_states"),
+                **fold_kwargs,
             )
         elif baseline == "fairtabddpm":
             from benchmarks.fairtabddpm_baseline import FairTabDDPMTrainer
@@ -303,6 +317,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 step_seconds=step_seconds,
                 dp_protected_col=spec.get("dp_protected_col", None),
                 acs_states=spec.get("acs_states"),
+                **fold_kwargs,
             )
         else:
             raise ValueError(

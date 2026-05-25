@@ -51,6 +51,8 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-042 | wildfire-forge-k10 | PAPER-FINAL | TERMINATED | wildfire | EXP-040, EXP-041 |
 | EXP-044 | wildfire-forge-k10-blm | PAPER-FINAL | IN PROGRESS | wildfire | EXP-040, EXP-041, EXP-042 |
 | EXP-043 | bank-marketing-viability | DATASET-VIABILITY | COMPLETE | bank_marketing | — |
+| EXP-046 | capture24-kfold-grid | PARAM-TUNING | READY | capture24 | EXP-025 |
+| EXP-047 | capture24-kfold-final | PAPER-FINAL | PLANNED | capture24 | EXP-046 |
 
 ---
 
@@ -2128,6 +2130,47 @@ Launched 2026-05-22. Huron GPU0 (RTX 3090). PID 70404. soft_eo_alpha=0.1284 at e
 
 ---
 
+### EXP-045 | census-final-5seeds
+
+**Status:** RUNNING
+**Type:** FORGE + BASELINES
+**Dataset:** census_income
+**Goal:** Bring census results from 3 seeds to 5 seeds for final paper reporting. Seeds 0, 1, 42 already complete (k=10 best config). Adding seeds 2 and 3.
+
+**Config (FORGE):** k=10, pca=10, ep=30, traj=2000, real=3000, da_pct=0.01433, radius_clip=3.0 — identical to EXP-021 best config.
+
+**FORGE runs:**
+- Seed 2 — GPU0 (Huron), PID 20056, output → `/storage_1/epigou_storage/FORGE/experiment3/census_forge/`
+- Seed 3 — GPU1 (Huron), PID 20453, output → `/storage_1/epigou_storage/FORGE/experiment3/census_forge/`
+- Seeds 0, 1, 42 already copied from `training_runs_k10/SPECcensus_k10_r04_e30_..._249e76f9/`
+
+**Baseline runs (all 5 seeds [0, 1, 2, 3, 42], CPU, Huron):**
+- group_dro PID 23521
+- fairness_loss_balancing PID 23522
+- gaussian_ot_repair PID 23523
+- smote PID 23524
+- ctgan PID 23525
+- fairtabddpm PID 23526
+- Logs → `/storage_1/epigou_storage/FORGE/experiment3/census_baselines/{method}_all5seeds.log`
+- All 6 methods use da_pct=0.01433, ffnn epochs=30, pca=10 — consistent with FORGE config.
+- **Replaces** the existing 3-seed baseline results in main_table_metrics_per_seed.csv, which used da_pct=0.11 and epochs=20 and had identical values across all seeds (likely a single run replicated).
+
+**Specs:**
+- `experiment_specs/exp045_census_forge_seed2.yaml`
+- `experiment_specs/exp045_census_forge_seed3.yaml`
+- `experiment_specs/exp045_census_{method}_seeds23.yaml` for each of 6 baseline methods
+
+**When complete:**
+1. Copy seed_2 and seed_3 FORGE dirs into `/storage_1/epigou_storage/FORGE/experiment3/census_forge/`
+2. Copy baseline result dirs into `/storage_1/epigou_storage/FORGE/experiment3/census_baselines/`
+3. Run `check_run.py` on experiment3/census_forge/ to get 5-seed summary
+4. Update main_table_metrics_per_seed.csv with new seed results
+5. Regenerate Figure 4 and Table 3
+
+**Follows from:** EXP-021 (census k=10 grid search best config)
+
+---
+
 ### EXP-043 | bank-marketing-viability
 
 **Status:** COMPLETE
@@ -2181,3 +2224,109 @@ Alpha-EO by seed: seed 0 = 0.114, seed 1 = 0.064, seed 42 = 0.140. AUC: seed 0 =
 - HOLD — do not run FORGE on bank_marketing unless wildfire EXP-042 fails
 - If wildfire fails: run baselines first, then launch bank_marketing FORGE with k=10 config
 - Spec not yet created — create only if needed
+
+---
+
+### EXP-046 | capture24-kfold-grid
+
+**Type:** PARAM-TUNING
+**Status:** PLANNED
+**Dataset(s):** capture24 (da_pct=0.015, DA+=60)
+**Folds:** k=3 (fold_idx 0,1,2)
+**Reference config:** vanilla_config.json
+**Config delta:** Full cartesian grid — same axes as EXP-025, plus fold_idx sweep
+**Follows from:** EXP-025
+
+---
+
+**Purpose:**
+Replace EXP-025's single-split grid with subject-level 3-fold cross-validation. The original EXP-025 grid suffered severe val-test discordance (val EO ranking had near-zero correlation with test EO) because the single-split val set came from different subjects than the test set, with highly variable per-subject MVPA rates. k-fold averaging neutralises this: each config is evaluated across all subject populations, giving a stable mean val EO for selection.
+
+**Why k=3 for grid (not k=5):** Compute budget. k=3 × N_configs is sufficient for stable config ranking; k=5 is reserved for the final selected config + baselines (EXP-047) where per-fold error bars are what gets reported in the paper.
+
+**Parameters swept:** Same as EXP-025:
+
+| Parameter | Values |
+|---|---|
+| `global_sigmoid_k` | [0, 3, 5] |
+| `pca_components` | [5, 10, 15] |
+| `ratio_trajectory` | [0.2, 0.4, 0.6] |
+| `ffnn.epochs` | [10, 20, 30] |
+
+**Fixed base patches:** dataset_name=capture24, da_pct=0.015, minority_id=1, majority_id=0, dp_protected_col=sex, win_seconds=1.0, step_seconds=0.5, total_episodes=5000, reward_mode=wgl, n_folds=3. One run per (config × fold_idx). No seed sweep — fold_idx replaces seed as the source of variance.
+
+**Selection criterion:** Lowest mean val EO across 3 folds (plain mean, no std penalty). Val/test never share subjects — no leakage.
+
+**Infrastructure implemented (2026-05-25):**
+- `dataset.py`: `_c24_kfold_assignments()` (deterministic stratified fold builder) + `split_capture24_kfold()` (train/val/test from disjoint subject folds, bias injection train-only).
+- `training.py`: reads `fold_idx`/`n_folds` from spec, passes to `get_data_splits`, logs in `meta.json`.
+- `make_spec.py`: `--fold-sweep N` flag generates one spec per fold.
+- All 7 baseline trainers + `run_baseline.py`: accept and forward `fold_idx`/`n_folds`.
+- `analyze_kfold.py`: aggregates per-fold results into mean±std table.
+
+**Pre-flight confirmed (2026-05-25):**
+- k=3 fold min val female positives: 7,243 (>>200 threshold).
+- Fold assignments are seed-invariant (deterministic stratification).
+- DA+=60 exact across all folds.
+- Smoke test confirmed fold routing and meta.json logging.
+
+**Specs to generate:**
+```bash
+python make_spec.py --base vanilla_config.json --name capture24_kfold_grid \
+  --patch dataset_name=capture24 da_pct=0.015 minority_id=1 majority_id=0 \
+          dp_protected_col=sex win_seconds=1.0 step_seconds=0.5 \
+          total_episodes=5000 reward_mode=wgl n_folds=3 \
+  --fold-sweep 3
+```
+Then add the hyperparameter permutations block (k × pca × ratio × epochs = 81 configs × 3 folds = 243 runs).
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- Generate specs (see above).
+- Run on available GPUs (Huron/Lambda/Aulavik).
+- Analyse with `analyze_kfold.py` — select config with lowest mean val EO across 3 folds.
+- Feed selected config into EXP-047.
+
+---
+
+### EXP-047 | capture24-kfold-final
+
+**Type:** PAPER-FINAL
+**Status:** PLANNED
+**Dataset(s):** capture24 (da_pct=0.015, DA+=60)
+**Folds:** k=5 (fold_idx 0–4)
+**Reference config:** vanilla_config.json + best config from EXP-046
+**Config delta:** fold_idx sweep at k=5, selected hyperparameters
+**Follows from:** EXP-046
+
+---
+
+**Purpose:**
+Final reported capture24 results using the config selected in EXP-046. k=5 folds gives more stable mean±std than k=3 for the paper's results table. All six baselines run on the identical k=5 fold structure for direct comparison.
+
+**Selection criterion used:** Mean val EO across EXP-046 k=3 folds (plain mean).
+
+**Reporting:** Mean±std of TEST EO across 5 folds. Wide error bars are honest and attributed to subject-level distribution shift — this is the correct framing for wearable data.
+
+**Baselines to run (all 6, identical folds):**
+GroupDRO, OT Repair, FLB, SMOTE, CTGAN, FairTabDDPM — each with fold_idx ∈ {0,1,2,3,4}, n_folds=5, same da_pct and real_data_size as FORGE.
+
+**Compute estimate:** ~6 hr/fold × 5 folds = ~30 hr FORGE + ~(1–4 hr/fold) × 5 × 6 baselines.
+
+**Specs to generate:** After EXP-046 completes and best config is identified.
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+- Blocked on EXP-046 completion.
+- Once best config known, generate 5 fold specs for FORGE + 5×6 baseline specs.
+- Analyse with `python analyze_kfold.py all <results_root>`.

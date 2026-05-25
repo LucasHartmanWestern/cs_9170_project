@@ -266,6 +266,10 @@ class Training:
         #dataset protected attribute column (passed to get_data_splits)
         self.dp_protected_col=spec.get("dp_protected_col", None)
 
+        # capture24 k-fold CV (fold_idx=None means use legacy single-split)
+        self.fold_idx  = spec.get("fold_idx",  None)
+        self.n_folds   = spec.get("n_folds",   5)
+
         #ACS Employment: list of state codes to load (None = default single state)
         self.acs_states=spec.get("acs_states", None)
 
@@ -1191,6 +1195,10 @@ class Training:
             # dataset-specific windowing (capture24); needed to reconstruct PCA post-hoc
             "win_seconds": self.win_seconds,
             "step_seconds": self.step_seconds,
+
+            # capture24 k-fold CV (None = legacy single-split)
+            "fold_idx": self.fold_idx,
+            "n_folds":  self.n_folds if self.fold_idx is not None else None,
         }
 
         # create beta factory once (so tracker can rehydrate best-beta for final test)
@@ -1225,6 +1233,8 @@ class Training:
                     bias_val=self.bias_val,
                     win_seconds=self.win_seconds,
                     step_seconds=self.step_seconds,
+                    **({"fold_idx": self.fold_idx, "n_folds": self.n_folds}
+                       if self.fold_idx is not None else {}),
                     **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
                     **({"acs_states": self.acs_states} if self.acs_states is not None else {}),
                     **({"pool_pos_fraction": self.pool_pos_fraction} if self.pool_pos_fraction is not None else {}),

@@ -130,7 +130,11 @@ def slurm_time_for(spec: dict, override: str | None) -> str:
     if override:
         return override
     eps = spec.get("total_episodes", 6000)
-    seeds = len(spec.get("seeds", [1]))
+    seeds_val = spec.get("seeds", [1])
+    seeds = len(seeds_val) if seeds_val is not None else 1
+    # In k-fold mode one spec = one fold = 1 run
+    if spec.get("fold_idx") is not None:
+        seeds = 1
     # Rough estimate: ~8s/ep on GPU × seeds, +20% buffer
     est_hours = (eps * seeds * 9) / 3600 * 1.2
     if est_hours <= 1.5:
@@ -203,14 +207,36 @@ def main():
                     help="Patches in dot-notation: key=value ...")
     ap.add_argument("--smoke",   action="store_true", help="500 eps, 1 seed, short time")
     ap.add_argument("--medium",  action="store_true", help="1500 eps, 1 seed")
-    ap.add_argument("--sweep",   nargs="+",     default=None, metavar="KEY VAL ...",
+    ap.add_argument("--sweep",      nargs="+",     default=None, metavar="KEY VAL ...",
                     help="KEY val1 val2 ... — generate one spec per value")
+    ap.add_argument("--fold-sweep", type=int,      default=None, metavar="N_FOLDS",
+                    help="Generate one spec per fold (fold_idx 0..N-1), patching fold_idx and n_folds")
     ap.add_argument("--time",    default=None,  help="Override SLURM time")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
     base_spec, base_name = load_base_spec(args.base)
     scale = "smoke" if args.smoke else ("medium" if args.medium else None)
+
+    # ── Fold sweep mode ─────────────────────────────────────────────────────
+    if args.fold_sweep:
+        n_folds = args.fold_sweep
+        for fold_idx in range(n_folds):
+            patches = list(args.patch) + [
+                f"fold_idx={fold_idx}",
+                f"n_folds={n_folds}",
+            ]
+            spec = apply_patches(base_spec, patches)
+            if scale:
+                spec = apply_scale(spec, scale)
+            suffix = "_smoke" if args.smoke else ("_medium" if args.medium else "")
+            name = args.name or f"{base_name}_fold{fold_idx}of{n_folds}{suffix}"
+            if args.name:
+                name = f"{args.name}_fold{fold_idx}of{n_folds}{suffix}"
+            slurm_time = slurm_time_for(spec, args.time)
+            print(f"\n── {name}  [fold_idx={fold_idx}, n_folds={n_folds}]  time={slurm_time}")
+            create_spec(name, spec, slurm_time, args.dry_run)
+        return
 
     # ── Sweep mode ──────────────────────────────────────────────────────────
     if args.sweep:

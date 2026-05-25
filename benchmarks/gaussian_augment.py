@@ -89,6 +89,8 @@ class GaussianAugmentTrainer:
         win_seconds: float = 5.0,
         step_seconds: float = 2.5,
         dp_protected_col: str | None = None,
+        fold_idx: int = None,
+        n_folds: int = 5,
     ):
         self.exp_group      = exp_group
         self.spec_name      = spec_name
@@ -106,6 +108,8 @@ class GaussianAugmentTrainer:
         self.win_seconds    = win_seconds
         self.step_seconds   = step_seconds
         self.dp_protected_col = dp_protected_col
+        self.fold_idx       = fold_idx
+        self.n_folds        = n_folds
         self.project_root   = _PROJECT_ROOT
         self.pca_components = pca_components
         self.ffnn_overrides = ffnn or {}
@@ -142,6 +146,7 @@ class GaussianAugmentTrainer:
             win_seconds=self.win_seconds,
             step_seconds=self.step_seconds,
             **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
+            **({"fold_idx": self.fold_idx, "n_folds": self.n_folds} if self.fold_idx is not None else {}),
         )
         feature_dim = x_train.shape[1]
 
