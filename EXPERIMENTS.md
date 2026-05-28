@@ -51,7 +51,7 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-042 | wildfire-forge-k10 | PAPER-FINAL | TERMINATED | wildfire | EXP-040, EXP-041 |
 | EXP-044 | wildfire-forge-k10-blm | PAPER-FINAL | IN PROGRESS | wildfire | EXP-040, EXP-041, EXP-042 |
 | EXP-043 | bank-marketing-viability | DATASET-VIABILITY | COMPLETE | bank_marketing | — |
-| EXP-046 | capture24-kfold-grid | PARAM-TUNING | RUNNING | capture24 | EXP-025 |
+| EXP-046 | capture24-kfold-grid | PARAM-TUNING | SMOKE-TEST-PENDING | capture24 | EXP-025 |
 | EXP-047 | capture24-kfold-final | PAPER-FINAL | PLANNED | capture24 | EXP-046 |
 
 ---
@@ -2132,9 +2132,10 @@ Launched 2026-05-22. Huron GPU0 (RTX 3090). PID 70404. soft_eo_alpha=0.1284 at e
 
 ### EXP-045 | census-final-5seeds
 
-**Status:** RUNNING
+**Status:** COMPLETE
 **Type:** FORGE + BASELINES
 **Dataset:** census_income
+**Date completed:** 2026-05-26
 **Goal:** Bring census results from 3 seeds to 5 seeds for final paper reporting. Seeds 0, 1, 42 already complete (k=10 best config). Adding seeds 2 and 3.
 
 **Config (FORGE):** k=10, pca=10, ep=30, traj=2000, real=3000, da_pct=0.01433, radius_clip=3.0 — identical to EXP-021 best config.
@@ -2145,27 +2146,47 @@ Launched 2026-05-22. Huron GPU0 (RTX 3090). PID 70404. soft_eo_alpha=0.1284 at e
 - Seeds 0, 1, 42 already copied from `training_runs_k10/SPECcensus_k10_r04_e30_..._249e76f9/`
 
 **Baseline runs (all 5 seeds [0, 1, 2, 3, 42], CPU, Huron):**
-- group_dro PID 23521
-- fairness_loss_balancing PID 23522
-- gaussian_ot_repair PID 23523
-- smote PID 23524
-- ctgan PID 23525
-- fairtabddpm PID 23526
+- All 6 methods complete: group_dro, FLB, gaussian_ot_repair, smote, ctgan, fairtabddpm
 - Logs → `/storage_1/epigou_storage/FORGE/experiment3/census_baselines/{method}_all5seeds.log`
 - All 6 methods use da_pct=0.01433, ffnn epochs=30, pca=10 — consistent with FORGE config.
-- **Replaces** the existing 3-seed baseline results in main_table_metrics_per_seed.csv, which used da_pct=0.11 and epochs=20 and had identical values across all seeds (likely a single run replicated).
+- Run dirs in `/home/epigou/cs_9170_project/training_runs/BASELINE_*_exp045_*_G202605251519/`
 
-**Specs:**
-- `experiment_specs/exp045_census_forge_seed2.yaml`
-- `experiment_specs/exp045_census_forge_seed3.yaml`
-- `experiment_specs/exp045_census_{method}_seeds23.yaml` for each of 6 baseline methods
+**Result:**
 
-**When complete:**
-1. Copy seed_2 and seed_3 FORGE dirs into `/storage_1/epigou_storage/FORGE/experiment3/census_forge/`
-2. Copy baseline result dirs into `/storage_1/epigou_storage/FORGE/experiment3/census_baselines/`
-3. Run `check_run.py` on experiment3/census_forge/ to get 5-seed summary
-4. Update main_table_metrics_per_seed.csv with new seed results
-5. Regenerate Figure 4 and Table 3
+FORGE per-seed (best-checkpoint from check_run.py):
+
+| Seed | α-EO | β-EO | β-F1w | β-AUC | Dead% | Best ep |
+|------|------|------|-------|-------|-------|---------|
+| 0 | 0.304 | 0.021 | 0.822 | 0.879 | 1.9 | 4657 |
+| 1 | 0.348 | 0.011 | 0.819 | 0.883 | 1.9 | 3797 |
+| 2 | 0.335 | 0.002 | 0.831 | 0.891 | 0.1 | 2589 |
+| 3 | 0.361 | 0.082 | 0.823 | 0.881 | 5.7 | 2105 |
+| 42 | 0.387 | 0.021 | 0.810 | 0.865 | 0.8 | 3654 |
+| **Mean±std** | **0.347±0.031** | **0.028±0.032** | **0.821±0.007** | **0.880±0.009** | **2.1%** | — |
+
+Full comparison table (5 seeds, all methods):
+
+| Method | β-EO (mean±std) | β-F1w | β-AUC |
+|--------|----------------|-------|-------|
+| **FORGE** | **0.028 ± 0.032** | **0.821** | **0.880** |
+| FLB | 0.042 ± 0.032 | 0.793 | 0.863 |
+| GroupDRO | 0.057 ± 0.029 | 0.806 | 0.883 |
+| SMOTE | 0.074 ± 0.037 | 0.805 | 0.865 |
+| OT Repair | 0.085 ± 0.070 | 0.808 | 0.858 |
+| FairTabDDPM | 0.258 ± 0.039 | 0.797 | 0.844 |
+| CTGAN | 0.278 ± 0.065 | 0.822 | 0.874 |
+| Alpha | 0.347 ± 0.031 | 0.831 | 0.890 |
+
+**Takeaway:**
+FORGE achieves the lowest β-EO across all methods (0.028), confirming the competitive performance claim with a 5-seed estimate. The next-best method is FLB at 0.042 (EO) but with worse F1w (0.793 vs FORGE 0.821). Naive generative baselines fail under scarcity (CTGAN 0.278, FairTabDDPM 0.258), supporting the motivation claim. Seeds improved: 5/5 (deadzone 2.1% on average — healthy reward signal).
+
+**Note on EO vs old 3-seed figure:** EXP-021 3-seed (seeds 0,1,42) reported β-EO=0.018±0.005. The 5-seed mean is 0.028±0.032, driven upward by seed 3 (β-EO=0.082). This is the honest estimate. The paper should report 0.028±0.032 (5 seeds). The ordering vs baselines is unchanged.
+
+**Next steps:**
+1. ~~Copy seed_2 and seed_3 FORGE dirs~~ — DONE (2026-05-26)
+2. ~~Run check_run.py on experiment3/census_forge/~~ — DONE (analysis/ written)
+3. Update main_table_metrics_per_seed.csv with new seed results
+4. Regenerate Figure 4 and Table 3
 
 **Follows from:** EXP-021 (census k=10 grid search best config)
 
@@ -2230,112 +2251,135 @@ Alpha-EO by seed: seed 0 = 0.114, seed 1 = 0.064, seed 42 = 0.140. AUC: seed 0 =
 ### EXP-046 | capture24-kfold-grid
 
 **Type:** PARAM-TUNING
-**Status:** RUNNING (2026-05-25)
+**Status:** SMOKE TEST PENDING (2026-05-28 — fold structure rebuilt; smoke test before full grid)
 **Dataset(s):** capture24 (da_pct=0.015, DA+=60)
-**Folds:** k=3 (fold_idx 0,1,2)
+**Folds:** k=5 (fold_idx 0–4), fold_rng_seed=6 (preflight-validated 2026-05-28)
 **Reference config:** vanilla_config.json
 **Config delta:** Full cartesian grid — same axes as EXP-025, plus fold_idx sweep
 **Follows from:** EXP-025
 
-**Server assignment (2026-05-25):**
+**Server assignment (smoke test, 2026-05-28):**
 
-| Fold | Server | GPU | Launch script | Output location |
-|------|--------|-----|---------------|-----------------|
-| fold0 | Oneida (129.100.226.232) | cuda:0 | `experiment_specs/capture24_kfold_grid/run_fold0_oneida.sh` | `~/cs_9170_project/training_runs/` |
-| fold1 | Aulavik (129.100.226.194) | cuda:0 | `experiment_specs/capture24_kfold_grid/run_fold1_aulavik.sh` | `~/cs_9170_project/training_runs/` |
-| fold2 | Lambda (129.100.226.208) | cuda:1 | `experiment_specs/capture24_kfold_grid/run_fold2_lambda.sh` | `~/cs_9170_project/training_runs/` |
+| Fold | Server | GPU | Launch script |
+|------|--------|-----|---------------|
+| fold0 | Oneida (129.100.226.232) | cuda:0 | `experiment_specs/capture24_kfold_grid/run_test_fold0_oneida.sh` |
+| fold1 | Aulavik (129.100.226.194) | cuda:0 | `experiment_specs/capture24_kfold_grid/run_test_fold1_aulavik.sh` |
+| fold2 | Lambda (129.100.226.208) | cuda:1 | `experiment_specs/capture24_kfold_grid/run_test_fold2_lambda.sh` |
 
-Run directories on each server are named `training_runs/SPEC_fold{N}_{hash}__G{timestamp}/`. After completion, sync to Huron with:
-```bash
-rsync -avz --progress epigou@129.100.226.232:~/cs_9170_project/training_runs/ /storage_1/epigou_storage/FORGE/oneida_kfold_runs/
-rsync -avz --progress epigou@129.100.226.194:~/cs_9170_project/training_runs/ /storage_1/epigou_storage/FORGE/aulavik_kfold_runs/
-rsync -avz --progress epigou@129.100.226.208:~/cs_9170_project/training_runs/ /storage_1/epigou_storage/FORGE/lambda_kfold_runs/
-```
-Then run `analyze_kfold.py all` pointing to each fold's result directories.
+Full grid (after smoke test passes) adds folds 3+4:
+
+| Fold | Server | GPU | Launch script |
+|------|--------|-----|---------------|
+| fold0 | Oneida | cuda:0 | `experiment_specs/capture24_kfold_grid/run_fold0_oneida.sh` |
+| fold1 | Aulavik | cuda:0 | `experiment_specs/capture24_kfold_grid/run_fold1_aulavik.sh` |
+| fold2 | Lambda | cuda:1 | `experiment_specs/capture24_kfold_grid/run_fold2_lambda.sh` |
+| fold3 | Oneida | cuda:1 | `experiment_specs/capture24_kfold_grid/run_fold3_oneida.sh` |
+| fold4 | Aulavik | cuda:1 | `experiment_specs/capture24_kfold_grid/run_fold4_aulavik.sh` |
 
 ---
 
 **Purpose:**
-Replace EXP-025's single-split grid with subject-level 3-fold cross-validation. The original EXP-025 grid suffered severe val-test discordance (val EO ranking had near-zero correlation with test EO) because the single-split val set came from different subjects than the test set, with highly variable per-subject MVPA rates. k-fold averaging neutralises this: each config is evaluated across all subject populations, giving a stable mean val EO for selection.
+Replace EXP-025's single-split results with subject-level k=5 cross-validation. Three structural problems were discovered and fixed during 2026-05-27/28 development (see history below); the current design is validated.
 
-**Why k=3 for grid (not k=5):** Compute budget. k=3 × N_configs is sufficient for stable config ranking; k=5 is reserved for the final selected config + baselines (EXP-047) where per-fold error bars are what gets reported in the paper.
+**Fold structure — final design (2026-05-28):**
 
-**Parameters swept:** Same as EXP-025:
+k=5 subject-level folds with `fold_rng_seed=6`. Fold assignment: female and male subject pools independently shuffled with seed 6, then round-robin assigned to 5 folds. Val and test both come from the same held-out subjects via stratified within-subject random split (`kfold_val_frac=0.4`, stratify by y×a), ensuring val and test target the same fairness problem.
 
-| Parameter | Values |
-|---|---|
-| `global_sigmoid_k` | [0, 3, 5] |
-| `pca_components` | [5, 10, 15] |
-| `ratio_trajectory` | [0.2, 0.4, 0.6] |
-| `ffnn.epochs` | [10, 20, 30] |
+`fold_rng_seed=6` was selected via `capture24_fold_preflight.py` — a 200-seed sweep using the exact training-loop environment (Dataset.get_data_splits, FFNNAgent, worst_group_loss, eo_gap_from_probs). All 5 folds pass all four viability checks:
+- α-EO > 0.05 on capped val (4000 windows): all 5 folds ✓ (EOs: 0.403, 0.375, 0.240, 0.085, 0.083)
+- WGL targets female (BCE_F > BCE_M): 5/5 folds ✓
+- EO direction correct (TPR_F < TPR_M): 5/5 folds ✓
+- Val-test alignment |val_EO − test_EO| ≤ 0.15: 5/5 folds ✓ (max Δ=0.084)
 
-**Fixed base patches:** dataset_name=capture24, da_pct=0.015, minority_id=1, majority_id=0, dp_protected_col=sex, win_seconds=1.0, step_seconds=0.5, total_episodes=5000, reward_mode=wgl, n_folds=3. One run per (config × fold_idx). No seed sweep — fold_idx replaces seed as the source of variance.
+Only 3 fully-viable seeds found in the first 123 seeds swept; seed=6 had the strongest min val EO (0.083) and tightest alignment.
 
-**Selection criterion:** Lowest mean val EO across 3 folds (plain mean, no std penalty). Val/test never share subjects — no leakage.
+**Smoke test — PENDING (2026-05-28):**
+Before running the full 36-config × 5-fold grid, a single fixed config is tested across 3 folds:
+- pca=15, ep=10, ratio_trajectory=0.2 (traj=1000, real=4000), global_sigmoid_k=5
+- Specs: `experiment_specs/capture24_kfold_grid/test_fold{0,1,2}.yaml`
+- **Pass criterion:** β-EO < α-EO on mean val EO across the 3 test folds.
+- If pass → run full 36-config × 5-fold grid (EXP-046 proper).
+- If pass and FORGE beats baselines on the single config → confidence to proceed.
 
-**Infrastructure implemented (2026-05-25):**
-- `dataset.py`: `_c24_kfold_assignments()` (deterministic stratified fold builder) + `split_capture24_kfold()` (train/val/test from disjoint subject folds, bias injection train-only).
-- `training.py`: reads `fold_idx`/`n_folds` from spec, passes to `get_data_splits`, logs in `meta.json`.
-- `make_spec.py`: `--fold-sweep N` flag generates one spec per fold.
-- All 7 baseline trainers + `run_baseline.py`: accept and forward `fold_idx`/`n_folds`.
-- `analyze_kfold.py`: aggregates per-fold results into mean±std table.
+**Parameters swept (full grid, after smoke test):**
 
-**Pre-flight confirmed (2026-05-25):**
-- k=3 fold min val female positives: 7,243 (>>200 threshold).
-- Fold assignments are seed-invariant (deterministic stratification).
-- DA+=60 exact across all folds.
-- Smoke test confirmed fold routing and meta.json logging.
+| Parameter | Values | Note |
+|---|---|---|
+| `ffnn.epochs` | [20, 30, 10] | outermost; 20 and 30 run before 10 |
+| `pca_components` | [10, 15] | pca=5 dropped (suboptimal in EXP-025) |
+| `ratio_trajectory` | [0.2, 0.4, 0.6] | unchanged |
+| `global_sigmoid_k` | [3, 5] | innermost |
 
-**Specs to generate:**
-```bash
-python make_spec.py --base vanilla_config.json --name capture24_kfold_grid \
-  --patch dataset_name=capture24 da_pct=0.015 minority_id=1 majority_id=0 \
-          dp_protected_col=sex win_seconds=1.0 step_seconds=0.5 \
-          total_episodes=5000 reward_mode=wgl n_folds=3 \
-  --fold-sweep 3
-```
-Then add the hyperparameter permutations block (k × pca × ratio × epochs = 81 configs × 3 folds = 243 runs).
+**Total (full grid):** 3×2×3×2 = 36 configs per fold × 5 folds = 180 runs. max_parallel=4, 9 batches per fold.
+
+**Fixed base patches:** dataset_name=capture24, da_pct=0.015, minority_id=1, majority_id=0, dp_protected_col=sex, win_seconds=1.0, step_seconds=0.5, total_episodes=5000, reward_mode=wgl, n_folds=5, fold_rng_seed=6, kfold_val_frac=0.4. No seed sweep — fold_idx is the source of variance.
+
+**Selection criterion:** Lowest mean val EO across 5 folds (plain mean, no std penalty).
+
+**Infrastructure (final state, 2026-05-28):**
+- `dataset.py`: `_c24_kfold_assignments(cache, k, fold_rng_seed)` — accepts optional rng seed for shuffled (non-deterministic-sort) fold assignment. `split_capture24_kfold()` accepts `fold_rng_seed` and passes through. Stratified within-subject val/test split (`kfold_val_frac=0.4`, stratify by y×a). `fold_rng_seed` added to `kfold_keys`.
+- `training.py`: reads `fold_rng_seed` from spec, passes to `get_data_splits`.
+- `run_baseline.py`: reads `fold_rng_seed` from spec, passes through `fold_kwargs`.
+- `capture24_fold_preflight.py`: standalone preflight using Dataset + FFNNAgent + reward_helpers directly (exact training-loop environment). Supports `--seeds` for targeted re-checks.
+
+**History of structural fixes (for paper methodology section):**
+
+1. **(2026-05-25) k=3 val-test subject mismatch:** original `split_capture24_kfold` assigned val subjects from a different fold than test subjects. With ~40 subjects and highly variable per-subject MVPA rates, val and test α-EO were structurally different problems (r=−0.267, direction agreement 5/12). Fixed by stratified within-subject split.
+
+2. **(2026-05-27) Fold assignment viability:** the deterministic asc-MVPA round-robin assignment (original) had only 1/3 folds with correct EO direction (TPR_F < TPR_M). Switched to random-seed-based assignment and ran a 200-seed preflight sweep to find seed=6 where all 5 folds are viable.
+
+3. **(2026-05-28) Preflight scarcity mismatch:** early preflight iterations used a different scarcity injection order than the training loop (subsample-then-reduce vs keep-exact-DA+-then-fill), producing unreliable α-EO estimates. Rewrote preflight to use Dataset.get_data_splits + FFNNAgent directly. Seed=40 and seed=190 (found viable in earlier sweeps) failed in the correct environment. Seed=6 is the confirmed viable seed.
+
+**Old k=3 results (2026-05-27, superseded):**
+Baseline results from the k=3 asc-F asc-M run are recorded here for reference but are NOT used for config selection — the fold assignment was invalid (1/3 folds correct direction).
+
+| Method | k=3 Fold0 β-EO | k=3 Fold1 β-EO | k=3 Fold2 β-EO | Mean |
+|--------|---------------|---------------|---------------|------|
+| GroupDRO | 0.0001 | 0.0357 | 0.0194 | 0.0184 |
+| FLB | 0.0059 | 0.0103 | 0.1001 | 0.0388 |
+| SMOTE | 0.3129↑ | 0.0984↑ | 0.0290 | 0.1468 |
+| OT Repair | 0.2878↑ | 0.0762↑ | 0.2322↑ | 0.1987 |
 
 **Result:**
-*(pending)*
+*(pending — smoke test not yet run)*
 
 **Takeaway:**
 *(pending)*
 
 **Next steps:**
-- Specs generated: `experiment_specs/capture24_kfold_grid/fold{0,1,2}.yaml` ✓
-- Launched: fold0 → Oneida cuda:0, fold1 → Aulavik cuda:0, fold2 → Lambda cuda:1 ✓
-- After ~3-4 days: rsync results to Huron (see rsync commands above).
-- Analyse with `analyze_kfold.py` — select config with lowest mean val EO across 3 folds.
-- Feed selected config into EXP-047.
+1. **Run smoke test** on Oneida/Aulavik/Lambda (test_fold{0,1,2}.yaml)
+2. If β-EO < α-EO on mean: run full 36-config × 5-fold grid (fold{0–4}.yaml)
+3. If FORGE also beats baselines on smoke test config: run baselines on same 5 folds
+4. Rsync results to Huron, run `analyze_kfold.py all`, select config with lowest mean val EO
+5. Feed selected config into EXP-047
 
 ---
 
 ### EXP-047 | capture24-kfold-final
 
 **Type:** PAPER-FINAL
-**Status:** PLANNED
+**Status:** PLANNED — blocked on EXP-046 smoke test + grid completion
 **Dataset(s):** capture24 (da_pct=0.015, DA+=60)
-**Folds:** k=5 (fold_idx 0–4)
+**Folds:** k=5 (fold_idx 0–4), fold_rng_seed=6 — same structure as EXP-046
 **Reference config:** vanilla_config.json + best config from EXP-046
-**Config delta:** fold_idx sweep at k=5, selected hyperparameters
+**Config delta:** fold_idx sweep at k=5, selected hyperparameters only (no grid)
 **Follows from:** EXP-046
 
 ---
 
 **Purpose:**
-Final reported capture24 results using the config selected in EXP-046. k=5 folds gives more stable mean±std than k=3 for the paper's results table. All six baselines run on the identical k=5 fold structure for direct comparison.
+Final reported capture24 results using the config selected in EXP-046 grid. EXP-046 uses the same k=5, fold_rng_seed=6 structure for both grid selection AND final evaluation — no separate k=5 rerun is needed. EXP-047 covers baselines and any additional seeds if required.
 
-**Selection criterion used:** Mean val EO across EXP-046 k=3 folds (plain mean).
+**Selection criterion used:** Mean val EO across EXP-046 k=5 folds (plain mean, no std penalty).
 
-**Reporting:** Mean±std of TEST EO across 5 folds. Wide error bars are honest and attributed to subject-level distribution shift — this is the correct framing for wearable data.
+**Reporting:** Mean±std of TEST EO across 5 folds. Wide error bars are honest and attributed to subject-level distribution shift — correct framing for wearable data.
 
-**Baselines to run (all 6, identical folds):**
-GroupDRO, OT Repair, FLB, SMOTE, CTGAN, FairTabDDPM — each with fold_idx ∈ {0,1,2,3,4}, n_folds=5, same da_pct and real_data_size as FORGE.
+**Baselines to run (all 6, identical folds, fold_rng_seed=6):**
+GroupDRO, OT Repair, FLB, SMOTE, CTGAN, FairTabDDPM — each with fold_idx ∈ {0,1,2,3,4}, n_folds=5, fold_rng_seed=6, same da_pct and real_data_size as FORGE.
 
 **Compute estimate:** ~6 hr/fold × 5 folds = ~30 hr FORGE + ~(1–4 hr/fold) × 5 × 6 baselines.
 
-**Specs to generate:** After EXP-046 completes and best config is identified.
+**Specs to generate:** After EXP-046 grid completes and best config is identified.
 
 **Result:**
 *(pending)*

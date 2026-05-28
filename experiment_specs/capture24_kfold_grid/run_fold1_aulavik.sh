@@ -1,5 +1,5 @@
 #!/bin/bash
-# EXP-046 fold 1/3 — Aulavik cuda:0
+# EXP-046 fold 1/5 (fold_rng_seed=190) — Aulavik cuda:0
 # Launch: bash experiment_specs/capture24_kfold_grid/run_fold1_aulavik.sh
 set -eo pipefail
 

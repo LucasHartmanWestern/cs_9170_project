@@ -75,7 +75,8 @@ def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
         step_seconds=float(spec.get("step_seconds", 2.5)),
         **({"dp_protected_col": dp_col} if dp_col is not None else {}),
         **({"acs_states": spec.get("acs_states")} if spec.get("acs_states") is not None else {}),
-        **({"fold_idx": fold_idx, "n_folds": n_folds} if fold_idx is not None else {}),
+        **({"fold_idx": fold_idx, "n_folds": n_folds,
+            "fold_rng_seed": spec.get("fold_rng_seed")} if fold_idx is not None else {}),
     )
 
     ffnn_cfg   = spec.get("ffnn", {})
@@ -117,9 +118,11 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
     print(f"[run_baseline] spec={spec_path}")
     print(f"[run_baseline] device={device}")
     print(f"[run_baseline] exp_group={exp_group}")
-    fold_idx = spec.get("fold_idx")
-    n_folds  = int(spec.get("n_folds", 5))
-    fold_kwargs = {"fold_idx": fold_idx, "n_folds": n_folds} if fold_idx is not None else {}
+    fold_idx      = spec.get("fold_idx")
+    n_folds       = int(spec.get("n_folds", 5))
+    fold_rng_seed = spec.get("fold_rng_seed")
+    fold_kwargs   = ({"fold_idx": fold_idx, "n_folds": n_folds, "fold_rng_seed": fold_rng_seed}
+                     if fold_idx is not None else {})
 
     print(f"[run_baseline] seeds={seeds}")
     if fold_idx is not None:

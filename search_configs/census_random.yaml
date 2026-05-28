@@ -11,10 +11,11 @@ base_patches:
   total_episodes: 5000
   reward_mode: wgl
   dp_protected_col: sex
-  reward_shaping.global_sigmoid_k: 3    # <- fill in best from grid
-  pca_components: 10                    # <- fill in best from grid
-  traj_length: 2000                     # <- fill in best from grid
-  ffnn.epochs: 20                       # <- fill in best from grid
+  reward_shaping.global_sigmoid_k: 10   # EXP-021 best (k=10 outperforms k=3,5)
+  pca_components: 10                    # EXP-021 best
+  traj_length: 2000                     # EXP-021 best
+  real_data_size: 3000                  # EXP-021 best
+  ffnn.epochs: 30                       # EXP-021 best (ep=30 > ep=20)
 random:
   n_samples: 20
   seed: 0

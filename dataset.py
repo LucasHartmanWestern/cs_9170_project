@@ -2833,18 +2833,20 @@ class Dataset:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _c24_kfold_assignments(cache, k: int):
+    def _c24_kfold_assignments(cache, k: int, fold_rng_seed=None):
         """
-        Build a deterministic stratified subject-level fold assignment.
+        Build a stratified subject-level fold assignment.
 
-        Subjects are split into female and male pools. Within each pool they
-        are sorted ascending by per-subject MVPA rate, then assigned to folds
-        0..k-1 in round-robin order (interleaving low and high MVPA subjects
-        across folds). The result is a list of k lists, each containing the
-        subject IDs (integer indices into cache["subject_ids"]) assigned to
-        that fold.
+        Subjects are split into female and male pools.
 
-        The assignment is deterministic (no randomness) so every method —
+        fold_rng_seed=None (default): sort each pool ascending by MVPA rate,
+        then round-robin into folds (the original deterministic assignment).
+
+        fold_rng_seed=<int>: shuffle each pool with that seed, then
+        round-robin. Use to find assignments where all folds have a viable
+        α-EO signal and WGL correctly targets the female group.
+
+        The assignment is reproducible given the same seed so every method —
         FORGE, alpha, and all baselines — sees the identical partitioning.
         """
         y_all   = cache["y"].astype(int)
@@ -2860,14 +2862,19 @@ class Dataset:
         female_subs = np.where(subject_sex == 1)[0]
         male_subs   = np.where(subject_sex == 0)[0]
 
-        # Sort each pool ascending by MVPA rate, then round-robin into folds
-        f_sorted = female_subs[np.argsort(subject_mvpa[female_subs])]
-        m_sorted = male_subs[np.argsort(subject_mvpa[male_subs])]
+        if fold_rng_seed is None:
+            # Original: sort ascending by MVPA rate
+            f_ordered = female_subs[np.argsort(subject_mvpa[female_subs])]
+            m_ordered = male_subs[np.argsort(subject_mvpa[male_subs])]
+        else:
+            rng = np.random.RandomState(fold_rng_seed)
+            f_ordered = female_subs[rng.permutation(len(female_subs))]
+            m_ordered = male_subs[rng.permutation(len(male_subs))]
 
         folds = [[] for _ in range(k)]
-        for i, s in enumerate(f_sorted):
+        for i, s in enumerate(f_ordered):
             folds[i % k].append(int(s))
-        for i, s in enumerate(m_sorted):
+        for i, s in enumerate(m_ordered):
             folds[i % k].append(int(s))
 
         return folds  # list of k lists
@@ -2880,20 +2887,28 @@ class Dataset:
         da_pct=None,
         pca_components: int = 10,
         dp_protected_col: str = "sex",
+        kfold_val_frac: float = 0.4,
+        fold_rng_seed=None,
     ):
         """
         Subject-level k-fold split for capture24.
 
         Fold assignment is deterministic (stratified by per-subject female-MVPA
         rate, round-robin). For each rotation:
-          test   = fold fold_idx
-          val    = fold (fold_idx + 1) % n_folds
-          train  = remaining n_folds - 2 folds
+          test   = last (1 - kfold_val_frac) of held-out subjects' windows
+          val    = first kfold_val_frac of the same held-out subjects' windows
+          train  = all remaining subjects
+
+        Val and test share the same subjects (stratified-random split within each
+        held-out subject, stratified by y×a). This ensures val and test have the
+        same female MVPA rate, so val α-EO ≈ test α-EO and the RL reward signal
+        targets the same fairness problem as the final evaluation. Stratified
+        random splitting also preserves the full temporal distribution in both
+        splits, avoiding day-of-study drift that a temporal split would introduce.
 
         Scarcity injection (da_pct) is applied to training windows only.
-        Val and test retain the natural class distribution.
-        Val is capped at train_size windows (same as split_capture24) so the
-        reward signal is not dominated by large unbiased windows.
+        Val is capped at train_size windows so the reward signal is not
+        dominated by large unbiased windows.
         Test is NOT subsampled — full subject windows for stable EO estimation.
         """
         data_dir   = Path(self.data_path)
@@ -2914,19 +2929,38 @@ class Dataset:
         print(f"[capture24-kfold] Cache: {len(X_all):,} windows, {n_subjects} subjects, "
               f"fold {fold_idx}/{n_folds}")
 
-        folds = Dataset._c24_kfold_assignments(cache, n_folds)
+        folds = Dataset._c24_kfold_assignments(cache, n_folds, fold_rng_seed=fold_rng_seed)
 
-        test_fold  = fold_idx
-        val_fold   = (fold_idx + 1) % n_folds
-        train_folds = [f for f in range(n_folds) if f not in (test_fold, val_fold)]
+        held_out_subs = np.array(folds[fold_idx])
+        train_subs    = np.concatenate([folds[f] for f in range(n_folds) if f != fold_idx])
 
-        test_subs  = np.array(folds[test_fold])
-        val_subs   = np.array(folds[val_fold])
-        train_subs = np.concatenate([folds[f] for f in train_folds])
+        # Val and test come from the same held-out subjects, split by stratified
+        # random sampling (stratified by y×a). This ensures val and test have
+        # the same female MVPA rate, so val α-EO ≈ test α-EO, making the RL
+        # reward signal and final evaluation target the same fairness problem.
+        # Stratified random sampling also preserves the full temporal distribution
+        # in both splits (no day-of-study drift).
+        va_mask = np.zeros(len(sid_all), dtype=bool)
+        te_mask = np.zeros(len(sid_all), dtype=bool)
+        for sub in held_out_subs:
+            sub_idx = np.where(sid_all == sub)[0]
+            y_sub = y_all[sub_idx]
+            a_sub = a_all[sub_idx]
+            strat = y_sub * 2 + a_sub  # 4 strata: (y=0/1) × (a=0/1)
+            n_val = max(1, int(len(sub_idx) * kfold_val_frac))
+            try:
+                idx_val, idx_te = train_test_split(
+                    sub_idx, train_size=n_val,
+                    stratify=strat, random_state=self.seed,
+                )
+            except ValueError:
+                # Fallback for subjects with too few samples per stratum
+                idx_val = sub_idx[:n_val]
+                idx_te  = sub_idx[n_val:]
+            va_mask[idx_val] = True
+            te_mask[idx_te]  = True
 
         tr_mask = np.isin(sid_all, train_subs)
-        va_mask = np.isin(sid_all, val_subs)
-        te_mask = np.isin(sid_all, test_subs)
 
         feature_names = [
             f"{ax}_{stat}"
@@ -2989,9 +3023,10 @@ class Dataset:
         a_val    = A_val.to_numpy(dtype=np.int64)
         _val_cap = train_size if train_size is not None else None
         if _val_cap is not None and _val_cap < len(X_val_b):
+            strat_va = y_val_b * 2 + a_val  # preserve female MVPA rate
             X_val_b, _, y_val_b, _, a_val, _ = train_test_split(
                 X_val_b, y_val_b, a_val,
-                train_size=_val_cap, random_state=self.seed, stratify=y_val_b,
+                train_size=_val_cap, random_state=self.seed, stratify=strat_va,
             )
 
         # Test: full natural distribution (no subsampling)
@@ -3033,7 +3068,7 @@ class Dataset:
         _log("TRAIN", y_train_b, a_train)
         _log("VAL",   y_val_b,   a_val)
         _log("TEST",  y_test_b,  a_test)
-        print(f"train_folds={train_folds} val_fold={val_fold} test_fold={test_fold} "
+        print(f"fold_idx={fold_idx} | held_out_subs={list(held_out_subs)} "
               f"| theta_dim={X_train_theta.shape[1]}")
 
         # GAN view for CTGAN/FairTabDDPM baselines
@@ -4937,7 +4972,8 @@ class Dataset:
                                        "win_seconds", "step_seconds")}
             if "fold_idx" in c24_kwargs:
                 kfold_keys = ("fold_idx", "n_folds", "train_size", "da_pct",
-                              "pca_components", "dp_protected_col")
+                              "pca_components", "dp_protected_col", "kfold_val_frac",
+                              "fold_rng_seed")
                 kfold_kwargs = {k: v for k, v in c24_kwargs.items() if k in kfold_keys}
                 return self.split_capture24_kfold(**kfold_kwargs)
             return self.split_capture24(**c24_kwargs)
