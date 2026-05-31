@@ -60,3 +60,5 @@ fold_rng_seed: 6
 kfold_val_frac: 0.4
 fold_idx: 1
 pca_components: 15
+seeds:
+- 42

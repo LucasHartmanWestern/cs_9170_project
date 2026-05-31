@@ -89,6 +89,8 @@ def parse_args():
                    help="Covertype: cover type id (1-7) to treat as y=1 (default=5 Aspen)")
     p.add_argument("--acs-states", nargs="+", default=None,
                    help="ACS Employment: list of state codes to load (e.g. CA TX NY FL)")
+    p.add_argument("--age-threshold", type=int, default=55,
+                   help="ACS Employment age framing: AGEP >= threshold → disadvantaged (default: 55)")
     p.add_argument("--ffnn-epochs", type=int, default=20,
                    help="Epochs to train alpha FFNN for EO baseline (default: 20)")
     p.add_argument("--drop-protected", type=lambda x: x.lower() in ("true", "1", "yes"),
@@ -137,6 +139,8 @@ def make_dataset(args, seed, bias_pct=None, da_pct=None):
     if args.dataset in ("acs_employment", "acs_public_coverage"):
         if args.acs_states is not None:
             kwargs["acs_states"] = args.acs_states
+        if args.dp_col == "age":
+            kwargs["age_threshold"] = args.age_threshold
     if args.dp_col is not None:
         kwargs["dp_protected_col"] = args.dp_col
 

@@ -444,6 +444,8 @@ class Training:
         ep_eod_max_diff = float("nan")
         ep_eod_avg_diff = float("nan")
         ep_soft_eo_beta = float("nan")
+        _bce_cells = [float("nan")] * 4
+        _worst_cell_id = -1
 
         if mode in ("wgl", "fairness", "roc_eo"):
             a_theta_val = self.dataset.a_val
@@ -454,6 +456,13 @@ class Training:
 
                 g_ids_val = torch.as_tensor(a_theta_val, device=loss_beta_vec.device).long() * 2 + y_val_bin
                 worst_b_t, per_b = rh.worst_group_loss(loss_beta_vec, g_ids_val, group_values=(0, 1, 2, 3))
+
+                # Per-cell BCE for worst-cell stability analysis (passive observation only).
+                # Cell encoding: cell_id = group*2 + label, so:
+                #   0=(g=0,y=0)  1=(g=0,y=1)  2=(g=1,y=0)  3=(g=1,y=1)
+                _bce_cells = [per_b.get(i, float("nan")) for i in range(4)]
+                _valid_cells = [(i, v) for i, v in enumerate(_bce_cells) if v == v]
+                _worst_cell_id = max(_valid_cells, key=lambda x: x[1])[0] if _valid_cells else -1
 
                 # per-group mean losses (floats/nan)
                 group_loss_beta_g0 = per_b.get(0, float("nan"))
@@ -708,6 +717,13 @@ class Training:
                 "soft_eo_beta": float(ep_soft_eo_beta),         # |E[p1|y=1,a=0] - E[p1|y=1,a=1]| (no threshold)
                 "eod_max_diff": float(ep_eod_max_diff),         # max(|TPR diff|, |FPR diff|)
                 "eod_avg_diff": float(ep_eod_avg_diff),         # avg(|TPR diff|, |FPR diff|)
+                # Per-cell BCE values and worst-cell identity (worst-cell stability analysis).
+                # Cell encoding: group*2+label → 0=(g0,y0) 1=(g0,y1) 2=(g1,y0) 3=(g1,y1)
+                "bce_cell_00": float(_bce_cells[0]),  # (disadvantaged, negative)
+                "bce_cell_01": float(_bce_cells[1]),  # (disadvantaged, positive) — the DA+ cell
+                "bce_cell_10": float(_bce_cells[2]),  # (advantaged, negative)
+                "bce_cell_11": float(_bce_cells[3]),  # (advantaged, positive)
+                "worst_cell_id": int(_worst_cell_id), # argmax of per-cell BCE (0–3, or -1 if all NaN)
             },
             "local": {
                 "anchors_used": int(getattr(self, "_cached_anchors_used", 0)),  # number of anchor points (static after setup)

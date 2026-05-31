@@ -1886,6 +1886,7 @@ class Dataset:
         acs_states: list = None,
         acs_year: str = "2018",
         drop_protected: bool = True,
+        age_threshold: int = 55,
     ):
         """
         ACS Employment (Ding et al. NeurIPS 2021 / folktables).
@@ -1937,10 +1938,10 @@ class Dataset:
             g0_name, g1_name = "disabled", "not_disabled"
         elif dp_protected_col == "age":
             age_vals = features["AGEP"].values
-            a_raw = (age_vals < 55).astype(np.int64)  # AGEP ≥ 55 → a=0 (older), AGEP < 55 → a=1
+            a_raw = (age_vals < age_threshold).astype(np.int64)
             if drop_protected:
                 features = features.drop(columns=["AGEP"])
-            g0_name, g1_name = "older_55plus", "younger_under55"
+            g0_name, g1_name = f"older_{age_threshold}plus", f"younger_under{age_threshold}"
         elif dp_protected_col == "nativity":
             nat_vals = features["NATIVITY"].values
             a_raw = (nat_vals == 1).astype(np.int64)  # NATIVITY=2 → foreign-born → a=0

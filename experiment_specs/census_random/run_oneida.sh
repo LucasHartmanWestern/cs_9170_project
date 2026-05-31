@@ -16,7 +16,7 @@ for spec in \
   experiment_specs/census_random/rand_0006_learning_rate0p008574577609317105_lr8p995380802416628em05_delta_scale0p26632748194291_optimizeradamw_optimizeradam.yaml; do
   name=$(basename $spec .yaml)
   echo "[$(date)] Starting $name"
-  python -u main.py --spec "$spec" --device cuda:0 \
+  python -u main.py --spec "$spec" --device cuda:0 --parallel \
     >> experiment_specs/census_random/logs/oneida_${name}.out \
     2>> experiment_specs/census_random/logs/oneida_${name}.err
   echo "[$(date)] Done $name"

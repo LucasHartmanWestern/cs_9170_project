@@ -1,0 +1,13 @@
+[Fri May 29 14:40:44 EDT 2026] Launching FORGE fold2 on cuda:1
+FORGE fold2 PID=107866
+[Fri May 29 14:40:44 EDT 2026] Launching 4 baselines fold2 on cuda:1 (sequential)
+Baseline chain fold2 PID=107870
+Waiting for FORGE fold2 (PID=107866)...
+[Fri May 29 14:40:44 EDT 2026] Starting group_dro_fold2
+[Fri May 29 14:42:03 EDT 2026] Done group_dro_fold2
+[Fri May 29 14:42:03 EDT 2026] Starting fairness_loss_balancing_fold2
+[Fri May 29 14:42:15 EDT 2026] Done fairness_loss_balancing_fold2
+[Fri May 29 14:42:15 EDT 2026] Starting smote_fold2
+[Fri May 29 14:42:51 EDT 2026] Done smote_fold2
+[Fri May 29 14:42:51 EDT 2026] Starting gaussian_ot_repair_fold2
+[Fri May 29 14:43:06 EDT 2026] Done gaussian_ot_repair_fold2

@@ -1,0 +1,72 @@
+# Worst-cell stability verification — ACS Employment (sex framing)
+# Same as worst_cell_verify_acs.yaml but dp_protected_col=sex
+# Female (SEX=2, a=0) disadvantaged; male (SEX=1, a=1) advantaged.
+# No meaningful proxy features for sex after drop (max r=0.096 for MIL).
+dataset_name: acs_employment
+multiclass: false
+da_pct: 0.01433
+bias_pct: null
+dp_protected_col: sex
+minority_id: 0
+majority_id: 1
+third_id: null
+acs_states:
+- CA
+- TX
+- NY
+- FL
+- PA
+- OH
+- IL
+- GA
+- NC
+- MI
+seeds:
+- 0
+- 42
+use_pca: true
+pca_components: 10
+traj_length: 2000
+real_data_size: 3000
+total_episodes: 1500
+phase2_episodes: null
+gen_both_classes: false
+curriculum_learning: false
+use_delta_actions: true
+delta_scale: 0.1
+delta_clip: 0.2
+pca_clip: null
+radius_clip: 3.0
+reward_mode: wgl
+lambda_schedule:
+- 1.0
+- 1.0
+reward_shaping:
+  global_sigmoid_k: 10.0
+  utility_guard_min_factor: 0.0
+local_weights:
+  use_dvrl_local: false
+  dvrl_max_bce: 0.693
+  w_anchor: 0.0
+  w_hard: 0.0
+  w_div: 0.0
+ffnn:
+  hidden_sizes:
+  - 32
+  - 16
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 20
+  optimizer: adam
+reinforce:
+  hidden_sizes:
+  - 64
+  - 64
+  lr: 0.0003
+  gamma: 1.0
+  entropy_start: 0.02
+  entropy_end: 0.005
+  optimizer: adam
+benchmarks:
+  run_ctgan: false
+  run_ctabgan: false

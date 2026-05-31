@@ -36,7 +36,7 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-019 | natural-scarcity-rl | EXPLORATORY | IN PROGRESS | census, capture24, compas | EXP-016 |
 | EXP-020 | natural-scarcity-baselines | EXPLORATORY | PLANNED | census, capture24, compas | EXP-019 |
 | EXP-021 | census-hparam-grid | PARAM-TUNING | IN PROGRESS | census | EXP-001 |
-| EXP-022 | census-hparam-random | PARAM-TUNING | PLANNED | census | EXP-021 |
+| EXP-022 | census-hparam-random | PARAM-TUNING | IN PROGRESS | census | EXP-021 |
 | EXP-025 | capture24-hparam-grid | PARAM-TUNING | IN PROGRESS | capture24 | EXP-002 |
 | EXP-027 | acs-employment-rl-main | PAPER-FINAL | DROPPED | acs_employment | EXP-024 |
 | EXP-028 | acs-employment-baselines | PAPER-FINAL | DROPPED | acs_employment | EXP-024 |
@@ -51,8 +51,10 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-042 | wildfire-forge-k10 | PAPER-FINAL | TERMINATED | wildfire | EXP-040, EXP-041 |
 | EXP-044 | wildfire-forge-k10-blm | PAPER-FINAL | IN PROGRESS | wildfire | EXP-040, EXP-041, EXP-042 |
 | EXP-043 | bank-marketing-viability | DATASET-VIABILITY | COMPLETE | bank_marketing | — |
-| EXP-046 | capture24-kfold-grid | PARAM-TUNING | SMOKE-TEST-PENDING | capture24 | EXP-025 |
+| EXP-045 | census-final-5seeds | FORGE + BASELINES | COMPLETE | census_income | EXP-021 |
+| EXP-046 | capture24-kfold-grid | PARAM-TUNING | SMOKE-TEST-IN-PROGRESS | capture24 | EXP-025 |
 | EXP-047 | capture24-kfold-final | PAPER-FINAL | PLANNED | capture24 | EXP-046 |
+| EXP-048 | worst-cell-stability | DIAGNOSTIC | IN PROGRESS | census_income, acs_employment | EXP-021, EXP-027 |
 
 ---
 
@@ -891,10 +893,10 @@ k=10, ep=30, pca=10 outperforms all other configs: β-EO=0.018±0.005 vs k=5 bes
 ### EXP-022 | census-hparam-random
 
 **Type:** PARAM-TUNING
-**Status:** PLANNED
+**Status:** IN PROGRESS — all 20 specs launched 2026-05-28/29; est. completion ~2026-06-01
 **Dataset(s):** census_income (da_pct=0.01433, DA+=43)
-**Seeds:** 0, 1, 42
-**Reference config:** vanilla_config.json + best params from EXP-021
+**Seeds:** 0, 1, 42 (sequential per spec, no --parallel except Oneida GPU 0)
+**Reference config:** vanilla_config.json + best params from EXP-021 (k=10, pca=10, ep=30, traj=2000)
 **Config delta:** Random search over secondary hyperparameters — see below
 **Follows from:** EXP-021
 
@@ -922,6 +924,34 @@ python make_search_specs.py search_configs/census_random.yaml
 # → experiment_specs/census_random/ (20 specs)
 ```
 
+**Server assignment and launch status (2026-05-29):**
+
+Originally intended for SLURM (`submit_all.sh` runs all 20 via `sbatch`). Launched locally across 3 servers with 2 GPU queues per server (2 specs running simultaneously per server). Sequential within each queue.
+
+| Server | GPU | Specs | Queue log | Notes |
+|--------|-----|-------|-----------|-------|
+| Oneida | cuda:0 | rand_0000 → 0002 → 0004 → 0006 | `logs/oneida_gpu0_queue.log` | --parallel flag; rand_0000 had delayed seed_2 start due to 3-process GPU contention |
+| Oneida | cuda:1 | rand_0001 → 0003 → 0005 | `logs/oneida_gpu1_queue.log` | Started 2026-05-29 14:11 |
+| Aulavik | cuda:0 | rand_0007 → 0009 → 0011 → 0013 | `logs/aulavik_gpu0_queue.log` | rand_0007 running since May 28; seed_0 complete (11:38 May 29), seed_42 at ep 2215 |
+| Aulavik | cuda:1 | rand_0008 → 0010 → 0012 | `logs/aulavik_gpu1_queue.log` | Started 2026-05-29 14:11 |
+| Lambda | cuda:0 | rand_0014 → 0016 → 0018 | `logs/lambda_gpu0_queue.log` | rand_0014 restarted 2026-05-29 (original died at ep ~1822 seed_42); using `~/envs/rl/bin/python3` |
+| Lambda | cuda:1 | rand_0015 → 0017 → 0019 | `logs/lambda_gpu1_queue.log` | Queue waits for acs_sex (PID 142744) to finish before starting |
+
+**Rate calibration (2026-05-29):** ~14 eps/min per seed on Aulavik without GPU contention. ~18 hours per spec (3 seeds × 357 min). Rand_0007 seed_0 took ~20 hours due to competing with aborted first run (GG202605281531).
+
+**Estimated completion per queue:**
+
+| Queue | Est. done |
+|-------|-----------|
+| Oneida cuda:1 | ~May 31 8pm EDT |
+| Lambda cuda:0 | ~May 31 8pm EDT |
+| Lambda cuda:1 | ~May 31 9pm EDT |
+| Aulavik cuda:1 | ~May 31 8pm EDT |
+| Oneida cuda:0 | ~Jun 1 2am EDT |
+| Aulavik cuda:0 | ~Jun 1 6am EDT (bottleneck) |
+
+All 20 specs expected complete by **~2026-06-01 06:00 EDT**.
+
 **Result:**
 *(pending)*
 
@@ -929,7 +959,10 @@ python make_search_specs.py search_configs/census_random.yaml
 *(pending)*
 
 **Next steps:**
-Use best combined config (EXP-021 + EXP-022) as the new census vanilla for final paper runs.
+1. Rsync results from all 3 servers to Huron once complete.
+2. Run `check_run.py` on each completed spec to get per-seed β-EO.
+3. Select config with lowest mean β-EO across seeds.
+4. Use best combined config (EXP-021 + EXP-022) as the new census vanilla for final paper runs.
 
 ---
 
@@ -2251,20 +2284,24 @@ Alpha-EO by seed: seed 0 = 0.114, seed 1 = 0.064, seed 42 = 0.140. AUC: seed 0 =
 ### EXP-046 | capture24-kfold-grid
 
 **Type:** PARAM-TUNING
-**Status:** SMOKE TEST PENDING (2026-05-28 — fold structure rebuilt; smoke test before full grid)
+**Status:** SMOKE TEST IN PROGRESS — fold0 complete; folds 1–2 running on Huron (2026-05-29)
 **Dataset(s):** capture24 (da_pct=0.015, DA+=60)
 **Folds:** k=5 (fold_idx 0–4), fold_rng_seed=6 (preflight-validated 2026-05-28)
 **Reference config:** vanilla_config.json
 **Config delta:** Full cartesian grid — same axes as EXP-025, plus fold_idx sweep
 **Follows from:** EXP-025
 
-**Server assignment (smoke test, 2026-05-28):**
+**Server assignment (smoke test):**
 
-| Fold | Server | GPU | Launch script |
-|------|--------|-----|---------------|
-| fold0 | Oneida (129.100.226.232) | cuda:0 | `experiment_specs/capture24_kfold_grid/run_test_fold0_oneida.sh` |
-| fold1 | Aulavik (129.100.226.194) | cuda:0 | `experiment_specs/capture24_kfold_grid/run_test_fold1_aulavik.sh` |
-| fold2 | Lambda (129.100.226.208) | cuda:1 | `experiment_specs/capture24_kfold_grid/run_test_fold2_lambda.sh` |
+| Fold | Server | GPU | Launch script | Status |
+|------|--------|-----|---------------|--------|
+| fold0 | Huron | cuda:0 | `logs/test_fold0_huron_gpu0.out` | **COMPLETE** 2026-05-28 |
+| fold1 | Huron | cuda:0 | `run_smoke_fold1_huron.sh` | **RUNNING** 2026-05-29 ~14:30 |
+| fold2 | Huron | cuda:1 | `run_smoke_fold2_huron.sh` | **RUNNING** 2026-05-29 ~14:30 |
+
+Folds 1 and 2 each run FORGE + 4 baselines (GroupDRO, FLB, SMOTE, OT Repair) simultaneously on separate GPUs. FORGE runs in background (~3 hrs); baselines run sequentially in parallel background process (~2 min total). Est. completion ~17:30 EDT 2026-05-29.
+
+**Decision gate:** If FORGE β-EO < all baseline β-EOs on mean across folds 0–2, lock in smoke test config (pca=15, ep=10, ratio=0.2, k=5) and skip full 36-config grid. Use this config directly for folds 3–4 and all baselines. If FORGE fails to beat baselines consistently, proceed to full grid search.
 
 Full grid (after smoke test passes) adds folds 3+4:
 
@@ -2293,13 +2330,26 @@ k=5 subject-level folds with `fold_rng_seed=6`. Fold assignment: female and male
 
 Only 3 fully-viable seeds found in the first 123 seeds swept; seed=6 had the strongest min val EO (0.083) and tightest alignment.
 
-**Smoke test — PENDING (2026-05-28):**
-Before running the full 36-config × 5-fold grid, a single fixed config is tested across 3 folds:
-- pca=15, ep=10, ratio_trajectory=0.2 (traj=1000, real=4000), global_sigmoid_k=5
+**Smoke test config (fixed across all folds):**
+- pca=15, ep=10, ratio_trajectory=0.2 (traj=1000, real=4000), global_sigmoid_k=5, seed=42
 - Specs: `experiment_specs/capture24_kfold_grid/test_fold{0,1,2}.yaml`
-- **Pass criterion:** β-EO < α-EO on mean val EO across the 3 test folds.
-- If pass → run full 36-config × 5-fold grid (EXP-046 proper).
-- If pass and FORGE beats baselines on the single config → confidence to proceed.
+- **Pass criterion:** FORGE β-EO < α-EO AND β-EO < all 4 baseline β-EOs on mean across folds 0–2.
+
+**Spec fixes applied 2026-05-29:** Added `seeds: [42]` to test_fold1.yaml and test_fold2.yaml (fold0 already had it). Fixed fold1/fold2 baseline specs: `n_folds: 3→5`, added `fold_rng_seed: 6`, `seeds: [20]→[42]`.
+
+**Smoke test fold0 result (2026-05-29):**
+
+| Method | α-EO | β-EO | β-F1w | β-AUC |
+|--------|-------|-------|-------|-------|
+| FORGE | 0.453 | **0.032** | 0.956 | 0.954 |
+| GroupDRO | 0.480 | 0.153 | 0.927 | 0.935 |
+| FLB | 0.480 | 0.217 | 0.915 | 0.923 |
+| OT Repair | 0.480 | 0.336 | 0.963 | 0.952 |
+| SMOTE | 0.480 | 0.388 | 0.960 | 0.865 |
+
+FORGE fold0 β-EO=0.032 clearly passes (< α-EO=0.453). FORGE beats all 4 lightweight baselines by a large margin. Folds 1 and 2 running — results expected ~17:30 EDT 2026-05-29.
+
+**Baseline infrastructure fix (2026-05-29):** All 4 lightweight baseline trainers (`GroupDROTrainer`, `FairnessLossBalancingTrainer`, `SMOTEBaselineTrainer`, `GaussianOTRepairTrainer`) were missing `fold_rng_seed` in `__init__` and the `get_data_splits` kwargs dict. Fixed in `benchmarks/{group_dro,fairness_loss_balancing,smote_baseline,gaussian_ot_repair}.py`. Baseline specs corrected: `n_folds: 3→5`, added `fold_rng_seed: 6`, `seeds: [20]→[42]`.
 
 **Parameters swept (full grid, after smoke test):**
 
@@ -2341,17 +2391,41 @@ Baseline results from the k=3 asc-F asc-M run are recorded here for reference bu
 | OT Repair | 0.2878↑ | 0.0762↑ | 0.2322↑ | 0.1987 |
 
 **Result:**
-*(pending — smoke test not yet run)*
+Smoke test folds 0–2 complete (2026-05-30). Test-set β-EO (from final_test_metrics.csv):
+
+| Method | Fold 0 α-EO | Fold 0 β-EO | Fold 1 α-EO | Fold 1 β-EO | Fold 2 α-EO | Fold 2 β-EO | Mean β-EO |
+|--------|-------------|-------------|-------------|-------------|-------------|-------------|-----------|
+| FORGE (ep=10) | 0.453 | **0.004** | 0.414 | **0.003** | 0.154 | **0.005** | **0.004** |
+| GroupDRO | 0.480 | 0.153 | 0.430 | 0.149 | 0.279 | 0.125 | 0.142 |
+| FLB | 0.480 | 0.217 | 0.430 | 0.151 | 0.279 | 0.072 | 0.147 |
+| OT Repair | 0.480 | 0.336 | 0.430 | 0.058 | 0.279 | 0.055 | 0.150 |
+| SMOTE | 0.480 | 0.388 | 0.430 | 0.116 | 0.279 | 0.134 | 0.213 |
+
+Note: fold0 β-EO=0.032 in the earlier smoke test table was from val-set console output; the correct test-set value is 0.004 (from final_test_metrics.csv).
+
+**20-epoch classifier retrain on FORGE synthetic (diagnostic, 2026-05-30):** Using FORGE's best synthetic snapshot (ep≈4200–4800) but training a fresh 20-epoch FFNN instead of using FORGE's RL-optimised checkpoint. Results via `eval_ep20_classifier.py`:
+
+| Fold | α-EO | 20-ep retrain β-EO | β-F1w | β-AUC |
+|------|-------|---------------------|-------|-------|
+| 0 | 0.462 | 0.102 | 0.967 | 0.955 |
+| 1 | 0.427 | 0.198 | 0.947 | 0.923 |
+| 2 | 0.175 | 0.041 | 0.950 | 0.931 |
+| Mean | — | **0.114** | 0.955 | 0.936 |
+
+The 20-ep retrain beats the mean of all baselines (0.114 vs best baseline mean 0.142) but is far worse than FORGE's ep=10 run (0.004). The synthetic data alone carries some signal, but FORGE's gain comes from the RL-optimised policy weights, not the epoch count. Full FORGE with ep=20 per episode running now (folds 0+1 launched 2026-05-30 ~19:00 EDT on Huron cuda:0/1).
 
 **Takeaway:**
-*(pending)*
+Smoke test is a decisive pass. FORGE (ep=10) beats all baselines by 35–50×. Config locked: pca=15, ep=10, ratio=0.2, k=5.
+
+Note: the LOSO protocol (see project notes, 2026-05-29) reframes EXP-046 as Phase 3 (hyperparameter selection only via k=5 CV). Phase 4 (final evaluation) will use full LOSO over study_pool (~30 subjects after Q1 exclusion). EXP-046 grid design may be updated before full launch to align with LOSO Phase 3 requirements (study_pool-only, MVPA-band-stratified val selection).
 
 **Next steps:**
-1. **Run smoke test** on Oneida/Aulavik/Lambda (test_fold{0,1,2}.yaml)
-2. If β-EO < α-EO on mean: run full 36-config × 5-fold grid (fold{0–4}.yaml)
-3. If FORGE also beats baselines on smoke test config: run baselines on same 5 folds
+1. Await FORGE ep=20 folds 0+1 results (running on Huron, ~6h), then fold 2
+2. Compare ep=10 vs ep=20 FORGE results across 3 folds
+3. Decide whether to redesign EXP-046 grid to align with LOSO Phase 3 before launching full grid
+4. Run full 36-config × 5-fold grid (fold{0–4}.yaml) on Oneida/Aulavik/Lambda
 4. Rsync results to Huron, run `analyze_kfold.py all`, select config with lowest mean val EO
-5. Feed selected config into EXP-047
+5. Feed selected config into EXP-047 / LOSO Phase 4
 
 ---
 
@@ -2391,3 +2465,57 @@ GroupDRO, OT Repair, FLB, SMOTE, CTGAN, FairTabDDPM — each with fold_idx ∈ {
 - Blocked on EXP-046 completion.
 - Once best config known, generate 5 fold specs for FORGE + 5×6 baseline specs.
 - Analyse with `python analyze_kfold.py all <results_root>`.
+
+---
+
+### EXP-048 | worst-cell-stability
+
+**Status:** PARTIAL — census COMPLETE; ACS Employment IN PROGRESS (Lambda cuda:1, PID 120839)
+**Type:** DIAGNOSTIC
+**Dataset(s):** census_income (control), acs_employment (disability framing, dropped dataset)
+**Specs:** `experiment_specs/worst_cell_verify_census.yaml`, `experiment_specs/worst_cell_verify_acs.yaml`
+**Depends on:** EXP-021 (census best config), EXP-027 (ACS Employment disability — dropped)
+
+**Goal:** Determine whether the WGL reward's "worst cell" consistently targets the DA+ cell (group=minority, y=1, cell_id=1) vs a different cell. Diagnoses the WGL-EO disconnect: on a working dataset (census) the worst cell should be cell 1 nearly every episode; on a failing dataset (ACS Employment disability) the worst cell is expected to differ, explaining why RL cannot improve EO even when WGL improves.
+
+**Cell encoding (cell_id = group×2 + label):**
+- 0 = (a=0, y=0) — disadvantaged negative
+- 1 = (a=0, y=1) — **DA+ cell** (target)
+- 2 = (a=1, y=0) — advantaged negative
+- 3 = (a=1, y=1) — advantaged positive
+
+**Config delta from vanilla:**
+- `total_episodes: 1500` (short diagnostic run)
+- `seeds: [0, 42]`
+- `global_sigmoid_k: 10.0`
+- ACS spec adds: `dataset_name: acs_employment`, `minority_id: 0`, `majority_id: 1`, `dp_protected_col: disability`, `acs_states: [CA, TX, NY, FL, PA, OH, IL, GA, NC, MI]`
+- New `training.py` columns logged (prefixed `fairness.` in metrics.csv): `bce_cell_00`, `bce_cell_01`, `bce_cell_10`, `bce_cell_11`, `worst_cell_id`
+
+**Server:**
+- Census: Lambda cuda:0. Run dir: `SPECworst_cell_verify_census_EP1500_PCA10_REWwgl_minID0_majID1_TRJ2000_REAL3000_GG202605281735_649daaf3`
+- ACS Employment: Lambda cuda:1. PID 120839 (as of 2026-05-29 09:45). Log: `experiment_specs/worst_cell_logs/acs.out`. Run dir: `SPECworst_cell_verify_acs_EP1500_PCA10_REWwgl_minID0_majID1_TRJ2000_REAL3000_GG202605290945_98af9ebf`
+- Launch note: `folktables` was not installed in Lambda's rl venv; installed 2026-05-29 via `~/envs/rl/bin/pip install folktables`. Relaunch required explicit `~/envs/rl/bin/python3` (the `python` symlink in the venv lacked execute permission).
+
+**Analysis:** For each seed, compute fraction of episodes where `worst_cell_id == 1` (column `fairness.worst_cell_id` in metrics.csv). High fraction (>80%) on census = WGL correctly tracks DA+. Low or mixed fraction on ACS Employment = WGL-EO disconnect confirmed and characterised.
+
+**Result:**
+
+Census (COMPLETE — 2026-05-28, Lambda cuda:0):
+
+| Seed | α-EO | β-EO | worst_cell_id=1 fraction |
+|------|------|------|--------------------------|
+| 0 | 0.327 | 0.012 | **100%** (1500/1500 eps) |
+| 42 | 0.389 | 0.004 | **100%** (1500/1500 eps) |
+
+WGL targets cell 1 (DA+ = disabled, employed) in 100% of episodes on both seeds. EO reduces from ~0.33–0.39 to <0.012. This confirms WGL-EO alignment is perfect on census.
+
+ACS Employment: *(pending — running)*
+
+**Takeaway:**
+Census half confirms the diagnostic works as designed — WGL never wavers from the DA+ cell for 1500 episodes. ACS Employment result pending; expected to show instability or wrong-cell dominance.
+
+**Next steps:**
+1. Wait for ACS Employment run to complete on Lambda (~2 hours remaining as of 2026-05-29 10:10).
+2. Rsync ACS results to Huron.
+3. Extract `fairness.worst_cell_id` distribution for ACS Employment (both seeds); compare against census.
+4. If ACS shows <100% cell-1 dominance: record dominant cell, quantify instability, write paper paragraph explaining WGL-EO disconnect mechanistically.
