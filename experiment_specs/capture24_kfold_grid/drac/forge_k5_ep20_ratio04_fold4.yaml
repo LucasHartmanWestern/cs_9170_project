@@ -1,0 +1,62 @@
+# EXP-046 DRAC grid — k=5, ep=20, ratio=0.4, fold 4/5, fold_rng_seed=6
+dataset_name: capture24
+multiclass: false
+da_pct: 0.015
+bias_pct: null
+dp_protected_col: sex
+minority_id: 1
+majority_id: 0
+win_seconds: 1.0
+step_seconds: 0.5
+reward_mode: wgl
+lambda_schedule:
+- 1.0
+- 1.0
+use_pca: true
+total_episodes: 5000
+phase2_episodes: null
+gen_both_classes: false
+curriculum_learning: false
+use_delta_actions: true
+delta_scale: 0.1
+delta_clip: 0.2
+pca_clip: null
+radius_clip: 3.0
+total_data_size: 5000
+ratio_trajectory: 0.4
+global_sigmoid_k: 5
+reward_shaping:
+  utility_guard_min_factor: 0.0
+local_weights:
+  use_dvrl_local: false
+  dvrl_max_bce: 0.693
+  w_anchor: 0.0
+  w_hard: 0.0
+  w_div: 0.0
+ffnn:
+  hidden_sizes:
+  - 32
+  - 16
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 20
+  optimizer: adam
+reinforce:
+  hidden_sizes:
+  - 64
+  - 64
+  lr: 0.0003
+  gamma: 1.0
+  entropy_start: 0.02
+  entropy_end: 0.005
+  optimizer: adam
+benchmarks:
+  run_ctgan: false
+  run_ctabgan: false
+n_folds: 5
+fold_rng_seed: 6
+kfold_val_frac: 0.4
+fold_idx: 4
+pca_components: 15
+seeds:
+- 42

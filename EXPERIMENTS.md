@@ -952,14 +952,43 @@ Originally intended for SLURM (`submit_all.sh` runs all 20 via `sbatch`). Launch
 
 All 20 specs expected complete by **~2026-06-01 06:00 EDT**.
 
+**Storage:** `/storage_1/epigou_storage/FORGE/census_random_search/` — rsynced 2026-06-01.
+
+**Collected and complete (16/20 specs):**
+
+| Spec | Server | Status | Notes |
+|------|--------|--------|-------|
+| rand_0000 | Oneida cuda:0 | **COMPLETE** | Valid dir: `GG202605281538`; aborted stub `GG202605281528` (35 eps) also present, ignore |
+| rand_0001 | Oneida cuda:1 | **COMPLETE** | |
+| rand_0002 | Oneida cuda:0 | **COMPLETE** | |
+| rand_0003 | Oneida cuda:1 | **IN PROGRESS** | seed_0+1 done, seed_42 at ep 247 as of 2026-06-01 |
+| rand_0004 | Oneida cuda:0 | **IN PROGRESS** | seed_0 done, seed_1 at ep 545 as of 2026-06-01 |
+| rand_0005 | Oneida cuda:1 | **NOT STARTED** | Queued behind rand_0003 |
+| rand_0006 | Oneida cuda:0 | **NOT STARTED** | Queued behind rand_0004 |
+| rand_0007 | Aulavik cuda:0 | **COMPLETE** | Valid dir: `GG202605281536`; aborted stub `GG202605281531` (18 eps) also present, ignore |
+| rand_0008 | Aulavik cuda:1 | **COMPLETE** | |
+| rand_0009 | Aulavik cuda:0 | **COMPLETE** | |
+| rand_0010 | Aulavik cuda:1 | **COMPLETE** | |
+| rand_0011 | Aulavik cuda:0 | **COMPLETE** | |
+| rand_0012 | Aulavik cuda:1 | **COMPLETE** | |
+| rand_0013 | Aulavik cuda:0 | **COMPLETE** | |
+| rand_0014 | Lambda cuda:0 | **COMPLETE** | Valid dir: `GG202605291351`; aborted stub `GG202605281533` (12 eps) also present, ignore |
+| rand_0015 | Lambda cuda:1 | **COMPLETE** | |
+| rand_0016 | Lambda cuda:0 | **COMPLETE** | |
+| rand_0017 | Lambda cuda:1 | **COMPLETE** | |
+| rand_0018 | Lambda cuda:0 | **COMPLETE** | |
+| rand_0019 | Lambda cuda:1 | **COMPLETE** | |
+
+rand_0003–0006 to be rsynced once Oneida finishes (est. later 2026-06-01). Re-run: `rsync -av --include='SPECrand_*/' --include='SPECrand_*/**' --exclude='*' -e "ssh -i ~/.ssh/id_rsa_oneida -p 2023" epigou@129.100.226.232:~/cs_9170_project/training_runs/ /storage_1/epigou_storage/FORGE/census_random_search/`
+
 **Result:**
-*(pending)*
+*(pending — analyse once all 20 specs collected)*
 
 **Takeaway:**
 *(pending)*
 
 **Next steps:**
-1. Rsync results from all 3 servers to Huron once complete.
+1. Rsync rand_0003–0006 from Oneida once complete.
 2. Run `check_run.py` on each completed spec to get per-seed β-EO.
 3. Select config with lowest mean β-EO across seeds.
 4. Use best combined config (EXP-021 + EXP-022) as the new census vanilla for final paper runs.
@@ -2284,34 +2313,82 @@ Alpha-EO by seed: seed 0 = 0.114, seed 1 = 0.064, seed 42 = 0.140. AUC: seed 0 =
 ### EXP-046 | capture24-kfold-grid
 
 **Type:** PARAM-TUNING
-**Status:** SMOKE TEST IN PROGRESS — fold0 complete; folds 1–2 running on Huron (2026-05-29)
+**Status:** GRID IN PROGRESS — 15 FORGE jobs submitted to DRAC 2026-05-31; smoke test + ep=20 diagnostic complete
 **Dataset(s):** capture24 (da_pct=0.015, DA+=60)
 **Folds:** k=5 (fold_idx 0–4), fold_rng_seed=6 (preflight-validated 2026-05-28)
 **Reference config:** vanilla_config.json
-**Config delta:** Full cartesian grid — same axes as EXP-025, plus fold_idx sweep
+**Config delta:** Grid — k∈{3,5} × ep∈{10,20,30} × ratio∈{0.2,0.4}, pca=15 (full 36-config grid superseded; ratio=0.4 extension added 2026-06-01; ep=30 extension added 2026-06-01)
 **Follows from:** EXP-025
 
-**Server assignment (smoke test):**
+**Server assignment (smoke test — COMPLETE):**
 
 | Fold | Server | GPU | Launch script | Status |
 |------|--------|-----|---------------|--------|
 | fold0 | Huron | cuda:0 | `logs/test_fold0_huron_gpu0.out` | **COMPLETE** 2026-05-28 |
-| fold1 | Huron | cuda:0 | `run_smoke_fold1_huron.sh` | **RUNNING** 2026-05-29 ~14:30 |
-| fold2 | Huron | cuda:1 | `run_smoke_fold2_huron.sh` | **RUNNING** 2026-05-29 ~14:30 |
+| fold1 | Huron | cuda:0 | `run_smoke_fold1_huron.sh` | **COMPLETE** 2026-05-30 |
+| fold2 | Huron | cuda:1 | `run_smoke_fold2_huron.sh` | **COMPLETE** 2026-05-30 |
 
-Folds 1 and 2 each run FORGE + 4 baselines (GroupDRO, FLB, SMOTE, OT Repair) simultaneously on separate GPUs. FORGE runs in background (~3 hrs); baselines run sequentially in parallel background process (~2 min total). Est. completion ~17:30 EDT 2026-05-29.
+**Decision gate result (2026-05-30):** PASSED — FORGE mean β-EO=0.004 across folds 0–2, beats all baselines by 35–50×. Full 36-config grid skipped. Moderate grid (k∈{3,5} × ep∈{10,20}, pca=15, ratio=0.2) launched on DRAC.
 
-**Decision gate:** If FORGE β-EO < all baseline β-EOs on mean across folds 0–2, lock in smoke test config (pca=15, ep=10, ratio=0.2, k=5) and skip full 36-config grid. Use this config directly for folds 3–4 and all baselines. If FORGE fails to beat baselines consistently, proceed to full grid search.
+**ep=20 diagnostic (Huron, 2026-05-30 — COMPLETE):** Ran FORGE ep=20 on folds 0+1 to determine if ep=20 would outperform ep=10.
 
-Full grid (after smoke test passes) adds folds 3+4:
+| Config | Fold | α-EO | β-EO |
+|--------|------|------|------|
+| FORGE ep=10 | 0 | 0.453 | **0.004** |
+| FORGE ep=10 | 1 | 0.414 | **0.003** |
+| FORGE ep=20 | 0 | 0.480 | 0.078 |
+| FORGE ep=20 | 1 | 0.430 | 0.181 |
 
-| Fold | Server | GPU | Launch script |
-|------|--------|-----|---------------|
-| fold0 | Oneida | cuda:0 | `experiment_specs/capture24_kfold_grid/run_fold0_oneida.sh` |
-| fold1 | Aulavik | cuda:0 | `experiment_specs/capture24_kfold_grid/run_fold1_aulavik.sh` |
-| fold2 | Lambda | cuda:1 | `experiment_specs/capture24_kfold_grid/run_fold2_lambda.sh` |
-| fold3 | Oneida | cuda:1 | `experiment_specs/capture24_kfold_grid/run_fold3_oneida.sh` |
-| fold4 | Aulavik | cuda:1 | `experiment_specs/capture24_kfold_grid/run_fold4_aulavik.sh` |
+ep=20 fold 1 is the worst method across all baselines (0.181 vs best baseline GroupDRO 0.149). ep=10 is decisively better on both folds. ep=20 included in DRAC grid to confirm across all 5 folds, not to challenge ep=10 selection. Specs: `experiment_specs/capture24_kfold_grid/test_fold{0,1}_ep20.yaml`, logs: `logs/test_fold{0,1}_ep20_huron_gpu{0,1}.out`.
+
+**DRAC moderate grid (submitted 2026-05-31):**
+
+Grid: k∈{3,5} × ep∈{10,20} × folds 0–4 = 20 total runs. 5 already complete (Huron smoke test + ep=20 diagnostic). 15 new jobs submitted to DRAC.
+
+| Config | Folds already done | Folds on DRAC |
+|--------|-------------------|---------------|
+| k=5, ep=10 | 0, 1, 2 ✓ | 3, 4 |
+| k=5, ep=20 | 0, 1 ✓ | 2, 3, 4 |
+| k=3, ep=10 | — | 0, 1, 2, 3, 4 |
+| k=3, ep=20 | — | 0, 1, 2, 3, 4 |
+
+Specs: `experiment_specs/capture24_kfold_grid/drac/forge_k{3,5}_ep{10,20}_fold{0-4}.yaml`
+Submit script: `experiment_specs/capture24_kfold_grid/drac/submit_all.sh`
+SLURM settings: `--account=def-mcapretz`, `--time=10:00:00`, 1 GPU, 2 CPUs, 3GB RAM.
+Walltime basis: ep=10 ~2.9h on Huron, ep=20 ~5.0h on Huron; 10h = 2× buffer on ep=20 worst case.
+No parallelization — single seed per job (`seeds: [42]`), `--parallel` not used.
+Capture24 feature cache on DRAC confirmed valid (recent dataset.py changes are kfold-logic only; cache fields X/y/a/subject_ids unchanged).
+
+**DRAC ratio=0.4 extension (2026-06-01):**
+
+Grid: k∈{3,5} × ep∈{10,20} × ratio=0.4 × folds 0–4 = 20 new runs. ep=20 included to provide worst-case contrast in paper.
+ratio=0.4 → traj=2000, real=3000 (total_data_size=5000 fixed); DA+ drops to ~45 vs ~60 at ratio=0.2, still in scarcity regime.
+
+| Config | Folds on DRAC |
+|--------|---------------|
+| k=3, ep=10, ratio=0.4 | 0, 1, 2, 3, 4 |
+| k=3, ep=20, ratio=0.4 | 0, 1, 2, 3, 4 |
+| k=5, ep=10, ratio=0.4 | 0, 1, 2, 3, 4 |
+| k=5, ep=20, ratio=0.4 | 0, 1, 2, 3, 4 |
+
+Specs: `experiment_specs/capture24_kfold_grid/drac/forge_k{3,5}_ep{10,20}_ratio04_fold{0-4}.yaml`
+Submit script: `experiment_specs/capture24_kfold_grid/drac/submit_ratio04.sh`
+
+**DRAC ep=30 extension (2026-06-01):**
+
+Grid: k∈{3,5} × ep=30 × ratio∈{0.2,0.4} × folds 0–4 = 20 new runs. Walltime 15h (extrapolated from ep=10→2.9h, ep=20→5.0h on Huron; 2× buffer on ep=30 worst case).
+
+| Config | Folds on DRAC |
+|--------|---------------|
+| k=3, ep=30, ratio=0.2 | 0, 1, 2, 3, 4 |
+| k=3, ep=30, ratio=0.4 | 0, 1, 2, 3, 4 |
+| k=5, ep=30, ratio=0.2 | 0, 1, 2, 3, 4 |
+| k=5, ep=30, ratio=0.4 | 0, 1, 2, 3, 4 |
+
+Specs: `experiment_specs/capture24_kfold_grid/drac/forge_k{3,5}_ep30{,_ratio04}_fold{0-4}.yaml`
+Submit script: `experiment_specs/capture24_kfold_grid/drac/submit_ep30.sh`
+
+Smoke-test specs and local Huron run scripts in `capture24_kfold_grid/` (non-drac) deleted 2026-06-01 — all superseded by drac/ specs.
 
 ---
 
@@ -2415,16 +2492,15 @@ Note: fold0 β-EO=0.032 in the earlier smoke test table was from val-set console
 The 20-ep retrain beats the mean of all baselines (0.114 vs best baseline mean 0.142) but is far worse than FORGE's ep=10 run (0.004). The synthetic data alone carries some signal, but FORGE's gain comes from the RL-optimised policy weights, not the epoch count. Full FORGE with ep=20 per episode running now (folds 0+1 launched 2026-05-30 ~19:00 EDT on Huron cuda:0/1).
 
 **Takeaway:**
-Smoke test is a decisive pass. FORGE (ep=10) beats all baselines by 35–50×. Config locked: pca=15, ep=10, ratio=0.2, k=5.
+Smoke test decisive pass — FORGE ep=10 beats all baselines by 35–50× (mean β-EO=0.004 vs best baseline 0.142). ep=20 diagnostic confirms ep=10 is the right choice: ep=20 is inconsistent across folds (fold 0: 0.078, fold 1: 0.181; fold 1 is worst of all methods). DRAC moderate grid running to confirm k selection (k=3 vs k=5) across all 5 folds.
 
-Note: the LOSO protocol (see project notes, 2026-05-29) reframes EXP-046 as Phase 3 (hyperparameter selection only via k=5 CV). Phase 4 (final evaluation) will use full LOSO over study_pool (~30 subjects after Q1 exclusion). EXP-046 grid design may be updated before full launch to align with LOSO Phase 3 requirements (study_pool-only, MVPA-band-stratified val selection).
+Note: the LOSO protocol (see project notes, 2026-05-29) reframes EXP-046 as Phase 3 (hyperparameter selection only via k=5 CV). Phase 4 (final evaluation) will use full LOSO over study_pool (~30 subjects after Q1 exclusion). Grid design was not redesigned for LOSO Phase 3 — moderate 4-config grid is sufficient to confirm k selection before committing to LOSO.
 
 **Next steps:**
-1. Await FORGE ep=20 folds 0+1 results (running on Huron, ~6h), then fold 2
-2. Compare ep=10 vs ep=20 FORGE results across 3 folds
-3. Decide whether to redesign EXP-046 grid to align with LOSO Phase 3 before launching full grid
-4. Run full 36-config × 5-fold grid (fold{0–4}.yaml) on Oneida/Aulavik/Lambda
-4. Rsync results to Huron, run `analyze_kfold.py all`, select config with lowest mean val EO
+1. Await DRAC grid results (~10h per job from submission time)
+2. Rsync DRAC results to Huron: `rsync -av drac:~/cs_9170_project/training_runs/ training_runs/`
+3. Run `python check_run.py` on each new run or `analyze_kfold.py all` once all 20 cells complete
+4. Select config with lowest mean val EO across 5 folds (ep=10 expected to win; k=3 vs k=5 is the open question)
 5. Feed selected config into EXP-047 / LOSO Phase 4
 
 ---
