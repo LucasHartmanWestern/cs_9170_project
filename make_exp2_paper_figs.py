@@ -20,9 +20,9 @@ CENSUS_ANALYSIS = Path(
     "TRJ2000_REAL3000_GG202604251803_9af13c63/analysis"
 )
 CAPTURE24_ANALYSIS = Path(
-    "/storage_1/epigou_storage/FORGE/aulavik_runs/capture_24/k5/"
-    "SPECcapture24_k5_gpu0_EP5000_PCA15_REWwgl_minID1_majID0_"
-    "TRJ1000_REAL4000_GG202605041119_779cf9c5/analysis"
+    "/storage_1/epigou_storage/FORGE/training_runs/"
+    "SPECtest_fold0_EP5000_PCA15_REWwgl_minID1_majID0_"
+    "TRJ1000_REAL4000_GG202605281522_4d35ee6c/analysis"
 )
 OUT_DIR = Path("paper/figures")
 

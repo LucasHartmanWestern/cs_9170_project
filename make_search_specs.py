@@ -300,6 +300,24 @@ def main():
             save_yaml(spec, spec_path)
             generated.append((spec_name, spec_path))
 
+    # ── fold expansion ────────────────────────────────────────────────────
+    # If fold_indices is set, replicate every generated spec once per fold,
+    # injecting fold_idx into each copy and appending _fold{i} to the name.
+    fold_indices = cfg.get("fold_indices")
+    if fold_indices:
+        expanded = []
+        for spec_name, spec_path in generated:
+            spec_dict = load_yaml(spec_path)
+            os.remove(spec_path)
+            for fi in fold_indices:
+                fold_spec = copy.deepcopy(spec_dict)
+                fold_spec["fold_idx"] = fi
+                fold_name = f"{spec_name}_fold{fi}"
+                fold_path = os.path.join(out_dir, f"{fold_name}.yaml")
+                save_yaml(fold_spec, fold_path)
+                expanded.append((fold_name, fold_path))
+        generated = expanded
+
     # ── generate SLURM scripts ────────────────────────────────────────────
     sh_files = []
     if bundle_size <= 1:
