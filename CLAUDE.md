@@ -119,12 +119,37 @@ Each training episode: generate synthetic trajectory → train beta on real+synt
 
 ### Analysis Scripts
 
+Located in `analysis/`:
+
 | File | Purpose |
 |------|---------|
-| `check_run.py` | Standard post-run analysis — summary table, learning curves, generalizability curves |
+| `analysis/check_run.py` | Standard post-run analysis — summary table, learning curves, generalizability curves |
+| `analysis/analyze_grid.py` | Aggregate and rank grid-search results across completed runs |
+| `analysis/analyze_k0_grid.py` | Grid analysis specific to k=0 (no-sigmoid) runs |
+| `analysis/analyze_kfold.py` | Aggregate FORGE and baseline results across k-fold runs |
+| `analysis/analyze_reward_signal.py` | Reward signal diagnostics across training |
+| `analysis/eval_checkpoint.py` | Evaluate best saved checkpoint on full val/test sets |
+
+Other tools (project root):
+
+| File | Purpose |
+|------|---------|
 | `dataset_viability.py` | Dataset structural viability checker — DA+ scan, alpha-EO baseline, feature separability |
 | `make_spec.py` | Generate experiment spec JSON + SLURM batch files from a base spec with `--patch` / `--sweep` |
+| `make_search_specs.py` | Generate random/grid hyperparameter search specs and SLURM batch files |
 | `run_baseline.py` | Run GroupDRO, FLB, CTGAN, OT Repair, and other baselines |
+
+Paper figure scripts (in `paper_figures/`):
+
+| File | Purpose |
+|------|---------|
+| `paper_figures/fig2_training_curves.py` | Figure 2 — episode return training curves (Census + Capture-24) |
+| `paper_figures/fig3_centroid_drift.py` | Figure 3 — centroid drift toward disadvantaged-positive cluster |
+| `paper_figures/fig4_comparative_results.py` | Figure 4 — comparative fairness-utility profile across all methods |
+| `paper_figures/fig5_radar.py` | Figure 5 — multi-metric radar trade-off profiles |
+| `paper_figures/fig_grid_sensitivity.py` | Exp 1 pending — sensitivity heatmap (k × PCA, k × traj) |
+| `paper_figures/fig_grid_scatter.py` | Exp 1 pending — grid scatter plot |
+| `paper_figures/plot_centroid_drift.py` | Per-run centroid drift (input to fig3_centroid_drift.py) |
 
 ### Notebooks
 
@@ -193,7 +218,7 @@ DRAC workflow: prepare spec and `.sh` batch files locally, user submits on DRAC,
 
 Run after every completed experiment:
 ```bash
-python check_run.py training_runs/<run_dir> [--interval 150] [--device cpu] [--no-gen-curve]
+python analysis/check_run.py training_runs/<run_dir> [--interval 150] [--device cpu] [--no-gen-curve]
 ```
 
 Outputs go to `<run_dir>/analysis/`:

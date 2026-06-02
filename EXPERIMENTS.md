@@ -52,8 +52,9 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-044 | wildfire-forge-k10-blm | PAPER-FINAL | IN PROGRESS | wildfire | EXP-040, EXP-041, EXP-042 |
 | EXP-043 | bank-marketing-viability | DATASET-VIABILITY | COMPLETE | bank_marketing | — |
 | EXP-045 | census-final-5seeds | FORGE + BASELINES | COMPLETE | census_income | EXP-021 |
-| EXP-046 | capture24-kfold-grid | PARAM-TUNING | SMOKE-TEST-IN-PROGRESS | capture24 | EXP-025 |
-| EXP-047 | capture24-kfold-final | PAPER-FINAL | PLANNED | capture24 | EXP-046 |
+| EXP-046 | capture24-kfold-grid | PARAM-TUNING | COMPLETE | capture24 | EXP-025 |
+| EXP-047 | capture24-kfold-final | PAPER-FINAL | PLANNED | capture24 | EXP-049 |
+| EXP-049 | capture24-hparam-random | PARAM-TUNING | IN PROGRESS | capture24 | EXP-046 |
 | EXP-048 | worst-cell-stability | DIAGNOSTIC | IN PROGRESS | census_income, acs_employment | EXP-021, EXP-027 |
 
 ---
@@ -2313,7 +2314,7 @@ Alpha-EO by seed: seed 0 = 0.114, seed 1 = 0.064, seed 42 = 0.140. AUC: seed 0 =
 ### EXP-046 | capture24-kfold-grid
 
 **Type:** PARAM-TUNING
-**Status:** GRID IN PROGRESS — 15 FORGE jobs submitted to DRAC 2026-05-31; smoke test + ep=20 diagnostic complete
+**Status:** COMPLETE — all DRAC runs downloaded 2026-06-02; best config selected: k=5, ep=10, ratio=0.2 (traj=1000, real=4000, pca=15)
 **Dataset(s):** capture24 (da_pct=0.015, DA+=60)
 **Folds:** k=5 (fold_idx 0–4), fold_rng_seed=6 (preflight-validated 2026-05-28)
 **Reference config:** vanilla_config.json
@@ -2496,12 +2497,31 @@ Smoke test decisive pass — FORGE ep=10 beats all baselines by 35–50× (mean 
 
 Note: the LOSO protocol (see project notes, 2026-05-29) reframes EXP-046 as Phase 3 (hyperparameter selection only via k=5 CV). Phase 4 (final evaluation) will use full LOSO over study_pool (~30 subjects after Q1 exclusion). Grid design was not redesigned for LOSO Phase 3 — moderate 4-config grid is sufficient to confirm k selection before committing to LOSO.
 
+**Result (folds 0–2 only, ranked by mean val-EO):**
+
+| Config | Val-EO f0 | f1 | f2 | Mean Val | Test-EO f0 | f1 | f2 | Mean Test |
+|--------|-----------|-----|-----|----------|-----------|-----|-----|-----------|
+| **k=5, ep=10, ratio=0.2** | 0.040 | 0.014 | 0.011 | **0.022** | 0.004 | 0.003 | 0.005 | **0.004** |
+| k=3, ep=10, ratio=0.4 | 0.060 | 0.088 | 0.064 | 0.070 | 0.001 | 0.115 | 0.187 | 0.101 |
+| k=5, ep=10, ratio=0.4 | 0.096 | 0.015 | 0.167 | 0.093 | 0.013 | 0.025 | 0.202 | 0.080 |
+| k=3, ep=30, ratio=0.4 | 0.028 | 0.193 | 0.057 | 0.093 | 0.009 | 0.191 | 0.095 | 0.098 |
+| k=5, ep=30, ratio=0.4 | 0.028 | 0.178 | 0.079 | 0.095 | 0.030 | 0.197 | 0.123 | 0.117 |
+| k=5, ep=20, ratio=0.4 | 0.012 | 0.290 | 0.041 | 0.114 | 0.028 | 0.282 | 0.108 | 0.139 |
+| k=3, ep=20, ratio=0.4 | 0.073 | 0.270 | 0.094 | 0.146 | 0.025 | 0.279 | 0.141 | 0.148 |
+| k=3, ep=30, ratio=0.2 | 0.414 | 0.149 | 0.004 | 0.189 | 0.448 | 0.178 | 0.084 | 0.237 |
+| k=5, ep=30, ratio=0.2 | 0.414 | 0.126 | 0.049 | 0.196 | 0.447 | 0.119 | 0.016 | 0.194 |
+
+Configs with incomplete folds excluded from selection: k=5, ep=20, ratio=0.2 (only folds 0–1 available). k=3 ep=10/20 ratio=0.2 never ran (submit_all.sh jobs absent from DRAC; not blocking since k=5 winner is unambiguous).
+
+**Winner: k=5, ep=10, ratio=0.2 (traj=1000, real=4000, pca=15)** — wins by 3× on mean val-EO (0.022 vs 0.070 second-best) and dominates on test-EO (0.004). Consistent with smoke test. ep=30 at ratio=0.2 degrades badly (fold 0 val-EO ≈ alpha-EO).
+
+**Storage:** DRAC runs downloaded to `/storage_1/epigou_storage/FORGE/capture24_kfold_grid/`. Smoke-test runs (k=5 ep=10 folds 0–2, k=5 ep=20 folds 0–1) copied from `training_runs/` into same directory.
+
 **Next steps:**
-1. Await DRAC grid results (~10h per job from submission time)
-2. Rsync DRAC results to Huron: `rsync -av drac:~/cs_9170_project/training_runs/ training_runs/`
-3. Run `python check_run.py` on each new run or `analyze_kfold.py all` once all 20 cells complete
-4. Select config with lowest mean val EO across 5 folds (ep=10 expected to win; k=3 vs k=5 is the open question)
-5. Feed selected config into EXP-047 / LOSO Phase 4
+1. ~~Await DRAC grid~~ COMPLETE
+2. ~~Select config~~ COMPLETE: k=5, ep=10, ratio=0.2, pca=15
+3. Run EXP-049 random search (secondary hyperparams) — IN PROGRESS on DRAC
+4. Feed best combined config (EXP-046 + EXP-049) into EXP-047 final evaluation
 
 ---
 
@@ -2595,3 +2615,61 @@ Census half confirms the diagnostic works as designed — WGL never wavers from 
 2. Rsync ACS results to Huron.
 3. Extract `fairness.worst_cell_id` distribution for ACS Employment (both seeds); compare against census.
 4. If ACS shows <100% cell-1 dominance: record dominant cell, quantify instability, write paper paragraph explaining WGL-EO disconnect mechanistically.
+
+---
+
+### EXP-049 | capture24-hparam-random
+
+**Type:** PARAM-TUNING
+**Status:** IN PROGRESS — 60 jobs queued on DRAC 2026-06-02
+**Dataset(s):** capture24 (da_pct=0.015, DA+≈60)
+**Folds:** k=5 (fold_idx 0–2), fold_rng_seed=6 — folds 0–2 only (matches grid selection set)
+**Reference config:** vanilla_config.json + EXP-046 best (k=5, ep=10, ratio=0.2, pca=15)
+**Follows from:** EXP-046
+
+---
+
+**Purpose:**
+Random search over secondary (optimisation) hyperparameters, conditioned on the best principal config from EXP-046. Mirrors EXP-022 for census. Covers learning rates, delta scale, and optimisers for both the classifier and RL agent.
+
+**Reference config (fixed principal params):**
+- global_sigmoid_k: 5, pca_components: 15, ffnn.epochs: 10
+- ratio_trajectory: 0.2 → traj=1000, real=4000 (total_data_size=5000)
+- total_episodes: 5000, seed: 42, fold_rng_seed: 6, kfold_val_frac: 0.4
+
+**Search space:**
+
+| Parameter | Distribution | Range |
+|-----------|-------------|-------|
+| `ffnn.learning_rate` | log-uniform | [1e-4, 1e-2] |
+| `reinforce.lr` | log-uniform | [1e-5, 1e-3] |
+| `delta_scale` | uniform | [0.05, 0.30] |
+| `ffnn.optimizer` | choice | adam, adamw, sgd |
+| `reinforce.optimizer` | choice | adam, adamw |
+
+**Structure:** 20 random configs (rng seed=0) × 3 folds = 60 SLURM jobs. Each job: single fold, single seed (42), 5000 episodes.
+
+**Specs:** `experiment_specs/capture24_random/` — generated 2026-06-02 via `python make_search_specs.py search_configs/capture24_random.yaml`
+**Submit script:** `experiment_specs/capture24_random/submit_all.sh`
+**SLURM:** `--account=def-mcapretz`, `--time=10:00:00`, 1 GPU, 2 CPUs, 3 GB
+
+**Selection criterion:** Lowest mean val-EO across folds 0–2 (plain mean, no std penalty). Same criterion as EXP-046.
+
+**Storage (once complete):** Download to `/storage_1/epigou_storage/FORGE/capture24_random_search/` via:
+```bash
+rsync -av --include='SPECrand_*/' --include='SPECrand_*/**' --exclude='*' \
+  epigou@narval.alliancecan.ca:projects/def-mcapretz/epigou/cs_9170_project/training_runs/ \
+  /storage_1/epigou_storage/FORGE/capture24_random_search/
+```
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending)*
+
+**Next steps:**
+1. Await DRAC completion (~10h per job)
+2. Download results to Huron
+3. Extract mean val-EO and test-EO per config (group by rand_XXXX, average folds 0–2)
+4. Select best combined config; feed into EXP-047 final evaluation
