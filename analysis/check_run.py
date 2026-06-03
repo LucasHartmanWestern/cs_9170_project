@@ -129,7 +129,10 @@ def reconstruct_dataset(meta: dict, device: str):
     dataset.a_test and dataset.pca_transform are available after this call.
     """
     import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
+    _root = Path(__file__).parent.parent
+    for _p in [str(_root), str(_root / 'FORGE')]:
+        if _p not in sys.path:
+            sys.path.insert(0, _p)
     from dataset import Dataset
 
     ds_name = meta["dataset_name"]

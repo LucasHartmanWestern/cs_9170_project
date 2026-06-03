@@ -10,8 +10,15 @@ import hashlib
 import json
 import os
 import random
+import sys
 from datetime import datetime
+from pathlib import Path
 import yaml
+
+_project_root = Path(__file__).parent
+for _p in [str(_project_root / 'utilities'), str(_project_root / 'FORGE')]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import numpy as np
 import torch
