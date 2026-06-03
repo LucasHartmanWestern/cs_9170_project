@@ -25,9 +25,7 @@ def _seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def _load_spec(path: str) -> dict:
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
+from spec_helpers import _load_spec
 
 
 def _build_exp_group(baseline: str, spec_name: str, spec: dict) -> str:
@@ -45,7 +43,7 @@ def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
     import torch
     from torch.utils.data import DataLoader, TensorDataset
     from dataset import Dataset
-    from agents.ffnn_agent2 import FFNNAgent
+    from agents.ffnn_agent import FFNNAgent
     import reward_helpers as rh
 
     ds = Dataset(

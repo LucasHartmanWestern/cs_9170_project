@@ -7,7 +7,7 @@ import argparse
 import itertools
 import torch.multiprocessing as mp
 from training import Training
-from helpers_main import _load_spec, build_exp_group
+from spec_helpers import _load_spec, build_exp_group
 
 # Workaround: Python 3.12 + certain PyTorch versions have an ABCMeta incompatibility
 # in torch.autograd.profiler.record_function, which the DataLoader wraps every

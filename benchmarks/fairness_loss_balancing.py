@@ -35,7 +35,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from agents.ffnn_agent2 import FFNNAgent, FFNNModel
+from agents.ffnn_agent import FFNNAgent, FFNNModel
 from dataset import Dataset
 import reward_helpers as rh
 from test_suite import TestSuite

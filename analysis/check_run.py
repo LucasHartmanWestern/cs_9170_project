@@ -184,7 +184,7 @@ def reconstruct_dataset(meta: dict, device: str):
 
 def train_beta_on_synthetic(x_real, y_real, x_syn, y_syn, ffnn_cfg: dict, device: str):
     """Combine real + synthetic, train a fresh FFNN, return trained agent."""
-    from agents.ffnn_agent2 import FFNNAgent
+    from agents.ffnn_agent import FFNNAgent
 
     x_comb = torch.cat([x_real, x_syn], dim=0)
     y_comb = torch.cat([y_real, y_syn], dim=0)

@@ -75,7 +75,7 @@ def main():
 
     sys.path.insert(0, str(run_dir.parents[1]))
     from dataset import Dataset
-    from agents.ffnn_agent2 import FFNNAgent
+    from agents.ffnn_agent import FFNNAgent
 
     device = torch.device(args.device)
 

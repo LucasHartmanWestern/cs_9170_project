@@ -1,4 +1,4 @@
-[validate_spec] experiment_specs/census_grid_v2/census_k0_gpu1_restart_pca10_e30.yaml: OK
+[validate_spec] experiment_specs/census_grid/census_k0_gpu1_restart_pca10_e30.yaml: OK
 [main] spec=census_k0_gpu1_restart_pca10_e30.yaml device=cuda:1
 [main] exp_group=SPEC_census_k0_gpu1_restart_pca10_e30_aa9fc838__G202604281727
 [main] permutations=6 max_parallel=4
@@ -30696,7 +30696,7 @@ FFNN Using device: cuda:1
 [TestSuite] Final test metrics appended to (experiment): /storage_1/epigou_storage/FORGE/training_runs/SPECcensus_k0_gpu1_restart_pca10_e30_EP5000_PCA10_REWwgl_minID0_majID1_TRJ3000_REAL2000_GG202604281727_fb16a47e/final_test_metrics.csv
 Total time 51210.35s
 [Tracker Process 5] Finished. Run folder: /storage_1/epigou_storage/FORGE/training_runs/SPECcensus_k0_gpu1_restart_pca10_e30_EP5000_PCA10_REWwgl_minID0_majID1_TRJ3000_REAL2000_GG202604281727_fb16a47e/seed_42
-[validate_spec] experiment_specs/census_grid_v2/census_k0_gpu1_restart_pca15_e30.yaml: OK
+[validate_spec] experiment_specs/census_grid/census_k0_gpu1_restart_pca15_e30.yaml: OK
 [main] spec=census_k0_gpu1_restart_pca15_e30.yaml device=cuda:1
 [main] exp_group=SPEC_census_k0_gpu1_restart_pca15_e30_4b4d4256__G202604300345
 [main] permutations=9 max_parallel=4

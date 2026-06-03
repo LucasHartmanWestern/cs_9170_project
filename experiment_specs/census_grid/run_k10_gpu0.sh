@@ -5,10 +5,10 @@ source ~/envs/rl/bin/activate
 LOGDIR=/storage_1/epigou_storage/FORGE/training_runs_k10/logs
 OUTDIR=/storage_1/epigou_storage/FORGE/training_runs_k10
 SPECS=(
-  experiment_specs/census_grid_v2/census_k10_r02_e20.yaml
-  experiment_specs/census_grid_v2/census_k10_r02_e30.yaml
-  experiment_specs/census_grid_v2/census_k10_r04_e10.yaml
-  experiment_specs/census_grid_v2/census_k10_r04_e20.yaml
+  experiment_specs/census_grid/census_k10_r02_e20.yaml
+  experiment_specs/census_grid/census_k10_r02_e30.yaml
+  experiment_specs/census_grid/census_k10_r04_e10.yaml
+  experiment_specs/census_grid/census_k10_r04_e20.yaml
 )
 cd "$(dirname "$0")/../.."
 for spec in "${SPECS[@]}"; do

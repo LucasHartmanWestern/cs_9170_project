@@ -28,7 +28,7 @@ from dataset import Dataset
 from agents.reinforce_agent import ReinforceAgent
 from agents.cmaes_agent import CMAESAgent
 
-from agents.ffnn_agent2 import FFNNAgent
+from agents.ffnn_agent import FFNNAgent
 from episode_tracker import EpisodeTracker
 import reward_helpers as rh
 

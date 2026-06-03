@@ -24,7 +24,7 @@ from sklearn.metrics import f1_score, roc_auc_score
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from dataset import Dataset
-from agents.ffnn_agent2 import FFNNAgent
+from agents.ffnn_agent import FFNNAgent
 import reward_helpers as rh
 
 

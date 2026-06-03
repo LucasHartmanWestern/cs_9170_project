@@ -56,7 +56,7 @@ from torch.utils.data import DataLoader, TensorDataset
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dataset import Dataset
-from agents.ffnn_agent2 import FFNNAgent
+from agents.ffnn_agent import FFNNAgent
 from reward_helpers import fairness_classification_metrics
 
 
@@ -513,7 +513,7 @@ def step4_wgl_eo_probe(args):
     from torch.utils.data import DataLoader, TensorDataset
     loader = DataLoader(TensorDataset(x_aug_t, y_aug_t), batch_size=64, shuffle=True)
 
-    from agents.ffnn_agent2 import FFNNAgent
+    from agents.ffnn_agent import FFNNAgent
     beta = FFNNAgent(
         input_size=x_aug_t.shape[1],
         hidden_sizes=[32, 16],

@@ -1,5 +1,5 @@
 nohup: ignoring input
-[validate_spec] experiment_specs/census_grid_v2/census_k0_gpu1.yaml: OK
+[validate_spec] experiment_specs/census_grid/census_k0_gpu1.yaml: OK
 [main] spec=census_k0_gpu1.yaml device=cuda:1
 [main] exp_group=SPEC_census_k0_gpu1_287d987f__G202604251635
 [main] permutations=27 max_parallel=4
