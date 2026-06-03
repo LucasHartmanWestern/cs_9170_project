@@ -40,11 +40,10 @@ _KNOWN_TOP_LEVEL_FIELDS = {
     "whiten_pca", "beta_reset_interval", "beta_warmstart_from_alpha",
     "pool_pos_fraction", "permutations", "total_data_size", "readmit_outcome", "brfss_outcome",
     "global_sigmoid_k", "epochs", "max_parallel",
-    "use_ppo", "ppo",
     "output_dir",
 }
 _KNOWN_LOCAL_WEIGHTS = {
-    "w_ot", "use_dvrl_local", "dvrl_max_bce", "dvrl_scale",
+    "use_dvrl_local", "dvrl_max_bce", "dvrl_scale",
     "w_anchor", "w_hard", "w_div", "sigma_anchor", "rho_div", "hard_margin",
     "use_uncertainty_anchors", "uncertainty_warmup_episodes", "sigma_calibration_factor",
     "anchor_refresh_interval", "anchor_refresh_top_k",
@@ -103,12 +102,10 @@ def validate_spec(spec: dict, spec_path: str) -> None:
     if spec.get("use_cmaes") and spec.get("curriculum_learning"):
         warnings.append("use_cmaes=True + curriculum_learning=True: curriculum is a REINFORCE concept; may have no effect with CMA-ES")
     lw = spec.get("local_weights", {})
-    if float(lw.get("w_ot", 0.0)) > 0 and spec.get("use_cmaes"):
-        warnings.append("w_ot > 0 with use_cmaes=True: OT local reward had negligible effect in v21; confirm this is intentional")
     lambda_sched = spec.get("lambda_schedule", [1.0, 1.0])
     if isinstance(lambda_sched, list) and len(lambda_sched) == 2:
         lam = lambda_sched[0]
-        if lam < 1.0 and float(lw.get("w_ot", 0.0)) == 0.0 and not lw.get("use_dvrl_local"):
+        if lam < 1.0 and not lw.get("use_dvrl_local"):
             warnings.append(f"lambda_schedule={lambda_sched} but all local weights are zero — global-only run with lambda<1.0")
     if spec.get("bias_val") is True:
         warnings.append("bias_val=True: validation set will be biased; use False unless intentionally testing under bias")

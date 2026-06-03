@@ -27,7 +27,7 @@ from env import Environment
 from dataset import Dataset
 from agents.reinforce_agent import ReinforceAgent
 from agents.cmaes_agent import CMAESAgent
-from agents.ppo_agent import PPOAgent
+
 from agents.ffnn_agent2 import FFNNAgent
 from episode_tracker import EpisodeTracker
 import reward_helpers as rh
@@ -168,32 +168,8 @@ class Training:
         DEFAULT_CMAES = {"sigma0": 1.0, "popsize": None, "cmaes_opts": {}}
         self.cmaes_config = {**DEFAULT_CMAES, **(self.cmaes or {})}
 
-        DEFAULT_PPO = {
-            "state_size": self.state_dim,
-            "action_size": self.pca_components,
-            "hidden_size": 64,
-            "lr": 3e-4,
-            "gamma": 1.0,
-            "clip_epsilon": 0.2,
-            "update_epochs": 4,
-            "batch_size": 64,
-            "c1": 0.5,
-            "c2": 0.01,
-            "device": self.device,
-            "seed": self.seed,
-        }
-        ppo_config = {**DEFAULT_PPO, **(self.ppo or {})}
-        ppo_config["state_size"] = self.state_dim
-        ppo_config["action_size"] = self.pca_components
-        ppo_config["device"] = self.device
-        ppo_config["seed"] = self.seed
-        self.ppo_config = ppo_config
-
         # agents (will be rebuilt in __call__ after feature_dim is known)
-        if self.use_ppo:
-            self.agent = PPOAgent(**self.ppo_config)
-        else:
-            self.agent = ReinforceAgent(**reinforce_config)
+        self.agent = ReinforceAgent(**reinforce_config)
         self.alpha_model = FFNNAgent(**self.ffnn_config)
         self.beta_model = FFNNAgent(**self.ffnn_config)
 
@@ -319,16 +295,11 @@ class Training:
         self.use_cmaes=bool(spec.get("use_cmaes", False))
         self.cmaes=spec.get("cmaes", None)
 
-        #PPO optimizer (replaces REINFORCE when use_ppo=True)
-        self.use_ppo=bool(spec.get("use_ppo", False))
-        self.ppo=spec.get("ppo", None)
-
         #beta warm-start   
         self.beta_reset_interval=int(spec.get("beta_reset_interval", 1))
         self.beta_warmstart_from_alpha=bool(spec.get("beta_warmstart_from_alpha", False))
 
         #OT-inspired local reward
-        self.w_ot=float(lw.get("w_ot", 0.0))
 
     def _corr_local_delta(self):
         # need a few points for a stable estimate
@@ -617,12 +588,6 @@ class Training:
                     md = min_d[torch.isfinite(min_d)]
                     min_anchor_dist_mean = float(md.mean().item())
 
-        # OT-inspired local reward: replaces score_local entirely when enabled
-        if self.w_ot > 0.0 and self._ot_mean is not None:
-            score_local = rh.ot_local_reward(
-                x_phi, self._ot_mean, self._ot_log_var, self._ot_ref_log_prob
-            )
-
         mean_local = float(score_local.mean().item())
 
         # local clipping rates (helpful to see if local is saturating)
@@ -787,7 +752,6 @@ class Training:
 
             x_syn_tensor = torch.zeros((self.traj_length, A), dtype=torch.float32, device=self.device)
             y_syn_tensor = torch.zeros(self.traj_length, dtype=torch.long, device=self.device)
-            log_probs = torch.zeros(self.traj_length, dtype=torch.float32, device=self.device)
 
             # Reset env — pass episode index so curriculum can schedule stages
             if self.curriculum_learning:
@@ -810,11 +774,7 @@ class Training:
                     self.beta_model.reset()
 
             for t in range(self.traj_length):
-                if self.use_ppo:
-                    action, lp = agent.predict(state)
-                    log_probs[t] = lp.to(self.device)
-                else:
-                    action = agent.predict(state)
+                action = agent.predict(state)
                 next_state, done, info = env.step(action, (t + 1))
 
                 states[t] = state
@@ -917,10 +877,7 @@ class Training:
             dones = dones[:T]
             rewards = rewards[:T]
 
-            if self.use_ppo:
-                agent.learn_trajectory(states, actions, log_probs[:T], rewards, next_states, dones)
-            else:
-                agent.learn_trajectory(states, actions, rewards, next_states, dones, episode)
+            agent.learn_trajectory(states, actions, rewards, next_states, dones, episode)
 
             # alignment metrics
             g = diagnostics.get("global", {})
@@ -976,7 +933,7 @@ class Training:
                 best_x_syn = x_phi_t.detach().clone()
                 best_y_syn = y_phi_t.detach().clone()
 
-            del states, actions, next_states, dones, rewards, x_syn_tensor, y_syn_tensor, log_probs, x_phi_t, y_phi_t
+            del states, actions, next_states, dones, rewards, x_syn_tensor, y_syn_tensor, x_phi_t, y_phi_t
             if episode % 100 == 0:
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
@@ -1089,9 +1046,7 @@ class Training:
 
             global_obj = diagnostics.get("global", {}).get("global_obj", 0.0)
             candidate_idx = episode % agent.popsize
-            # Use the full episode return (global + local) so that OT / other local
-            # rewards actually influence CMA-ES search. When lambda=1 or w_ot=0 this
-            # reduces to global_obj (no behaviour change for pure-global runs).
+            # Use the full episode return so local rewards influence CMA-ES search.
             cmaes_obj = float(rewards.sum().item())
             agent.tell(candidate_idx, cmaes_obj)
             agent.advance()
@@ -1281,13 +1236,7 @@ class Training:
             self.ffnn_config["input_size"] = feature_dim
             self.reinforce_config["state_size"] = self.state_dim
             self.reinforce_config["action_size"] = feature_dim
-            self.ppo_config["state_size"] = self.state_dim
-            self.ppo_config["action_size"] = feature_dim
-
-            if self.use_ppo:
-                self.agent = PPOAgent(**self.ppo_config)
-            else:
-                self.agent = ReinforceAgent(**self.reinforce_config)
+            self.agent = ReinforceAgent(**self.reinforce_config)
             self.alpha_model = FFNNAgent(**self.ffnn_config)
             self.beta_model = FFNNAgent(**self.ffnn_config)
 
@@ -1379,22 +1328,6 @@ class Training:
 
             self.disadv_pos_anchors = anchors.detach()
             self._cached_anchors_used = int(self.disadv_pos_anchors.shape[0])
-
-            # OT local reward: precompute target Gaussian from advantaged minority samples
-            if self.w_ot > 0.0:
-                adv_minority_mask = (y_theta_train == 1) & (a_train == int(self.adv_group_value))
-                adv_minority = x_theta_train[adv_minority_mask]
-                if adv_minority.shape[0] >= 2 and real_minority_samples.shape[0] >= 2:
-                    self._ot_mean, self._ot_log_var, self._ot_ref_log_prob = rh.compute_ot_target(
-                        real_minority_samples, adv_minority
-                    )
-                    print(f"[OT {self.process_label}] target fitted: adv_pos={adv_minority.shape[0]} "
-                          f"disadv_pos={real_minority_samples.shape[0]} "
-                          f"ref_log_prob={self._ot_ref_log_prob:.3f}")
-                else:
-                    print(f"[OT {self.process_label}] insufficient samples (adv={adv_minority.shape[0]}, "
-                          f"disadv={real_minority_samples.shape[0]}) — OT local reward disabled")
-                    self.w_ot = 0.0
 
             # Sigma auto-calibration: set sigma to median nearest-neighbour distance * factor
             if self.sigma_calibration_factor is not None and anchors.shape[0] >= 2:
@@ -1581,10 +1514,7 @@ class Training:
                     )
                 else:
                     # Fresh RL agent for phase 2
-                    if self.use_ppo:
-                        phase2_agent = PPOAgent(**self.ppo_config)
-                    else:
-                        phase2_agent = ReinforceAgent(**self.reinforce_config)
+                    phase2_agent = ReinforceAgent(**self.reinforce_config)
 
                     # Fresh beta model for phase 2
                     self.beta_model = FFNNAgent(**self.ffnn_config)
