@@ -970,7 +970,7 @@ All 20 specs expected complete by **~2026-06-01 06:00 EDT**.
 | rand_0007 | Aulavik cuda:0 | **COMPLETE** | Valid dir: `GG202605281536`; aborted stub `GG202605281531` (18 eps) also present, ignore |
 | rand_0008 | Aulavik cuda:1 | **COMPLETE** | |
 | rand_0009 | Aulavik cuda:0 | **COMPLETE** | |
-| rand_0010 | Aulavik cuda:1 | **COMPLETE** | |
+| rand_0010 | Aulavik cuda:1 | **COMPLETE** | **SELECTED** — best config from random search |
 | rand_0011 | Aulavik cuda:0 | **COMPLETE** | |
 | rand_0012 | Aulavik cuda:1 | **COMPLETE** | |
 | rand_0013 | Aulavik cuda:0 | **COMPLETE** | |
@@ -981,19 +981,24 @@ All 20 specs expected complete by **~2026-06-01 06:00 EDT**.
 | rand_0018 | Lambda cuda:0 | **COMPLETE** | |
 | rand_0019 | Lambda cuda:1 | **COMPLETE** | |
 
-rand_0003–0006 to be rsynced once Oneida finishes (est. later 2026-06-01). Re-run: `rsync -av --include='SPECrand_*/' --include='SPECrand_*/**' --exclude='*' -e "ssh -i ~/.ssh/id_rsa_oneida -p 2023" epigou@129.100.226.232:~/cs_9170_project/training_runs/ /storage_1/epigou_storage/FORGE/census_random_search/`
+rand_0003–0006 abandoned (Oneida queue; rand_0010 selected before these completed — not needed).
 
 **Result:**
-*(pending — analyse once all 20 specs collected)*
+rand_0010 selected as best config (2026-06-03). Seeds 0+1 complete; seed 2 + seed 3 running in parallel on DRAC:
+- `rand_0010_s23` (job 62291968) — seeds 2+3 sequentially, spec: `experiment_specs/census_random/...seeds23`
+- `rand_0010_s3` (started 2026-06-03) — seed 3 only in parallel, spec: `experiment_specs/census_random_search/...seed3`
+
+Use whichever delivers seed 3 first; discard the duplicate.
+
+**Selected config (rand_0010):** lr=0.000241, reinforce_lr=0.000136, delta_scale=0.1097, ffnn_optimizer=adam, reinforce_optimizer=adamw.
 
 **Takeaway:**
-*(pending)*
+*(pending — fill in once all 3 seeds for rand_0010 are collected and analysed)*
 
 **Next steps:**
-1. Rsync rand_0003–0006 from Oneida once complete.
-2. Run `check_run.py` on each completed spec to get per-seed β-EO.
-3. Select config with lowest mean β-EO across seeds.
-4. Use best combined config (EXP-021 + EXP-022) as the new census vanilla for final paper runs.
+1. Collect rand_0010 seeds 2+3 from DRAC once complete.
+2. Run `check_run.py` on rand_0010 (all 3 seeds) to confirm β-EO.
+3. Use best combined config (EXP-021 + EXP-022 rand_0010) as the new census vanilla for final paper runs.
 
 ---
 
