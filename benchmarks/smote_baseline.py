@@ -98,19 +98,13 @@ class SMOTEBaselineTrainer:
         device: str,
         minority_id=None,
         majority_id=None,
-        third_id=None,
-        bias_pct=None,
         da_pct=None,
         real_data_size: int = 3000,
         ffnn: dict = None,
         smote: dict = None,
-        multiclass: bool = False,
         use_pca: bool = True,
         pca_components: int = 10,
-        win_seconds: float = 5.0,
-        step_seconds: float = 2.5,
         dp_protected_col: str | None = None,
-        acs_states: list = None,
         fold_idx: int = None,
         n_folds: int = 5,
         fold_rng_seed: int = None,
@@ -122,15 +116,9 @@ class SMOTEBaselineTrainer:
         self.device       = torch.device(device)
         self.minority_id  = minority_id
         self.majority_id  = majority_id
-        self.third_id     = third_id
-        self.bias_pct     = bias_pct
         self.da_pct       = da_pct
         self.real_data_size = real_data_size
-        self.multiclass   = multiclass
-        self.win_seconds  = win_seconds
-        self.step_seconds = step_seconds
         self.dp_protected_col = dp_protected_col
-        self.acs_states   = acs_states
         self.fold_idx     = fold_idx
         self.n_folds      = n_folds
         self.fold_rng_seed = fold_rng_seed
@@ -156,10 +144,8 @@ class SMOTEBaselineTrainer:
 
         self.dataset = Dataset(
             dataset_name,
-            multiclass=multiclass,
             minority_id=minority_id,
             majority_id=majority_id,
-            third_id=third_id,
             pca_components=pca_components,
             seed=seed,
             device=self.device,
@@ -173,16 +159,11 @@ class SMOTEBaselineTrainer:
 
         x_train, x_val, x_test, y_train, y_val, y_test = self.dataset.get_data_splits(
             train_size=self.real_data_size,
-            bias_pct=self.bias_pct,
             da_pct=self.da_pct,
             pca_components=self.pca_components,
             drop_protected=False,
             protected_cols=self.dataset.protected_attributes,
-            bias_val=True,
-            win_seconds=self.win_seconds,
-            step_seconds=self.step_seconds,
             **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
-            **({"acs_states": self.acs_states} if self.acs_states is not None else {}),
             **({"fold_idx": self.fold_idx, "n_folds": self.n_folds,
                 "fold_rng_seed": self.fold_rng_seed} if self.fold_idx is not None else {}),
         )
@@ -205,7 +186,7 @@ class SMOTEBaselineTrainer:
         ffnn_config = {
             "input_size":    feature_dim,
             "hidden_sizes":  self.ffnn_overrides.get("hidden_sizes", [32, 16]),
-            "output_size":   3 if self.multiclass else 2,
+            "output_size": 2,
             "learning_rate": float(self.ffnn_overrides.get("learning_rate",
                                    self.smote_config["lr"])),
             "batch_size":    int(self.ffnn_overrides.get("batch_size",
@@ -213,7 +194,7 @@ class SMOTEBaselineTrainer:
             "epochs":        int(self.ffnn_overrides.get("epochs",
                                  self.smote_config["epochs"])),
             "type":          "classification",
-            "classes":       [0, 1, 2] if self.multiclass else [0, 1],
+            "classes": [0, 1],
             "device":        self.device,
             "seed":          self.seed,
         }
@@ -349,7 +330,6 @@ class SMOTEBaselineTrainer:
                 beta_model=beta,
                 x_train=x_train,
                 y_train=y_train,
-                bias_pct=self.bias_pct,
                 train_size=self.real_data_size,
                 seed=self.seed,
                 a_test=a_test,
