@@ -2758,3 +2758,29 @@ Complete fresh re-run of all 6 baselines on both paper datasets, using consisten
 **Next steps:**
 - ~~Run FORGE capture24 folds 3&4~~ — COMPLETE 2026-06-03
 - Update paper figures/tables with these numbers — COMPLETE 2026-06-03 (v9.2.tex)
+
+---
+
+### EXP-051 | repo-cleanup-reproducibility
+
+**Type:** REPRODUCIBILITY
+**Status:** IN PROGRESS
+**Dataset(s):** census_income, capture24
+**Branch:** repo-cleanup
+
+**Purpose:** Confirm that the refactored codebase (repo-cleanup branch) reproduces paper-quality results under the confirmed best configs. All core modules were rewritten during cleanup (training.py, dataset.py, env.py, episode_tracker.py, test_suite.py, reward_helpers.py, all benchmark trainers). This run validates that no regressions were introduced.
+
+**Config:** Exact paper configs — no changes from EXP-021 (census) and EXP-047 (capture24).
+
+| Dataset | Spec | seed/fold | episodes | device | Expected β-EO |
+|---------|------|-----------|----------|--------|---------------|
+| census_income | `experiment_specs/census/paper_final_seed42.yaml` | seed=42 | 5000 | cuda:0 (Huron) | ~0.018 (±0.005 over 3 seeds) |
+| capture24 | `experiment_specs/capture24/paper_final_fold0.yaml` | fold=0 | 5000 | cuda:1 (Huron) | ~0.045 (fold 0 result from EXP-047) |
+
+**Launched:** 2026-06-03. tmux sessions: `forge_census` (cuda:0), `forge_c24` (cuda:1). Logs: `logs/forge_census_seed42.log`, `logs/forge_c24_fold0.log`.
+
+**Result:**
+*(pending)*
+
+**Takeaway:**
+*(pending — fill in once runs complete and results are compared to EXP-021/EXP-047)*
