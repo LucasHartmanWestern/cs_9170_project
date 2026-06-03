@@ -58,6 +58,8 @@ class TestSuite:
         prefer_best_beta: bool = True,
         beta_model=None,
         a_test=None,
+        x_test_alpha=None,  # if set, alpha is evaluated on this (e.g. OT-repaired features)
+        **_ignored,
     ):
         # Load best beta checkpoint
         beta = None
@@ -73,9 +75,10 @@ class TestSuite:
         else:
             print("[TestSuite] No β available for test evaluation.")
 
-        # Alpha metrics
+        # Alpha metrics (evaluated on x_test_alpha if provided, else x_test)
+        x_alpha = x_test_alpha if x_test_alpha is not None else x_test
         with torch.no_grad():
-            p_alpha = rh.p1_from_agent(alpha_model, x_test)
+            p_alpha = rh.p1_from_agent(alpha_model, x_alpha)
         a_f1_min, a_f1_maj, a_f1_w, a_f1_macro = self._all_f1_from_probs(y_test, p_alpha, f1_thresh)
         a_brier = self._brier_mean(y_test, p_alpha)
         a_acc   = rh.acc_from_probs(y_test, p_alpha, f1_thresh)

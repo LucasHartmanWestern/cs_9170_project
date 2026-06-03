@@ -9,7 +9,7 @@ import itertools
 import torch.multiprocessing as mp
 from pathlib import Path
 
-_project_root = Path(__file__).parent.parent
+_project_root = Path(__file__).parent
 for _p in [str(_project_root), str(_project_root / 'utilities'), str(_project_root / 'FORGE')]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
