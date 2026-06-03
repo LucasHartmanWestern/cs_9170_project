@@ -545,26 +545,7 @@ class Training:
                 f1_thresh=0.5,
                 prefer_best_beta=True,
                 beta_model=self.beta_model,
-                x_train=x_train,
-                y_train=y_train,
-                jitter_n=None,
-                jitter_scale=0.20,
-                run_alpha_raw_original=False,
-                run_alpha_plus_real=False,
-                alpha_plus_real_n=2000,
-                run_alpha_plus_ctgan=False,
-                alpha_plus_ctgan_n=self.traj_length,
-                ctgan_epochs=300,
-                cap_ctgan_train=None,
-                data_path=None,
-                bias_pct=None,
-                val_frac=0.20,
-                test_frac=0.20,
-                train_size=self.real_data_size,
-                batch_size=64,
-                pca_components=None,
-                seed=self.seed,
-                a_test=getattr(self.dataset, "a_test", None)
+                a_test=getattr(self.dataset, "a_test", None),
             )
 
         print(f"Total time {time.time() - start_time:.2f}s")

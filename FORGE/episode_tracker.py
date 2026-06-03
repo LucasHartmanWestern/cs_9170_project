@@ -2,13 +2,10 @@ import os, json, time, sys, uuid
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import csv
 import torch
-from torch.utils.data import TensorDataset, DataLoader
 from test_suite import TestSuite
 import hashlib
 from copy import deepcopy
-from datetime import datetime
 
 
 
@@ -68,19 +65,15 @@ def _fingerprint_run_stats(
     # NEW: include spec name early so it appears in the parent folder
     add_key("SPEC", "SPEC_NAME", lambda s: _slug(str(s)))
 
-    add_key("EP",    "EPISODES",       int)
+    add_key("EP",    "episodes",       int)
     add_key("PCA",   "pca_components", int)
-    add_key("REW",   "reward_mode",    lambda s: str(s).lower())
+    add_key("K",     "sigmoid_k",      lambda x: str(x).rstrip("0").rstrip(".") if isinstance(x, float) else x)
     add_key("minID", "minority_id",    int)
     add_key("majID", "majority_id",    int)
-    add_key("thirdID","third_id",      int)
-    add_key("TRJ",   "TRAJ_LENGTH",    int)
-    add_key("REAL",  "REAL_DATA_SIZE", int)
-    add_key("BIAS",  "BIAS_PCT",       lambda x: str(x).rstrip("0").rstrip(".") if isinstance(x, float) else x)
+    add_key("TRJ",   "traj_length",    int)
+    add_key("REAL",  "real_data_size", int)
 
-    # OPTIONAL: keep a short group stamp, but don't truncate away useful info
-    # If EXP_GROUP already includes G2026..., keep just the time marker:
-    add_key("G", "EXP_GROUP", lambda s: str(s)[-13:])  # e.g., "__G202601061430"
+    add_key("G", "EXP_GROUP", lambda s: str(s)[-13:])
 
     slug = "_".join(parts) if parts else "exp"
 
@@ -116,7 +109,7 @@ class EpisodeTracker:
                  capture_console: bool = True,
                  ckpt_every: int = 5,
                  beta_ckpt_every: int = 20,
-                 compare_metric: str = "reward.avg_reward",
+                 compare_metric: str = "reward.wgl_reward",
                  flush_every_episodes: int = 10,
                  snapshot_csv: bool = False,
                  beta_factory=None, process_label="Procces", seed=42):
@@ -231,15 +224,13 @@ class EpisodeTracker:
         keys = list(flat_row.keys())
 
         def sort_key(k):
-            # new canonical groups from diagnostics
-            if   k.startswith("global."):   g = 0
-            elif k.startswith("utility."):  g = 1
-            elif k.startswith("fairness."): g = 2
-            elif k.startswith("local."):    g = 3
-            elif k.startswith("extra."):    g = 4
-            elif k.startswith("align."):    g = 5
-            elif k.startswith("meta."):     g = 6
-            else:                           g = 9
+            if   k.startswith("reward."):      g = 0
+            elif k.startswith("performance."): g = 1
+            elif k.startswith("fairness."):    g = 2
+            elif k.startswith("generation."):  g = 3
+            elif k.startswith("align."):       g = 4
+            elif k.startswith("meta."):        g = 5
+            else:                              g = 9
             return (g, k)
 
         keys_sorted = sorted(keys, key=sort_key)
@@ -298,16 +289,11 @@ class EpisodeTracker:
         self.episode_rewards.append(float(csv_row.get("meta.avg_reward", np.nan)))
 
         # console one-liner
-        ep_ret  = csv_row.get("meta.episode_return", np.nan)
-        g_obj   = csv_row.get("global.global_obj", np.nan)
-        l_mean  = csv_row.get("global.local_reward", np.nan)
-        f1m     = csv_row.get("utility.f1_macro_beta", np.nan)
-        worst   = csv_row.get("fairness.worst_loss_beta", np.nan)
-
-        if np.isnan(ep_ret):
-            print(f"[Tracker {self.process_label}] Ep {episode_num:4d} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
-        else:
-            print(f"[Tracker {self.process_label}] Ep {episode_num:4d} | Return {ep_ret:.2f} | Global {g_obj:.4f} | Local {l_mean:.4f} | F1_macro {f1m:.4f} | WorstLoss {worst:.4f}")
+        wgl_r = csv_row.get("reward.wgl_reward", np.nan)
+        f1w   = csv_row.get("performance.f1_macro", np.nan)
+        wgl_b = csv_row.get("fairness.wgl_beta", np.nan)
+        eo    = csv_row.get("fairness.eo_gap", np.nan)
+        print(f"[Tracker {self.process_label}] Ep {episode_num:4d} | WGL_reward={wgl_r:.4f} | F1w={f1w:.4f} | WGL_beta={wgl_b:.4f} | EO={eo:.4f}")
 
         pd.DataFrame([csv_row]).to_csv(self.csv_path, mode="a", header=False, index=False)
 
@@ -325,21 +311,12 @@ class EpisodeTracker:
             v = flat_row[key]
         else:
             legacy = {
-                # old
-                "average_reward": "meta.avg_reward",
-                "reward.avg_reward": "meta.avg_reward",
-
-                # new preferred
-                "global_obj": "global.global_obj",
-                "local_reward": "global.local_reward",
-                "worst_loss_beta": "fairness.worst_loss_beta",
-                "macro_f1_beta": "utility.f1_macro_beta",
-                "f1_minority_beta": "utility.f1_minority_beta",
-
-                # some old names you used previously
-                "obj1": "global.global_obj",
-                "obj2_mean": "global.local_reward",
-                "global_f1": "utility.f1_macro_beta",
+                "wgl_reward":        "reward.wgl_reward",
+                "average_reward":    "meta.avg_reward",
+                "global_obj":        "reward.wgl_reward",
+                "worst_loss_beta":   "fairness.wgl_beta",
+                "macro_f1_beta":     "performance.f1_macro",
+                "f1_minority_beta":  "performance.f1_minority",
             }
             mapped = legacy.get(key, "meta.avg_reward")
             v = flat_row.get(mapped, np.nan)
@@ -486,53 +463,26 @@ class EpisodeTracker:
             pass
 
     def log_final_test(
-        self, alpha_model, x_test, y_test, f1_thresh: float = 0.5,
-        prefer_best_beta: bool = True, beta_model=None,
-        x_train=None, y_train=None,
-        # existing jitter baseline params
-        jitter_n=None, jitter_scale: float = 0.20,
-        # alpha toggles/params
-        run_alpha_raw_original: bool = True,
-        run_alpha_plus_real: bool = True,
-        alpha_plus_real_n: int = 2000,
-        # CTGAN baseline toggles/params
-        run_alpha_plus_ctgan: bool = False,
-        alpha_plus_ctgan_n: int = 2000,
-        ctgan_epochs: int = 300,
-        cap_ctgan_train: int | None = None,
-        # CTABGAN baseline toggles/params
-        # CTABGAN subprocess wiring (IMPORTANT: default None)
-        ctab_python: str | None = None,
-        ctab_repo: str | None = None,
-        ctab_runner: str | None = None,
-        # dataset settings used to rebuild original pool
-        data_path: str = "census+income/adult.data",
-        bias_pct = None,
-        val_frac: float = 0.20,
-        test_frac: float = 0.20,
-        train_size: int | None = None,
-        # additional CTABGAN batch/seed/pca-related params
-        batch_size: int = 64,
-        pca_components: int | None = None,
-        seed: int | None = None,
-        a_test: torch.Tensor | None = None,   # <--- NEW
+        self,
+        alpha_model,
+        x_test,
+        y_test,
+        f1_thresh: float = 0.5,
+        prefer_best_beta: bool = True,
+        beta_model=None,
+        a_test: torch.Tensor | None = None,
+        **_ignored,
     ):
-        # Prefer phase-labelled best checkpoint (phase1_class1) if it exists,
-        # since maybe_save_synthetic always writes the phase-labelled path.
-        _phase1_path = self.seed_dir / "best_beta_state_dict_phase1_class1.pt"
-        _best_beta_path = _phase1_path if _phase1_path.exists() else self.best_beta_path
-
         tests = TestSuite(
             seed_dir=self.seed_dir,
             experiment_dir=self.experiment_dir,
             seed=self.seed,
             run_id=self.run_id,
             beta_factory=self.beta_factory,
-            best_beta_path=_best_beta_path,
-            alpha_factory=self.alpha_factory if hasattr(self, "alpha_factory") else self.beta_factory,
-            dataset=self.dataset
+            best_beta_path=self.best_beta_path,
+            alpha_factory=self.beta_factory,
+            dataset=self.dataset,
         )
-
         return tests.log_final_test(
             alpha_model=alpha_model,
             x_test=x_test,
@@ -540,36 +490,7 @@ class EpisodeTracker:
             f1_thresh=f1_thresh,
             prefer_best_beta=prefer_best_beta,
             beta_model=beta_model,
-            x_train=x_train,
-            y_train=y_train,
-            # jitter params
-            jitter_n=jitter_n,
-            jitter_scale=jitter_scale,
-            # alpha toggles/params
-            run_alpha_raw_original=run_alpha_raw_original,
-            run_alpha_plus_real=run_alpha_plus_real,
-            alpha_plus_real_n=alpha_plus_real_n,
-            # CTGAN
-            run_alpha_plus_ctgan=run_alpha_plus_ctgan,
-            alpha_plus_ctgan_n=alpha_plus_ctgan_n,
-            ctgan_epochs=ctgan_epochs,
-            cap_ctgan_train=cap_ctgan_train,
-            # CTABGAN
-            # CTABGAN wiring
-            ctab_python=ctab_python,
-            ctab_repo=ctab_repo,
-            ctab_runner=ctab_runner,
-            # dataset rebuild settings
-            data_path=data_path,
-            bias_pct=bias_pct,
-            val_frac=val_frac,
-            test_frac=test_frac,
-            train_size=train_size,
-            # pass through batch/pca/seed
-            batch_size=batch_size,
-            pca_components=pca_components,
-            seed=self.seed if seed is None else seed,
-            a_test=a_test
+            a_test=a_test,
         )
 
     def save_alpha_state_dict(self, alpha_model, config=None, n_pca_components=None):
