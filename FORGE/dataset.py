@@ -21,30 +21,16 @@ class Dataset:
             "protected_attributes": ["sex"]
         },
     }
-    def __init__(self, dataset_name, multiclass, minority_id, majority_id, third_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False, whiten_pca: bool = False):
+    def __init__(self, dataset_name, minority_id, majority_id, pca_components=2, seed=42, device="cpu", use_pca: bool = False):
         self.dataset_name = dataset_name
         self.MINORITY_ID = minority_id
         self.MAJORITY_ID = majority_id
-        self.third_id=third_id
         self.pca_components = pca_components
         self.seed = seed
         self.device = device
         self.data_path = self.DATASET_REGISTRY[dataset_name]["data_path"]
         self.protected_attributes = self.DATASET_REGISTRY[self.dataset_name].get("protected_attributes", [])
-        self.multiclass=multiclass
         self.use_pca = bool(use_pca)
-        self.whiten_pca = bool(whiten_pca)
-
-    @dataclass
-    class GanView:
-        supported: bool
-        X_train_unbiased_df: pd.DataFrame
-        y_train_unbiased: np.ndarray
-        encoder: OneHotEncoder
-        scaler: StandardScaler
-        pca: PCA
-        cat_cols: list[str]
-        num_cols: list[str]
 
     def _to_theta(
         self,
@@ -77,24 +63,19 @@ class Dataset:
     def _make_pca(self, n_components: int) -> PCA:
         return PCA(
             n_components=n_components,
-            svd_solver="full",          # deterministic basis for same data
-            random_state=self.seed,     # deterministic for randomized solvers
-            whiten=getattr(self, "whiten_pca", False),
+            svd_solver="full",
+            random_state=self.seed,
         )
 
     def split_census_income(
             self,
             train_size=None,
-            bias_pct=None,
             da_pct=None,
             val_frac=0.20,
             test_frac=0.20,
             pca_components=2,
             drop_protected: bool = False,
             protected_cols=None,
-            return_test_df: bool = False,
-            return_raw: bool = False,
-            bias_val: bool = True,
             dp_protected_col: str = "sex",
         ):
         """
@@ -161,35 +142,7 @@ class Dataset:
         def _map_protected_census(a_series):
             return (a_series.str.strip().str.lower() == "male").astype(np.int64).to_numpy()
 
-        # Helper: apply the SAME bias inside a split (keep all majority; keep fraction of minority)
-        def apply_bias(df_split, y_split, a_split_df, target_minority_pct):
-            df = df_split.copy()
-            df["__y__"] = y_split
-            df["__a__"] = a_split_df[dp_protected_col].to_numpy()
-            df_major = df[df["__y__"] == 0]
-            df_minor = df[df["__y__"] == 1]
-
-            n_major = len(df_major)
-            n_minor = len(df_minor)
-
-            if n_minor == 0 or n_major == 0:
-                df_biased = df
-            else:
-                keep_minority = int(np.floor((target_minority_pct * n_major) / (1 - target_minority_pct)))
-                keep_minority = min(n_minor, max(1, keep_minority))
-                df_minor_biased = df_minor.sample(n=keep_minority, random_state=self.seed, replace=False)
-                df_biased = (
-                    pd.concat([df_major, df_minor_biased], axis=0)
-                    .sample(frac=1.0, random_state=self.seed)
-                    .reset_index(drop=True)
-                )
-
-            y_out = df_biased["__y__"].to_numpy(dtype=int)
-            a_out = _map_protected_census(df_biased["__a__"])
-            X_out = df_biased.drop(columns=["__y__", "__a__"])
-            return X_out, y_out, a_out
-
-        # Helper: group-specific DA+ targeting (replaces apply_bias when da_pct is set).
+        # Helper: group-specific DA+ targeting.
         # Targets exactly round(da_pct * train_size) disadvantaged-group (female, a=0)
         # positives. Keeps all advantaged-group positives and all negatives. Fills the
         # remainder of train_size from the non-disadvantaged-positive pool.
@@ -225,29 +178,21 @@ class Dataset:
             X_out = result.drop(columns=["__y__", "__a__"])
             return X_out, y_out, a_out
 
-        # 4) Apply bias to train (da_pct takes priority over bias_pct); val/test unbiased.
+        # 4) Apply DA+ bias to train; val/test unbiased.
         if da_pct is not None:
             n_total = train_size if train_size is not None else len(X_train_df)
             X_train_biased_df, y_train_biased, a_train = apply_da_pct_bias(
                 X_train_df, y_train, A_train_df, da_pct, n_total)
-        elif bias_pct is not None:
-            target_minority_pct = bias_pct
-            X_train_biased_df, y_train_biased, a_train = apply_bias(X_train_df, y_train, A_train_df, target_minority_pct)
-            if bias_val:
-                X_val_biased_df, y_val_biased, a_val = apply_bias(X_val_df, y_val, A_val_df, target_minority_pct)
         else:
             X_train_biased_df, y_train_biased = X_train_df.copy().reset_index(drop=True), y_train.copy()
             a_train = _map_protected_census(A_train_df[dp_protected_col])
 
-        # Val is always unbiased (da_pct mode) or conditionally biased (bias_pct mode)
-        if da_pct is not None or (bias_pct is not None and not bias_val) or bias_pct is None:
-            X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
-            a_val = _map_protected_census(A_val_df[dp_protected_col])
+        X_val_biased_df, y_val_biased = X_val_df.copy().reset_index(drop=True), y_val.copy()
+        a_val = _map_protected_census(A_val_df[dp_protected_col])
 
         X_test_biased_df, y_test_biased = X_test_df.copy().reset_index(drop=True), y_test.copy()
         a_test = _map_protected_census(A_test_df[dp_protected_col])
 
-        # Subsample train to train_size (only needed for bias_pct mode; da_pct integrates this)
         if da_pct is None and train_size is not None and train_size < len(X_train_biased_df):
             X_train_biased_df, _, y_train_biased, _, a_train, _ = train_test_split(
                 X_train_biased_df, y_train_biased, a_train,
@@ -326,19 +271,6 @@ class Dataset:
         except Exception:
             pass
 
-        if return_test_df:
-            return (
-                X_train_theta, X_val_theta, X_test_theta,
-                y_train_theta, y_val_theta, y_test_theta,
-                X_test_biased_df.copy()    # <--- raw df for group membership
-            )
-        if return_raw:
-            return (
-                X_train_theta, X_val_theta, X_test_theta,
-                y_train_theta, y_val_theta, y_test_theta,
-                X_test_biased_df.copy(), y_test_biased.copy()
-            )
-
         return X_train_theta, X_val_theta, X_test_theta, y_train_theta, y_val_theta, y_test_theta
 
 
@@ -346,14 +278,10 @@ class Dataset:
         self,
         train_size=None,
         val_size=None,
-        bias_pct=None,
         da_pct=None,
         val_frac=0.20,
         test_frac=0.20,
         pca_components=10,
-        return_test_df: bool = False,
-        return_raw: bool = False,
-        bias_val: bool = True,
         dp_protected_col: str = "sex",
     ):
         """
@@ -443,28 +371,7 @@ class Dataset:
         A_val   = pd.Series(a_all[va_mask], name="sex")
         A_test  = pd.Series(a_all[te_mask], name="sex")
 
-        # ---- Bias injection -------------------------------------------------
-        def apply_bias(df_split, y_split, a_split, target_pct):
-            df = df_split.copy()
-            df["__y__"] = y_split
-            df["__a__"] = a_split.to_numpy() if hasattr(a_split, "to_numpy") else a_split
-            maj  = df[df["__y__"] == 0]
-            mino = df[df["__y__"] == 1]
-            if len(maj) == 0 or len(mino) == 0:
-                out = df
-            else:
-                keep = int(np.floor((target_pct * len(maj)) / (1 - target_pct)))
-                keep = min(len(mino), max(1, keep))
-                mino_b = mino.sample(n=keep, random_state=self.seed, replace=False)
-                out = (pd.concat([maj, mino_b])
-                         .sample(frac=1.0, random_state=self.seed)
-                         .reset_index(drop=True))
-            y_out = out["__y__"].to_numpy(dtype=int)
-            a_out = out["__a__"].to_numpy(dtype=np.int64)
-            X_out = out.drop(columns=["__y__", "__a__"])
-            return X_out, y_out, a_out
-
-        # Helper: group-specific DA+ targeting for capture24.
+        # ---- Bias injection (DA+ targeting) ---------------------------------
         # Targets exactly round(da_pct * n_total) female (a=1) positives.
         # Keeps all male positives and all negatives. Fills remainder from non-disadv-pos pool.
         def apply_da_pct_bias_c24(df_split, y_split, a_split, da_pct, n_total):
@@ -503,31 +410,19 @@ class Dataset:
             n_total = train_size if train_size is not None else len(X_train_df)
             X_train_b, y_train_b, a_train = apply_da_pct_bias_c24(
                 X_train_df, y_train, A_train, da_pct, n_total)
-            # Val always unbiased in da_pct mode
-            X_val_b = X_val_df.copy().reset_index(drop=True)
-            y_val_b = y_val.copy()
-            a_val   = A_val.to_numpy(dtype=np.int64)
-        elif bias_pct is not None:
-            X_train_b, y_train_b, a_train = apply_bias(X_train_df, y_train, A_train, bias_pct)
-            if bias_val:
-                X_val_b, y_val_b, a_val = apply_bias(X_val_df, y_val, A_val, bias_pct)
-            else:
-                X_val_b = X_val_df.copy().reset_index(drop=True)
-                y_val_b = y_val.copy()
-                a_val   = A_val.to_numpy(dtype=np.int64)
         else:
             X_train_b = X_train_df.copy().reset_index(drop=True)
             y_train_b = y_train.copy()
             a_train   = A_train.to_numpy(dtype=np.int64)
-            X_val_b   = X_val_df.copy().reset_index(drop=True)
-            y_val_b   = y_val.copy()
-            a_val     = A_val.to_numpy(dtype=np.int64)
+
+        X_val_b = X_val_df.copy().reset_index(drop=True)
+        y_val_b = y_val.copy()
+        a_val   = A_val.to_numpy(dtype=np.int64)
 
         X_test_b = X_test_df.copy().reset_index(drop=True)
         y_test_b = y_test.copy()
         a_test   = A_test.to_numpy(dtype=np.int64)
 
-        # Subsample train to train_size (only for bias_pct mode; da_pct integrates this)
         if da_pct is None and train_size is not None and train_size < len(X_train_b):
             X_train_b, _, y_train_b, _, a_train, _ = train_test_split(
                 X_train_b, y_train_b, a_train,
@@ -601,14 +496,6 @@ class Dataset:
         except Exception:
             pass
 
-        if return_test_df:
-            return (X_train_theta, X_val_theta, X_test_theta,
-                    y_train_theta, y_val_theta, y_test_theta,
-                    X_test_b.copy())
-        if return_raw:
-            return (X_train_theta, X_val_theta, X_test_theta,
-                    y_train_theta, y_val_theta, y_test_theta,
-                    X_test_b.copy(), y_test_b.copy())
         return (X_train_theta, X_val_theta, X_test_theta,
                 y_train_theta, y_val_theta, y_test_theta)
 
@@ -891,94 +778,6 @@ class Dataset:
                 kfold_kwargs = {k: v for k, v in c24_kwargs.items() if k in kfold_keys}
                 return self.split_capture24_kfold(**kfold_kwargs)
             return self.split_capture24(**c24_kwargs)
-        else:
-            raise ValueError(f"Unknown dataset: {self.dataset_name}")
-
-
-    def rebuild_original_train_pool_theta(
-        self, *, bias_pct: float | None, val_frac: float, test_frac: float,
-        train_size: int | None, pca_components: int, device: torch.device,
-        include_third_label: bool = False, third_activity_id: int = 13,
-    ):
-        """
-        Build the ORIGINAL (unbiased) TRAIN pool mapped into θ-space that matches
-        the experiment (i.e., scaler/PCA fitted on TRAIN-biased).
-        Returns (X_pool_theta, y_pool_theta) as torch tensors on `device`.
-        """
-        if self.dataset_name == "census_income":
-            # ---- Adult (Census) ----
-            column_names = [
-                "age","workclass","fnlwgt","education","education-num","marital-status",
-                "occupation","relationship","race","sex","capital-gain","capital-loss",
-                "hours-per-week","native-country","income"
-            ]
-            X_df_raw = pd.read_csv(self.data_path, header=None, names=column_names,
-                                na_values="?", skipinitialspace=True)
-            y_raw = np.where(X_df_raw["income"].isin([">50K", ">50K."]), 1, 0).astype(int)
-            X_df_raw = X_df_raw.drop(columns=["income"])
-
-            cat_cols = [c for c in X_df_raw.columns if X_df_raw[c].dtype.name in ["category","object","bool"]]
-            num_cols = [c for c in X_df_raw.columns if np.issubdtype(X_df_raw[c].dtype, np.number)]
-
-            X_train_df, X_temp_df, y_train, y_temp = train_test_split(
-                X_df_raw, y_raw, test_size=(val_frac + test_frac),
-                random_state=self.seed, stratify=y_raw
-            )
-            rel_test = test_frac / (val_frac + test_frac)
-            _X_val_df, _X_test_df, _y_val, _y_test = train_test_split(
-                X_temp_df, y_temp, test_size=rel_test,
-                random_state=self.seed, stratify=y_temp
-            )
-
-            def apply_bias(df_split, y_split, target_minority_pct):
-                df = df_split.copy(); df["__y__"] = y_split
-                maj = df[df["__y__"] == 0]; mino = df[df["__y__"] == 1]
-                if len(maj)==0 or len(mino)==0:
-                    out = df
-                else:
-                    keep_min = int(np.floor((target_minority_pct * len(maj)) / (1 - target_minority_pct)))
-                    keep_min = min(len(mino), max(1, keep_min))
-                    mino_b = mino.sample(n=keep_min, random_state=self.seed, replace=False)
-                    out = pd.concat([maj, mino_b], axis=0).sample(frac=1.0, random_state=self.seed).reset_index(drop=True)
-                y_out = out["__y__"].to_numpy(dtype=int)
-                X_out = out.drop(columns=["__y__"])
-                return X_out, y_out
-
-            # TRAIN-biased for fitting transforms (skip bias if bias_pct is None)
-            if bias_pct is not None:
-                X_train_biased_df, y_train_biased = apply_bias(X_train_df, y_train, bias_pct)
-            else:
-                X_train_biased_df, y_train_biased = X_train_df.copy(), y_train.copy()
-            if train_size is not None and train_size < len(X_train_biased_df):
-                X_train_biased_df, _, y_train_biased, _ = train_test_split(
-                    X_train_biased_df, y_train_biased,
-                    train_size=train_size, random_state=self.seed, stratify=y_train_biased
-                )
-
-            try:
-                encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-            except TypeError:
-                encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
-            scaler = StandardScaler()
-            Xtr_cat = encoder.fit_transform(X_train_biased_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_biased_df),0))
-            Xtr_num = scaler.fit_transform(X_train_biased_df[num_cols])   if len(num_cols) else np.empty((len(X_train_biased_df),0))
-            Xtr_all = np.hstack([Xtr_num, Xtr_cat])
-
-            Xpool_cat = encoder.transform(X_train_df[cat_cols]) if len(cat_cols) else np.empty((len(X_train_df),0))
-            Xpool_num = scaler.transform(X_train_df[num_cols])  if len(num_cols) else np.empty((len(X_train_df),0))
-            Xpool_all = np.hstack([Xpool_num, Xpool_cat])
-
-            # Fit/identity on biased train, then transform pool consistently
-            _, _, Xpool_theta_np, pca = self._to_theta(
-                Xtr_all, Xtr_all, Xpool_all,
-                pca_components=pca_components
-            )
-
-            X_pool_theta = torch.tensor(Xpool_theta_np, dtype=torch.float32, device=device)
-
-            y_pool_theta = torch.tensor(y_train,   dtype=torch.long,   device=device)
-            return X_pool_theta, y_pool_theta
-
         else:
             raise ValueError(f"Unknown dataset: {self.dataset_name}")
 

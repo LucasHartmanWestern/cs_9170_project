@@ -1,11 +1,19 @@
 # Main v2 script including parallelization for multiple runs on one GPU. Intended to be used on DRAC.
 
 import os
+import sys
 import torch
 import gc
 import argparse
 import itertools
 import torch.multiprocessing as mp
+from pathlib import Path
+
+_project_root = Path(__file__).parent.parent
+for _p in [str(_project_root), str(_project_root / 'utilities'), str(_project_root / 'FORGE')]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from training import Training
 from spec_helpers import _load_spec, build_exp_group
 
