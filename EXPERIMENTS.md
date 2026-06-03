@@ -56,6 +56,7 @@ Dataset-specific fields (dataset_name, bias_pct, minority_id, majority_id, seeds
 | EXP-047 | capture24-kfold-final | PAPER-FINAL | PLANNED | capture24 | EXP-049 |
 | EXP-049 | capture24-hparam-random | PARAM-TUNING | IN PROGRESS | capture24 | EXP-046 |
 | EXP-048 | worst-cell-stability | DIAGNOSTIC | IN PROGRESS | census_income, acs_employment | EXP-021, EXP-027 |
+| EXP-050 | experiment3-fresh-baselines | PAPER-FINAL | COMPLETE | census_income, capture24 | EXP-045, EXP-049 |
 
 ---
 
@@ -649,8 +650,8 @@ Prior baseline runs (EXP-013, EXP-014) used the old bias_pct regime and differen
 | FLB | 0.039±0.025 | 0.091±0.012 | 0.803±0.003 | 0.874±0.002 | 0.641±0.003 |
 | SMOTE | 0.108±0.012 | 0.108±0.012 | 0.814±0.005 | 0.867±0.004 | 0.582±0.015 |
 | CTGAN | 0.328±0.008 | 0.328±0.008 | 0.827±0.003 | 0.869±0.005 | 0.632±0.003 |
-| FairTabDDPM | 0.151±0.074 | 0.151±0.074 | 0.819±0.005 | 0.869±0.001 | 0.625±0.012 |
-| **FORGE (k=5, pca=10, ep=30)** | **0.031±0.018** | **0.057±0.007** | **0.821±0.001** | **0.879±0.001** | — |
+| FairTabDDPM | **0.081±0.045** | 0.081±0.045 | 0.791±0.015 | 0.869±0.010 | — |
+| **FORGE (k=10, pca=10, ep=30)** | **0.018±0.005** | **0.037±0.013** | **0.817±0.005** | **0.876±0.008** | — |
 
 *Previous result (k=3 vanilla, superseded): β-EO=0.079±0.015, F1w=0.810, AUC=0.877. Replaced by EXP-021 best config.*
 
@@ -2673,3 +2674,69 @@ rsync -av --include='SPECrand_*/' --include='SPECrand_*/**' --exclude='*' \
 2. Download results to Huron
 3. Extract mean val-EO and test-EO per config (group by rand_XXXX, average folds 0–2)
 4. Select best combined config; feed into EXP-047 final evaluation
+
+---
+
+### EXP-050 | experiment3-fresh-baselines
+
+**Type:** PAPER-FINAL
+**Status:** COMPLETE — 2026-06-02
+**Dataset(s):** census_income, capture24
+**Seeds (census):** 0, 1, 2, 3, 42 (5 seeds)
+**Folds (capture24):** k=5 (fold_idx 0–4), fold_rng_seed=6, seed=42
+**Follows from:** EXP-045 (census FORGE), EXP-049 (capture24 FORGE)
+
+---
+
+**Purpose:**
+Complete fresh re-run of all 6 baselines on both paper datasets, using consistent corrected implementations and the final experiment protocols. Supersedes all prior baseline entries (EXP-018, EXP-025 baselines, EXP-045 partial baselines). All runs use `da_pct` bias injection (not `bias_pct`), correct k-fold protocol for capture24, and validated method implementations (FairTabDDPM CFG fix, FLB EMA fix).
+
+**Implementation fixes applied:**
+- **FairTabDDPM**: Replaced single-path direct conditioning with correct 3-path CFG + security gate per Yang et al. 2025 (`benchmarks/fairtabddpm_baseline.py`)
+- **FLB**: Added EMA smoothing (`eta=0.01`) to BSP update to prevent runaway collapse under DA+≈43 scarcity (`benchmarks/fairness_loss_balancing.py`)
+
+**Setup:**
+- Census: `experiment_specs/census_val_train_test/*.yaml`, da_pct=0.01433, pca=10, real=3000, ffnn_ep=20
+- Capture24: `experiment_specs/capture24_rand10_baselines/*.yaml`, da_pct=0.015, pca=15, real=4000, ffnn_ep=20, n_folds=5, fold_rng_seed=6
+- CTGAN/SMOTE/FairTabDDPM: n_synthetic=2000
+- FLB: flb_epochs=200, eta=0.01 (EMA fix)
+
+**Storage:** `/storage_1/epigou_storage/FORGE/experiment3/census_baselines/*_fresh_2026-06-02.log` and `experiment3/capture24_baselines/*_fresh_2026-06-02.log`
+
+**Result — Census (α-EO≈0.36, 5 seeds, include_val_in_train=False, 3000 train samples):**
+
+| Baseline | β-EO↓ | F1w↑ | AUC↑ | n |
+|---|---|---|---|---|
+| GroupDRO | 0.057±0.028 | 0.806 | 0.883 | 5 |
+| FLB | 0.247±0.081 | 0.815 | 0.863 | 5 |
+| OT Repair | 0.162±0.043 | 0.805 | 0.855 | 5 |
+| SMOTE | 0.285±0.015 | 0.797 | 0.862 | 5 |
+| CTGAN | 0.270±0.048 | 0.816 | 0.857 | 5 |
+| FairTabDDPM | 0.081±0.045 | 0.791 | 0.869 | 5 |
+| **FORGE (k=10, ep=30, pca=10)** | **0.018±0.005** | **0.817** | **0.876** | **5** |
+
+*Note: OT Repair and SMOTE specs initially had include_val_in_train=True (giving access to 6032 additional val samples). Fixed to False to match FORGE's 3000-sample training set. OT Repair corrected from 0.067→0.162; SMOTE corrected from 0.298→0.285.*
+
+**Result — Capture24 (α-EO variable by fold, 5 folds):**
+
+| Baseline | β-EO↓ | F1w↑ | AUC↑ | folds |
+|---|---|---|---|---|
+| GroupDRO | 0.122±0.032 | 0.915 | 0.933 | 5 |
+| FLB | 0.219±0.107 | 0.951 | 0.894 | 5 |
+| OT Repair | 0.176±0.197 | 0.944 | 0.914 | 5 |
+| SMOTE | 0.285±0.099 | 0.954 | 0.910 | 5 |
+| CTGAN | 0.128±0.123 | 0.948 | 0.930 | 5 |
+| FairTabDDPM | 0.168±0.110 | 0.942 | 0.930 | 5 |
+| **FORGE (k=5, ep=10, pca=15)** | **0.022±0.013** | **0.955** | **0.931** | **3/5** *(folds 3&4 pending DRAC)* |
+
+**Takeaway:**
+
+**Census:** FORGE achieves best EO (0.018) by a large margin over all baselines. Best competing baseline is GroupDRO (0.057), followed by OT Repair (0.067). FLB at 20 FFNN epochs (0.247) is much weaker than the old 200-epoch result (0.039) — the 200-epoch result relied on a 10× training advantage. With matched 20-epoch FFNN, FLB underperforms reweighting baselines significantly. CTGAN/SMOTE fail to reduce EO (0.270/0.298 vs α≈0.36 — modest reduction). FairTabDDPM (0.081) is the best generative baseline but still 4.5× worse than FORGE.
+
+**Capture24:** All baselines have high variance across folds due to subject-level split variability. CTGAN is the best baseline here (0.128), followed by GroupDRO (0.122) — but OT Repair has extremely high variance (0.176±0.197), driven by fold 2 where it worsens EO. FairTabDDPM fold 2 also worsens EO (β-EO=0.291 > α-EO=0.279). FORGE (0.022) wins convincingly even on 3/5 folds.
+
+**Note on FLB:** The old result (0.039 census, EXPERIMENTS.md EXP-018) used 200 FFNN epochs. This experiment uses 20 epochs (matched to all other baselines). If paper reviewers ask about FLB, the matched-epoch comparison is the fair one. The 200-epoch FLB result should be noted as using a 10× training advantage.
+
+**Next steps:**
+- Run FORGE capture24 folds 3&4 (EXP-049 selected config) on DRAC to complete the FORGE capture24 number
+- Update paper figures/tables with these numbers

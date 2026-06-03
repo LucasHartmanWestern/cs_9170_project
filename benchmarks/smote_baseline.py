@@ -143,11 +143,12 @@ class SMOTEBaselineTrainer:
             torch.backends.cudnn.deterministic = True
 
         DEFAULT_SMOTE = {
-            "n_synthetic":  2000,   # synthetic samples per phase — matches RL traj_length
-            "two_phase":    True,   # also oversample majority class (mirrors gen_both_classes)
-            "epochs":       100,
-            "lr":           0.001,
-            "batch_size":   64,
+            "n_synthetic":        2000,   # synthetic samples per phase — matches RL traj_length
+            "two_phase":          True,   # also oversample majority class (mirrors gen_both_classes)
+            "epochs":             100,
+            "lr":                 0.001,
+            "batch_size":         64,
+            "include_val_in_train": False,  # merge val into train before fitting
         }
         self.smote_config = {**DEFAULT_SMOTE, **(smote or {})}
         self.ffnn_overrides = ffnn or {}
@@ -191,6 +192,12 @@ class SMOTEBaselineTrainer:
         a_val   = self.dataset.a_val
         a_test  = getattr(self.dataset, "a_test", None)
 
+        if self.smote_config.get("include_val_in_train", False):
+            x_train = torch.cat([x_train, x_val], dim=0)
+            y_train = torch.cat([y_train, y_val], dim=0)
+            a_train = torch.cat([a_train, a_val], dim=0)
+            print(f"[SMOTE] Val merged into train: {len(y_train)} total samples")
+
         # minority_id=0 means disadvantaged group is a=0
         minority_group = int(self.minority_id) if self.minority_id is not None else 0
         majority_group = int(self.majority_id) if self.majority_id is not None else 1
@@ -199,9 +206,12 @@ class SMOTEBaselineTrainer:
             "input_size":    feature_dim,
             "hidden_sizes":  self.ffnn_overrides.get("hidden_sizes", [32, 16]),
             "output_size":   3 if self.multiclass else 2,
-            "learning_rate": float(self.smote_config["lr"]),
-            "batch_size":    int(self.smote_config["batch_size"]),
-            "epochs":        int(self.smote_config["epochs"]),
+            "learning_rate": float(self.ffnn_overrides.get("learning_rate",
+                                   self.smote_config["lr"])),
+            "batch_size":    int(self.ffnn_overrides.get("batch_size",
+                                 self.smote_config["batch_size"])),
+            "epochs":        int(self.ffnn_overrides.get("epochs",
+                                 self.smote_config["epochs"])),
             "type":          "classification",
             "classes":       [0, 1, 2] if self.multiclass else [0, 1],
             "device":        self.device,

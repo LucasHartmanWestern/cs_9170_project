@@ -200,6 +200,10 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
             )
         elif baseline == "ctgan":
             from benchmarks.ctgan_baseline import CTGANBaselineTrainer
+            # n_synthetic defaults to traj_length from spec so budget matches FORGE
+            ctgan_cfg = dict(spec.get("ctgan") or {})
+            if "n_synthetic" not in ctgan_cfg and spec.get("traj_length"):
+                ctgan_cfg["n_synthetic"] = spec["traj_length"]
             trainer = CTGANBaselineTrainer(
                 exp_group=exp_group,
                 spec_name=spec_name,
@@ -213,7 +217,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 da_pct=spec.get("da_pct"),
                 real_data_size=spec.get("real_data_size", 3000),
                 ffnn=spec.get("ffnn"),
-                ctgan=spec.get("ctgan"),
+                ctgan=ctgan_cfg,
                 multiclass=spec.get("multiclass", False),
                 use_pca=spec.get("use_pca", False),
                 pca_components=spec.get("pca_components", 10),
@@ -299,6 +303,10 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
             )
         elif baseline == "fairtabddpm":
             from benchmarks.fairtabddpm_baseline import FairTabDDPMTrainer
+            # n_synthetic defaults to traj_length from spec so budget matches FORGE
+            fairtabddpm_cfg = dict(spec.get("fairtabddpm") or {})
+            if "n_synthetic" not in fairtabddpm_cfg and spec.get("traj_length"):
+                fairtabddpm_cfg["n_synthetic"] = spec["traj_length"]
             trainer = FairTabDDPMTrainer(
                 exp_group=exp_group,
                 spec_name=spec_name,
@@ -312,7 +320,7 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 da_pct=spec.get("da_pct"),
                 real_data_size=spec.get("real_data_size", 3000),
                 ffnn=spec.get("ffnn"),
-                fairtabddpm=spec.get("fairtabddpm"),
+                fairtabddpm=fairtabddpm_cfg,
                 multiclass=spec.get("multiclass", False),
                 use_pca=spec.get("use_pca", False),
                 pca_components=spec.get("pca_components", 10),

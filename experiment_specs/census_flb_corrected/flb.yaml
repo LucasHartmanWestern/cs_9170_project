@@ -1,0 +1,25 @@
+baseline: fairness_loss_balancing
+dataset_name: census_income
+da_pct: 0.01433
+bias_pct: null
+minority_id: 0
+majority_id: 1
+dp_protected_col: sex
+real_data_size: 3000
+seeds:
+- 0
+- 1
+- 42
+use_pca: true
+pca_components: 10
+multiclass: false
+ffnn:
+  hidden_sizes:
+  - 32
+  - 16
+flb:
+  lr: 1.0e-05
+  epochs: 200
+  batch_size: 100
+  beta: 1.0
+  n_groups: 4

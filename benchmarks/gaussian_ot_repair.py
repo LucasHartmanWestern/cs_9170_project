@@ -198,6 +198,7 @@ class GaussianOTRepairTrainer:
             "cov_reg":    1e-5,   # regularisation added to each group covariance
             "barycenter_iters": 100,
             "repair_test": True,  # also repair test features before evaluation
+            "include_val_in_train": False,  # merge val into train before fitting transport map
         }
         self.ot_config  = {**DEFAULT_OT, **(ot_repair or {})}
         self.ffnn_overrides = ffnn or {}
@@ -243,12 +244,18 @@ class GaussianOTRepairTrainer:
         a_val   = self.dataset.a_val
         a_test  = getattr(self.dataset, "a_test", None)
 
+        if self.ot_config.get("include_val_in_train", False):
+            x_train = torch.cat([x_train, x_val], dim=0)
+            y_train = torch.cat([y_train, y_val], dim=0)
+            a_train = torch.cat([a_train, a_val], dim=0)
+            print(f"[OTRepair] Val merged into train: {len(y_train)} total samples")
+
         # ---- FFNN config ----
         ffnn_config = {
             "input_size":    feature_dim,
             "hidden_sizes":  self.ffnn_overrides.get("hidden_sizes", [32, 16]),
             "output_size":   3 if self.multiclass else 2,
-            "learning_rate": self.ffnn_overrides.get("lr", 1e-3),
+            "learning_rate": self.ffnn_overrides.get("learning_rate", 1e-3),
             "batch_size":    self.ffnn_overrides.get("batch_size", 64),
             "epochs":        self.ffnn_overrides.get("epochs", 100),
             "type":          "classification",
@@ -325,9 +332,6 @@ class GaussianOTRepairTrainer:
             # ---- repair features ----
             x_train_rep = _repair_features(
                 x_train, a_train, mu_list, A_list, mu_star, lam
-            )
-            x_val_rep   = _repair_features(
-                x_val, a_val, mu_list, A_list, mu_star, lam
             )
 
             if repair_test and a_test is not None:

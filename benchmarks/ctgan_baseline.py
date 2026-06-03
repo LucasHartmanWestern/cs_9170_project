@@ -4,7 +4,7 @@ CTGAN baseline for fairness evaluation.
 
 Algorithm:
   1. Train CTGAN on biased training data (same data all other methods see).
-  2. Conditionally sample synthetic minority-class (y=1) examples.
+  2. Conditionally sample synthetic disadvantaged-group positive (y=1, a=minority_id) examples.
   3. Concatenate synthetic samples with real biased training data.
   4. Train a standard ERM classifier on the augmented dataset.
   5. Evaluate fairness / utility with TestSuite.
@@ -36,11 +36,12 @@ from test_suite import TestSuite
 #  CTGAN helpers                                                      #
 # ------------------------------------------------------------------ #
 
-def _fit_ctgan(X_np: np.ndarray, y_np: np.ndarray, label_col: str,
+def _fit_ctgan(X_np: np.ndarray, y_np: np.ndarray, a_np: np.ndarray,
+               label_col: str, group_col: str,
                ctgan_epochs: int, batch_size: int, seed: int):
     """
-    Fit a CTGAN on the joint (X, y) distribution.
-    The label column is stored as a *string* so SDV treats it as categorical.
+    Fit a CTGAN on the joint (X, y, a) distribution.
+    Label and group columns are stored as strings so SDV treats them as categorical.
     Returns the fitted synthesizer and the list of feature column names.
     """
     import pandas as pd
@@ -51,12 +52,13 @@ def _fit_ctgan(X_np: np.ndarray, y_np: np.ndarray, label_col: str,
     feat_cols = [f"f{i}" for i in range(n_feat)]
 
     df = pd.DataFrame(X_np, columns=feat_cols)
-    df[label_col] = y_np.astype(str)          # categorical label
+    df[label_col] = y_np.astype(str)   # categorical label
+    df[group_col] = a_np.astype(str)   # categorical group
 
     metadata = SingleTableMetadata()
     metadata.detect_from_dataframe(df)
-    # Ensure label is categorical
     metadata.update_column(column_name=label_col, sdtype="categorical")
+    metadata.update_column(column_name=group_col, sdtype="categorical")
 
     synth = CTGANSynthesizer(
         metadata,
@@ -68,16 +70,17 @@ def _fit_ctgan(X_np: np.ndarray, y_np: np.ndarray, label_col: str,
     return synth, feat_cols
 
 
-def _sample_conditional(synth, label_col: str, label_value: int,
+def _sample_conditional(synth, label_col: str, group_col: str,
+                        label_value: int, group_value: int,
                         n_samples: int, feat_cols: list) -> np.ndarray:
     """
-    Sample `n_samples` rows conditioned on label == label_value.
+    Sample `n_samples` rows conditioned on (y=label_value, a=group_value).
     Returns a float32 numpy array of shape [n_samples, n_features].
     """
     from sdv.sampling import Condition
 
     cond = Condition(
-        column_values={label_col: str(label_value)},
+        column_values={label_col: str(label_value), group_col: str(group_value)},
         num_rows=int(n_samples),
     )
     out_df = synth.sample_from_conditions([cond])
@@ -118,6 +121,7 @@ class CTGANBaselineTrainer:
         acs_states: list = None,
         fold_idx: int = None,
         n_folds: int = 5,
+        fold_rng_seed: int = None,
     ):
         self.exp_group      = exp_group
         self.spec_name      = spec_name
@@ -137,6 +141,7 @@ class CTGANBaselineTrainer:
         self.acs_states     = acs_states
         self.fold_idx       = fold_idx
         self.n_folds        = n_folds
+        self.fold_rng_seed  = fold_rng_seed
         self.project_root   = _PROJECT_ROOT
 
         torch.manual_seed(seed)
@@ -149,8 +154,9 @@ class CTGANBaselineTrainer:
         DEFAULT_CTGAN = {
             "epochs":               300,
             "batch_size":           500,
-            "n_synthetic":          2000,  # total synthetic minority samples to add
+            "n_synthetic":          2000,  # total synthetic disadvantaged-positive samples to add
             "label_col":            "__y__",
+            "group_col":            "__a__",
         }
         self.ctgan_config   = {**DEFAULT_CTGAN, **(ctgan or {})}
         self.ffnn_overrides = ffnn or {}
@@ -187,7 +193,8 @@ class CTGANBaselineTrainer:
             step_seconds   = self.step_seconds,
             **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
             **({"acs_states": self.acs_states} if self.acs_states is not None else {}),
-            **({"fold_idx": self.fold_idx, "n_folds": self.n_folds} if self.fold_idx is not None else {}),
+            **({"fold_idx": self.fold_idx, "n_folds": self.n_folds,
+                "fold_rng_seed": self.fold_rng_seed} if self.fold_idx is not None else {}),
         )
         feature_dim = x_train.shape[1]
 
@@ -198,7 +205,7 @@ class CTGANBaselineTrainer:
             "input_size":    feature_dim,
             "hidden_sizes":  self.ffnn_overrides.get("hidden_sizes", [32, 16]),
             "output_size":   3 if self.multiclass else 2,
-            "learning_rate": self.ffnn_overrides.get("lr", 1e-3),
+            "learning_rate": self.ffnn_overrides.get("learning_rate", 1e-3),
             "batch_size":    self.ffnn_overrides.get("batch_size", 64),
             "epochs":        self.ffnn_overrides.get("epochs", 100),
             "type":          "classification",
@@ -236,34 +243,38 @@ class CTGANBaselineTrainer:
 
             X_train_np = x_train.cpu().numpy()
             y_train_np = y_train.cpu().numpy()
+            a_train_np = self.dataset.a_train.cpu().numpy()
 
             n_pos  = int((y_train_np == 1).sum())
             n_neg  = int((y_train_np == 0).sum())
+            n_da_pos = int(((y_train_np == 1) & (a_train_np == self.minority_id)).sum())
             print(f"[CTGAN] Training set: n_pos={n_pos}, n_neg={n_neg}, "
-                  f"total={len(y_train_np)}")
+                  f"n_disadvantaged_pos={n_da_pos}, total={len(y_train_np)}")
 
-            label_col   = self.ctgan_config["label_col"]
-            ctgan_epochs  = int(self.ctgan_config["epochs"])
-            ctgan_batch   = int(self.ctgan_config["batch_size"])
-            n_synthetic   = int(self.ctgan_config["n_synthetic"])
+            label_col    = self.ctgan_config["label_col"]
+            group_col    = self.ctgan_config["group_col"]
+            ctgan_epochs = int(self.ctgan_config["epochs"])
+            ctgan_batch  = int(self.ctgan_config["batch_size"])
+            n_synthetic  = int(self.ctgan_config["n_synthetic"])
 
-            # ---- fit CTGAN on biased training data ----
+            # ---- fit CTGAN on biased training data (with group column) ----
             print(f"[CTGAN] Fitting CTGAN for {ctgan_epochs} epochs …")
             t0 = time.time()
             synth, feat_cols = _fit_ctgan(
-                X_train_np, y_train_np, label_col,
+                X_train_np, y_train_np, a_train_np, label_col, group_col,
                 ctgan_epochs, ctgan_batch, self.seed
             )
             print(f"[CTGAN] CTGAN fitted in {time.time() - t0:.1f}s")
 
-            # ---- sample synthetic minority (y=1) examples ----
-            print(f"[CTGAN] Sampling {n_synthetic} synthetic minority samples …")
+            # ---- sample synthetic disadvantaged-group positive (y=1, a=minority_id) ----
+            print(f"[CTGAN] Sampling {n_synthetic} synthetic (y=1, a={self.minority_id}) samples …")
             X_syn_np = _sample_conditional(
-                synth, label_col, label_value=1,
+                synth, label_col, group_col,
+                label_value=1, group_value=self.minority_id,
                 n_samples=n_synthetic, feat_cols=feat_cols
             )
             y_syn_np = np.ones(len(X_syn_np), dtype=np.int64)
-            print(f"[CTGAN] Got {len(X_syn_np)} synthetic minority samples.")
+            print(f"[CTGAN] Got {len(X_syn_np)} synthetic disadvantaged-positive samples.")
 
             # ---- augment training data ----
             X_aug_np = np.concatenate([X_train_np, X_syn_np], axis=0)

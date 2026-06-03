@@ -7,20 +7,35 @@ Adapted from:
   Transactions on Machine Learning Research (TMLR), February 2025.
   https://github.com/comp-well-org/fair-tab-diffusion
 
-The original library targets mixed-type (numerical + categorical) tabular data with a
-complex file-system-centric pipeline. Since our features are already all-numerical
-(PCA-transformed), we implement the core algorithm — Gaussian DDPM with joint
-(class label, sensitive attribute) conditioning — directly in PyTorch without the
-mixed-type encoding machinery.
+Since our features are already all-numerical (PCA-transformed) we replace the original
+mixed-type encoder/U-Net/decoder stack with a residual MLP, but preserve the core
+fairness mechanism exactly as implemented in estimator.py:
+
+  3-path forward (unconditional | label-conditioned | sensitive-conditioned):
+    z_uncond = f(x_t, t, ∅)
+    z_label  = f(x_t, t, y)
+    z_cond   = f(x_t, t, a)
+
+  Label guidance:
+    label_guid = z_label − z_uncond                              (Eq. 5)
+
+  Sensitive guidance with security gate μ (Eq. 6 / §4.1):
+    scale      = clamp(|z_label − z_cond| * w_s,  max=1)
+    gate       = [(z_label − z_cond) ≤ λ]          (element-wise)
+    cond_guid  = (z_cond − z_uncond) * scale * gate
+    cond_guid  = 0  if  t < warmup_steps            (warmup)
+
+  Final guided estimate:
+    ε̃ = z_uncond + w_g * (label_guid + cond_guid)
+
+  The same forward pass is used during both training and sampling.
 
 Algorithm:
-  1. Train a conditional denoising network f_θ(x_t, t, y, a) on (X_train, y_train, a_train).
-  2. Standard DDPM with cosine noise schedule; loss = MSE(noise, predicted noise).
-  3. To generate fair synthetic minority samples: sample conditioned on (y=1, a=minority).
-  4. Add synthetic samples to the biased training set; train ERM classifier; evaluate.
-
-The is_fair conditioning (simultaneous class + sensitive-attr guidance) is the key
-contribution of Yang et al. vs. standard class-conditional CTGAN/TabDDPM.
+  1. Train f_θ(x_t, t, y, a) on (X_train, y_train, a_train).
+     Loss = MSE(ε̃_θ(x_t, t, y, a), ε_true).
+  2. DDPM cosine noise schedule.
+  3. Sample conditioned on (y=1, a=minority) to generate fair synthetic data.
+  4. Augment biased training set; train ERM classifier; evaluate.
 """
 
 import csv
@@ -79,45 +94,77 @@ class DDPMSchedule:
 
 
 # ------------------------------------------------------------------ #
-#  Conditional denoising network                                       #
+#  Residual block and CFG denoising network                           #
 # ------------------------------------------------------------------ #
+
+class ResidualBlock(nn.Module):
+    """Residual MLP block with timestep injection."""
+
+    def __init__(self, d_model: int, d_t_emb: int):
+        super().__init__()
+        self.norm1  = nn.LayerNorm(d_model)
+        self.fc1    = nn.Linear(d_model, d_model)
+        self.t_proj = nn.Linear(d_t_emb, d_model)
+        self.act    = nn.SiLU()
+        self.norm2  = nn.LayerNorm(d_model)
+        self.fc2    = nn.Linear(d_model, d_model)
+
+    def forward(self, x: torch.Tensor, t_emb: torch.Tensor) -> torch.Tensor:
+        h = self.act(self.norm1(self.fc1(x) + self.t_proj(t_emb)))
+        return x + self.norm2(self.fc2(h))
+
 
 class CondDenoiseNet(nn.Module):
     """
-    MLP that predicts the noise ε given (x_t, t, y, a).
+    Residual MLP denoising network with CFG-based multivariate guidance.
 
-    Conditioning:
-      - t   : sinusoidal time embedding
-      - y   : class label (0/1) — one-hot → linear projection
-      - a   : sensitive attribute (0/1) — one-hot → linear projection
+    Faithfully implements the 3-path guidance of Yang et al. (2025) §4.1
+    (estimator.py in the reference repo), adapted for 1-D numerical features.
 
-    Architecture follows Yang et al.: embed each input separately, sum
-    embeddings, pass through residual MLP.
+    Three paths share the same MLP weights but receive different condition
+    embeddings (unconditional / label / sensitive), mirroring the original
+    3× feature-concatenation trick used with the U-Net.
     """
 
-    def __init__(self, d_x: int, d_emb: int = 128, n_layers: int = 4):
+    def __init__(
+        self,
+        d_x:                  int,
+        d_emb:                int   = 128,
+        n_layers:             int   = 4,
+        overall_guid_weight:  float = 1.0,
+        cond_guid_weight:     float = 1.0,   # w_s  — security-gate scale
+        cond_guid_threshold:  float = 0.1,   # λ    — security-gate threshold
+        warmup_steps:         int   = 10,    # δ    — warmup timestep
+    ):
         super().__init__()
-        self.d_x = d_x
+        self.d_x                 = d_x
+        self.overall_guid_weight = overall_guid_weight
+        self.cond_guid_weight    = cond_guid_weight
+        self.cond_guid_threshold = cond_guid_threshold
+        self.warmup_steps        = warmup_steps
 
-        # Sinusoidal time embedding → linear projection
+        # Sinusoidal time embedding → projected
         self.t_proj = nn.Sequential(
             nn.Linear(d_emb, d_emb), nn.SiLU(), nn.Linear(d_emb, d_emb)
         )
-        # Class and group embeddings
-        self.y_emb = nn.Embedding(2, d_emb)
-        self.a_emb = nn.Embedding(2, d_emb)
 
-        # Input projection
+        # Condition embeddings: unconditional token, class label y, sensitive attr a
+        self.uncond_emb = nn.Embedding(1, d_emb)
+        self.y_emb      = nn.Embedding(2, d_emb)
+        self.a_emb      = nn.Embedding(2, d_emb)
+
+        # Input projection (feature space → embedding space)
         self.x_proj = nn.Linear(d_x, d_emb)
 
-        # Residual MLP
-        layers = []
-        for _ in range(n_layers):
-            layers += [nn.Linear(d_emb, d_emb), nn.SiLU()]
-        self.mlp = nn.Sequential(*layers)
+        # Residual MLP backbone — shared across all three paths
+        self.blocks = nn.ModuleList([
+            ResidualBlock(d_emb, d_emb) for _ in range(n_layers)
+        ])
 
-        # Output
+        # Output projection (embedding space → feature space)
         self.out = nn.Linear(d_emb, d_x)
+
+    # ---------------------------------------------------------------- #
 
     def _sinusoidal_embedding(self, t: torch.Tensor, d: int) -> torch.Tensor:
         half = d // 2
@@ -127,12 +174,62 @@ class CondDenoiseNet(nn.Module):
         args = t.float().unsqueeze(1) * freqs.unsqueeze(0)
         return torch.cat([args.sin(), args.cos()], dim=-1)
 
-    def forward(self, x_t: torch.Tensor, t: torch.Tensor,
-                y: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
-        t_emb = self._sinusoidal_embedding(t, self.t_proj[0].in_features)
-        h = self.x_proj(x_t) + self.t_proj(t_emb) + self.y_emb(y) + self.a_emb(a)
-        h = self.mlp(h)
+    def _run_path(
+        self,
+        x_t:      torch.Tensor,   # [B, d_x]
+        t_emb:    torch.Tensor,   # [B, d_emb]
+        cond_emb: torch.Tensor,   # [B, d_emb]
+    ) -> torch.Tensor:            # [B, d_x]
+        """Single conditioning path through the shared backbone."""
+        h = self.x_proj(x_t) + t_emb + cond_emb
+        for block in self.blocks:
+            h = block(h, t_emb)
         return self.out(h)
+
+    def forward(
+        self,
+        x_t: torch.Tensor,   # [B, d_x]  noisy features
+        t:   torch.Tensor,   # [B]        integer diffusion timesteps
+        y:   torch.Tensor,   # [B]        class labels (long)
+        a:   torch.Tensor,   # [B]        sensitive attribute (long)
+    ) -> torch.Tensor:       # [B, d_x]  guided noise estimate
+        """
+        3-path CFG forward (Yang et al. 2025, Eq. 5-6 / estimator.py).
+
+        Returns the guided noise estimate to be used as the target-noise
+        predictor in both training (loss = MSE vs true noise) and sampling.
+        """
+        t_emb = self.t_proj(self._sinusoidal_embedding(t, self.t_proj[0].in_features))
+
+        zeros      = torch.zeros(x_t.shape[0], dtype=torch.long, device=x_t.device)
+        uncond_emb = self.uncond_emb(zeros)   # ε̂(x_t)       — no condition
+        label_emb  = self.y_emb(y)            # ε̂(x_t, c)    — label guided
+        sens_emb   = self.a_emb(a)            # ε̂(x_t, s)    — sensitive guided
+
+        z_uncond = self._run_path(x_t, t_emb, uncond_emb)
+        z_label  = self._run_path(x_t, t_emb, label_emb)
+        z_cond   = self._run_path(x_t, t_emb, sens_emb)
+
+        # ---- label guidance (Eq. 5) ----
+        label_guid = z_label - z_uncond
+
+        # ---- sensitive guidance with security gate (Eq. 6 / §4.1) ----
+        # scale ∝ |ε̂(x_t,c) − ε̂(x_t,s)|, clamped to [0, 1]
+        scale = torch.clamp(
+            torch.abs(z_label - z_cond) * self.cond_guid_weight,
+            max=1.0,
+        )
+        # gate: zero out element-wise wherever (label − sensitive) > λ
+        gate      = ((z_label - z_cond) <= self.cond_guid_threshold).float()
+        cond_guid = (z_cond - z_uncond) * scale * gate
+
+        # warmup: suppress sensitive guidance for t < δ (early reverse steps)
+        warm_mask = (t >= self.warmup_steps).float().unsqueeze(-1)   # [B, 1]
+        cond_guid = cond_guid * warm_mask
+
+        # ---- combine (Eq. 5) ----
+        total_guid = label_guid + cond_guid
+        return z_uncond + total_guid * self.overall_guid_weight
 
 
 # ------------------------------------------------------------------ #
@@ -168,6 +265,7 @@ class FairTabDDPMTrainer:
         acs_states: list = None,
         fold_idx: int = None,
         n_folds: int = 5,
+        fold_rng_seed: int = None,
     ):
         self.exp_group      = exp_group
         self.spec_name      = spec_name
@@ -187,6 +285,7 @@ class FairTabDDPMTrainer:
         self.acs_states     = acs_states
         self.fold_idx       = fold_idx
         self.n_folds        = n_folds
+        self.fold_rng_seed  = fold_rng_seed
         self.project_root   = _PROJECT_ROOT
 
         torch.manual_seed(seed)
@@ -197,14 +296,19 @@ class FairTabDDPMTrainer:
             torch.backends.cudnn.deterministic = True
 
         DEFAULT_FTDDPM = {
-            "timesteps":      100,     # diffusion steps (Yang et al. use 100)
-            "d_emb":          128,     # embedding dimension
-            "n_layers":       4,       # residual MLP depth
-            "lr":             3.9e-4,  # Adam lr (Yang et al. default)
-            "weight_decay":   0.0,
-            "diff_epochs":    1000,    # diffusion model training epochs
-            "batch_size":     256,
-            "n_synthetic":    2000,    # synthetic minority samples to add
+            "timesteps":            100,     # T — diffusion steps
+            "d_emb":                128,     # embedding dimension
+            "n_layers":             4,       # residual MLP depth
+            "lr":                   3.9e-4,  # Adam lr (Yang et al. default)
+            "weight_decay":         0.0,
+            "diff_epochs":          1000,    # diffusion model training epochs
+            "batch_size":           256,
+            "n_synthetic":          2000,    # synthetic minority samples to add
+            # CFG guidance parameters (estimator.py / §4.1)
+            "overall_guid_weight":  1.0,     # w_g — overall guidance weight
+            "cond_guid_weight":     1.0,     # w_s — security-gate scale weight
+            "cond_guid_threshold":  0.1,     # λ   — security-gate threshold
+            "warmup_steps":         10,      # δ   — warmup timestep
         }
         self.cfg        = {**DEFAULT_FTDDPM, **(fairtabddpm or {})}
         self.ffnn_overrides = ffnn or {}
@@ -240,7 +344,8 @@ class FairTabDDPMTrainer:
             step_seconds   = self.step_seconds,
             **({"dp_protected_col": self.dp_protected_col} if self.dp_protected_col is not None else {}),
             **({"acs_states": self.acs_states} if self.acs_states is not None else {}),
-            **({"fold_idx": self.fold_idx, "n_folds": self.n_folds} if self.fold_idx is not None else {}),
+            **({"fold_idx": self.fold_idx, "n_folds": self.n_folds,
+                "fold_rng_seed": self.fold_rng_seed} if self.fold_idx is not None else {}),
         )
         feature_dim = x_train.shape[1]
         a_train = self.dataset.a_train
@@ -281,14 +386,18 @@ class FairTabDDPMTrainer:
             print(f"[FairTabDDPM] dataset={self.dataset_name}  feature_dim={feature_dim}")
             print(f"[FairTabDDPM] cfg={self.cfg}")
 
-            # ---- Build and train diffusion model ----
+            # ---- Build diffusion schedule and denoising network ----
             schedule = DDPMSchedule(
                 timesteps=int(self.cfg["timesteps"]), device=self.device
             )
             net = CondDenoiseNet(
-                d_x      = feature_dim,
-                d_emb    = int(self.cfg["d_emb"]),
-                n_layers = int(self.cfg["n_layers"]),
+                d_x                 = feature_dim,
+                d_emb               = int(self.cfg["d_emb"]),
+                n_layers            = int(self.cfg["n_layers"]),
+                overall_guid_weight = float(self.cfg["overall_guid_weight"]),
+                cond_guid_weight    = float(self.cfg["cond_guid_weight"]),
+                cond_guid_threshold = float(self.cfg["cond_guid_threshold"]),
+                warmup_steps        = int(self.cfg["warmup_steps"]),
             ).to(self.device)
 
             print(f"[FairTabDDPM] Training diffusion model for "
@@ -299,8 +408,7 @@ class FairTabDDPMTrainer:
 
             # ---- Sample synthetic minority + sensitive-group samples ----
             n_syn = int(self.cfg["n_synthetic"])
-            # Auto-detect disadvantaged group: whichever a-group has fewer positive
-            # training examples. This is robust to minority_id encoding conventions.
+            # Auto-detect disadvantaged group: whichever a-group has fewer positives.
             _a_np = a_train.cpu().numpy()
             _y_np = y_train.cpu().numpy()
             _n_pos_g0 = int(((_a_np == 0) & (_y_np == 1)).sum())
@@ -324,7 +432,7 @@ class FairTabDDPMTrainer:
                   f"({int((y_train_aug==1).sum())} pos)")
 
             # ---- Train ERM on augmented data ----
-            beta_agent = self._train_erm(ffnn_config, x_train_aug, y_train_aug)
+            beta_agent  = self._train_erm(ffnn_config, x_train_aug, y_train_aug)
             alpha_agent = self._train_erm(ffnn_config, x_train, y_train)
 
             # ---- Save model ----
@@ -394,7 +502,7 @@ class FairTabDDPMTrainer:
 
     def _train_diffusion(
         self,
-        net: CondDenoiseNet,
+        net:     CondDenoiseNet,
         schedule: DDPMSchedule,
         x_train: torch.Tensor,
         y_train: torch.Tensor,
@@ -410,9 +518,9 @@ class FairTabDDPMTrainer:
             weight_decay = float(self.cfg["weight_decay"]),
         )
 
-        # Normalise features to [-1, 1] for diffusion stability
-        x_min = x_train.min(0).values
-        x_max = x_train.max(0).values
+        # Normalise features to [-1, 1] per dimension for diffusion stability.
+        x_min   = x_train.min(0).values
+        x_max   = x_train.max(0).values
         x_range = (x_max - x_min).clamp(min=1e-8)
         self._x_min   = x_min
         self._x_range = x_range
@@ -427,7 +535,7 @@ class FairTabDDPMTrainer:
         )
 
         rows = []
-        best_loss = float("inf")
+        best_loss  = float("inf")
         best_state = {k: v.detach().clone() for k, v in net.state_dict().items()}
 
         for epoch in range(1, epochs + 1):
@@ -440,12 +548,11 @@ class FairTabDDPMTrainer:
                 y_b = y_b.to(self.device)
                 a_b = a_b.to(self.device)
 
-                # Sample random timesteps
-                t = torch.randint(0, T, (len(x_b),), device=self.device)
+                t     = torch.randint(0, T, (len(x_b),), device=self.device)
                 noise = torch.randn_like(x_b)
                 x_t   = schedule.q_sample(x_b, t, noise)
 
-                # Predict noise
+                # Guided noise prediction (all 3 paths)
                 noise_pred = net(x_t, t, y_b, a_b)
                 loss = F.mse_loss(noise_pred, noise)
 
@@ -478,16 +585,16 @@ class FairTabDDPMTrainer:
     @torch.no_grad()
     def _sample_conditional(
         self,
-        net: CondDenoiseNet,
-        schedule: DDPMSchedule,
-        d_x: int,
+        net:       CondDenoiseNet,
+        schedule:  DDPMSchedule,
+        d_x:       int,
         n_samples: int,
-        y_val: int,
-        a_val: int,
+        y_val:     int,
+        a_val:     int,
         batch_size: int = 256,
     ) -> torch.Tensor:
         net.eval()
-        T    = schedule.T
+        T     = schedule.T
         all_x = []
 
         for start in range(0, n_samples, batch_size):
@@ -503,12 +610,13 @@ class FairTabDDPMTrainer:
 
                 beta_t  = schedule.betas[t_idx]
                 ab_t    = schedule.alphas_bar[t_idx]
-                ab_prev = schedule.alphas_bar[t_idx - 1] if t_idx > 0 else torch.tensor(1.0)
+                ab_prev = schedule.alphas_bar[t_idx - 1] if t_idx > 0 \
+                          else torch.tensor(1.0, device=self.device)
 
-                # DDPM reverse step
-                x0_pred  = (x - (1.0 - ab_t).sqrt() * noise_pred) / ab_t.sqrt()
-                x0_pred  = x0_pred.clamp(-1.5, 1.5)
-                dir_xt   = (1.0 - ab_prev - beta_t).clamp(min=0.0).sqrt() * noise_pred
+                # DDPM reverse step (x_0 prediction form)
+                x0_pred = (x - (1.0 - ab_t).sqrt() * noise_pred) / ab_t.sqrt()
+                x0_pred = x0_pred.clamp(-1.5, 1.5)
+                dir_xt  = (1.0 - ab_prev - beta_t).clamp(min=0.0).sqrt() * noise_pred
                 x = ab_prev.sqrt() * x0_pred + dir_xt
 
                 if t_idx > 0:

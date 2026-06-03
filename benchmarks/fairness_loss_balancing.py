@@ -6,18 +6,18 @@ Kim et al. (2023) — "Fair Classification by Loss Balancing via Fairness-Aware
 Batch Sampling", Neurocomputing, Vol. 518, pp. 231-241.
 DOI: 10.1016/j.neucom.2022.08.040
 
-Algorithm per epoch:
-  1. Divide training data into (a, y) subgroups.
-  2. Compute per-group mean BCE loss on the current batch.
-  3. Update per-group sampling probabilities proportional to group losses:
-       p_g  ←  p_g * exp(eta * L_g)  then renormalise.
-  4. Sample the next batch by drawing uniformly within each group according
-     to the updated probabilities (proportional group sizes in each batch).
-  5. Backprop on standard (unweighted) BCE over the resampled batch.
+Algorithm (Algorithm 1 in the paper):
+  Each epoch iterates over n/B mini-batches:
+    - Epoch 1: sample batch randomly; compute forward pass; update BSP.
+    - Epoch 2+: sample batch using current BSP; forward pass; update BSP.
+  BSP update (per batch, β=1):
+    W_k = 1 / mean_batch_loss_k  (Eq. 4-6, relaxed form Eq. 13 with β=1)
+    BSP_k = W_k / sum(W_k)
+  Standard (unweighted) BCE is backpropagated on the resampled batch.
+  No validation-based checkpoint selection — final epoch model is reported.
 
 Key difference from GroupDRO: GroupDRO reweights the *loss*; this method
-reweights the *sampling* so that high-loss groups contribute more samples to
-each batch. The loss itself remains unweighted.
+reweights the *sampling* so that high-loss groups contribute more samples.
 """
 
 import csv
@@ -103,7 +103,8 @@ class FairnessLossBalancingTrainer:
             "lr":         1e-3,
             "epochs":     200,
             "batch_size": 64,
-            "eta":        0.01,   # sampling-weight update rate (same scale as GroupDRO eta)
+            "beta":       1.0,    # relaxation parameter (Eq. 13); β=1 = standard inverse-loss weighting
+            "eta":        0.01,   # EMA step size for BSP update — prevents runaway collapse
             "n_groups":   4,      # (a, y) subgroups
         }
         self.flb_config     = {**DEFAULT_FLB, **(flb or {})}
@@ -197,22 +198,17 @@ class FairnessLossBalancingTrainer:
             optimizer = optim.Adam(model.parameters(), lr=self.flb_config["lr"])
 
             n_groups = int(self.flb_config["n_groups"])
-            eta      = float(self.flb_config["eta"])
 
-            # Per-group sampling probabilities (initialised uniform)
-            p = torch.ones(n_groups, device="cpu") / n_groups
-
-            metrics_rows, best_state = self._train_flb(
-                model, optimizer, p, eta, n_groups,
+            metrics_rows, final_state = self._train_flb(
+                model, optimizer, n_groups,
                 x_train, y_train, a_train,
-                x_val,   y_val,   a_val,
             )
 
             self._save_metrics_csv(seed_dir / "metrics.csv", metrics_rows)
 
             best_model_path = seed_dir / "flb_model.pt"
-            torch.save(best_state, best_model_path)
-            print(f"[FLB] Best model saved -> {best_model_path}")
+            torch.save(final_state, best_model_path)
+            print(f"[FLB] Final model saved -> {best_model_path}")
 
             # Alpha: ERM on original biased data
             erm_config = dict(ffnn_config)
@@ -221,7 +217,7 @@ class FairnessLossBalancingTrainer:
             alpha_agent = self._train_erm(erm_config, x_train, y_train)
 
             beta_agent = FFNNAgent(**ffnn_config)
-            beta_agent.model.load_state_dict(best_state)
+            beta_agent.model.load_state_dict(final_state)
             beta_agent.model.to(self.device)
 
             _ffnn_cfg = dict(ffnn_config)
@@ -285,149 +281,125 @@ class FairnessLossBalancingTrainer:
 
     def _train_flb(
         self,
-        model, optimizer, p, eta, n_groups,
+        model, optimizer, n_groups,
         x_train, y_train, a_train,
-        x_val,   y_val,   a_val,
     ):
+        """
+        Algorithm 1 from Kim et al. (2023).
+
+        Per-batch BSP update (β=1, Eq. 13 relaxed form):
+          W_k = 1 / mean_batch_loss_k
+          BSP_k = W_k / sum(W_k)
+        Epoch 1: random sampling; update BSP after each batch.
+        Epoch 2+: sample using BSP; update BSP after each batch.
+        No validation-based checkpoint selection — returns final-epoch model.
+        """
         epochs     = int(self.flb_config["epochs"])
         batch_size = int(self.flb_config["batch_size"])
+        beta       = float(self.flb_config.get("beta", 1.0))
+        eta        = float(self.flb_config.get("eta", 0.01))
 
-        # Pre-compute group membership indices on CPU for efficient sampling
-        # Group index: g = a * 2 + y  →  0=(a=0,y=0), 1=(a=0,y=1),
-        #                                2=(a=1,y=0), 3=(a=1,y=1)
-        y_cpu = y_train.cpu().numpy().astype(int)
-        a_cpu = a_train.cpu().numpy().astype(int)
-        g_ids_np = a_cpu * 2 + y_cpu   # [N]
+        y_cpu    = y_train.cpu().numpy().astype(int)
+        a_cpu    = a_train.cpu().numpy().astype(int)
+        g_ids_np = a_cpu * 2 + y_cpu
 
-        group_indices = [
-            np.where(g_ids_np == g)[0] for g in range(n_groups)
-        ]
-        group_sizes = [len(idx) for idx in group_indices]
-        print(f"[FLB] Group sizes (a=0/y=0, a=0/y=1, a=1/y=0, a=1/y=1): "
-              f"{group_sizes}")
+        group_indices = [np.where(g_ids_np == g)[0] for g in range(n_groups)]
+        group_sizes   = [len(idx) for idx in group_indices]
+        print(f"[FLB] Group sizes (a=0/y=0, a=0/y=1, a=1/y=0, a=1/y=1): {group_sizes}")
 
-        # Move full train tensors to device once
-        x_tr = x_train.to(self.device)
-        y_tr = y_train.to(self.device).long()
+        x_tr  = x_train.to(self.device)
+        y_tr  = y_train.to(self.device).long()
+        a_tr  = a_train.to(self.device).long()
+        N     = len(y_cpu)
+        n_batches = max(1, N // batch_size)
 
         rng = np.random.default_rng(self.seed)
 
-        best_val_worst = float("inf")
-        best_state     = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        # BSP initialised uniform
+        bsp = np.ones(n_groups) / n_groups
+
         rows = []
 
         for epoch in range(1, epochs + 1):
             model.train()
+            epoch_loss = 0.0
 
-            # ---- Build resampled batch according to p ----
-            # Allocate batch_size slots proportionally to p, then sample
-            # uniformly within each group to fill those slots.
-            p_np   = p.numpy()
-            alloc  = np.maximum((p_np * batch_size).astype(int), 0)
-            # Top up to exactly batch_size by adding to largest group
-            deficit = batch_size - alloc.sum()
-            if deficit > 0:
-                alloc[np.argmax(alloc)] += deficit
-
-            sampled_indices = []
-            for g in range(n_groups):
-                n_g = int(alloc[g])
-                if n_g == 0 or group_sizes[g] == 0:
-                    continue
-                chosen = rng.choice(group_indices[g], size=n_g, replace=True)
-                sampled_indices.append(chosen)
-
-            if not sampled_indices:
-                continue
-
-            idx = np.concatenate(sampled_indices)
-            rng.shuffle(idx)
-            idx_t = torch.from_numpy(idx).long()
-
-            x_b = x_tr[idx_t]
-            y_b = y_tr[idx_t]
-            a_b = a_train.to(self.device)[idx_t].long()
-            g_ids_b = a_b * 2 + y_b
-
-            # ---- Forward pass ----
-            logits = model(x_b)
-            probs  = torch.softmax(logits, dim=-1)
-            p1     = probs[:, 1]
-
-            per_sample_loss = rh.bce_per_sample_from_probs(y_b, p1)
-
-            # ---- Standard (unweighted) BCE on resampled batch ----
-            loss = per_sample_loss.mean()
-
-            if not torch.isfinite(loss):
-                continue
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            # ---- Update sampling probabilities using per-group losses ----
-            with torch.no_grad():
-                for g in range(n_groups):
-                    mask = (g_ids_b == g)
-                    if mask.sum() > 0:
-                        lg = per_sample_loss[mask].mean().item()
-                        if np.isfinite(lg):
-                            p[g] *= np.exp(eta * lg)
-                p_sum = p.sum().item()
-                if p_sum > 0:
-                    p /= p_sum
+            for batch_idx in range(n_batches):
+                # ---- Sample batch ----
+                if epoch == 1:
+                    # First epoch: standard random sampling (Algorithm 1, line 4)
+                    idx = rng.choice(N, size=batch_size, replace=True)
                 else:
-                    p = torch.ones(n_groups) / n_groups
+                    # Subsequent epochs: sample using BSP (Algorithm 1, line 7)
+                    alloc = np.maximum((bsp * batch_size).astype(int), 0)
+                    deficit = batch_size - alloc.sum()
+                    if deficit > 0:
+                        alloc[np.argmax(alloc)] += deficit
+                    parts = []
+                    for g in range(n_groups):
+                        n_g = int(alloc[g])
+                        if n_g > 0 and group_sizes[g] > 0:
+                            parts.append(rng.choice(group_indices[g], size=n_g, replace=True))
+                    if not parts:
+                        idx = rng.choice(N, size=batch_size, replace=True)
+                    else:
+                        idx = np.concatenate(parts)
+                        rng.shuffle(idx)
 
-            # ---- Validation ----
-            if epoch % 5 == 0 or epoch == epochs:
-                model.eval()
+                idx_t = torch.from_numpy(idx).long()
+                x_b   = x_tr[idx_t]
+                y_b   = y_tr[idx_t]
+                a_b   = a_tr[idx_t]
+                g_b   = (a_b * 2 + y_b).long()
+
+                # ---- Forward + standard unweighted BCE ----
+                logits = model(x_b)
+                p1     = torch.softmax(logits, dim=-1)[:, 1]
+                per_sample_loss = rh.bce_per_sample_from_probs(y_b, p1)
+                loss = per_sample_loss.mean()
+
+                if not torch.isfinite(loss):
+                    continue
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+
+                # ---- Update BSP after each batch (Algorithm 1, line 10) ----
+                # BSP_k ∝ W_k = 1 / E[L_k]^β  (Kim et al. Eq. 13, β=1)
                 with torch.no_grad():
-                    val_p1 = torch.softmax(
-                        model(x_val.to(self.device)), dim=-1
-                    )[:, 1]
-                    val_losses = rh.bce_per_sample_from_probs(
-                        y_val.to(self.device).long(), val_p1
-                    )
-                    g_ids_val = (a_val.to(self.device) * 2
-                                 + y_val.to(self.device).long())
-                    val_worst_t, val_per_g = rh.worst_group_loss(
-                        val_losses, g_ids_val,
-                        group_values=tuple(range(n_groups)),
-                    )
+                    w = np.zeros(n_groups)
+                    for g in range(n_groups):
+                        mask = (g_b == g)
+                        if mask.sum() > 0:
+                            lg = float(per_sample_loss[mask].mean().item())
+                            if lg > 0 and np.isfinite(lg):
+                                w[g] = 1.0 / (lg ** beta)
+                            else:
+                                w[g] = bsp[g]  # keep previous if no samples or zero loss
+                        else:
+                            w[g] = bsp[g]      # keep previous if group absent from batch
+                    w_sum = w.sum()
+                    bsp_new = w / w_sum if w_sum > 0 else np.ones(n_groups) / n_groups
+                    # EMA update — prevents runaway collapse when one group's loss → 0
+                    bsp = (1.0 - eta) * bsp + eta * bsp_new
 
-                val_worst = (float(val_worst_t.item())
-                             if torch.isfinite(val_worst_t) else float("nan"))
+            if epoch % 20 == 0 or epoch == 1 or epoch == epochs:
+                bsp_str = ",".join(f"{bsp[g]:.3f}" for g in range(n_groups))
+                print(f"[FLB] epoch={epoch:4d} | "
+                      f"loss={epoch_loss/n_batches:.4f} | "
+                      f"bsp=[{bsp_str}]")
 
-                if val_worst == val_worst and val_worst < best_val_worst:
-                    best_val_worst = val_worst
-                    best_state = {
-                        k: v.detach().clone()
-                        for k, v in model.state_dict().items()
-                    }
+            rows.append({
+                "epoch":      epoch,
+                "train_loss": epoch_loss / n_batches,
+                **{f"bsp{g}": float(bsp[g]) for g in range(n_groups)},
+            })
 
-                p_str = ",".join(f"{p[g]:.3f}" for g in range(n_groups))
-                if epoch % 20 == 0 or epoch == 1:
-                    print(
-                        f"[FLB] epoch={epoch:4d} | "
-                        f"loss={loss.item():.4f} | "
-                        f"val_worst={val_worst:.4f} | "
-                        f"p=[{p_str}]"
-                    )
-
-                row = {
-                    "epoch":                epoch,
-                    "train_loss":           float(loss.item()),
-                    "val_worst_group_loss": val_worst,
-                    **{f"p{g}": float(p[g].item()) for g in range(n_groups)},
-                    **{f"val_group{g}_loss": val_per_g.get(g, float("nan"))
-                       for g in range(n_groups)},
-                }
-                rows.append(row)
-
-        print(f"[FLB] Training done. Best val_worst={best_val_worst:.4f}")
-        return rows, best_state
+        final_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        print("[FLB] Training done. Reporting final-epoch model (no val selection).")
+        return rows, final_state
 
     # ------------------------------------------------------------------ #
     #  ERM baseline (alpha)                                                #
