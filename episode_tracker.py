@@ -501,8 +501,6 @@ class EpisodeTracker:
         ctgan_epochs: int = 300,
         cap_ctgan_train: int | None = None,
         # CTABGAN baseline toggles/params
-        run_ctabgan: bool = False,
-        alpha_plus_ctabgan_n: int = 2000,
         # CTABGAN subprocess wiring (IMPORTANT: default None)
         ctab_python: str | None = None,
         ctab_repo: str | None = None,
@@ -557,8 +555,6 @@ class EpisodeTracker:
             ctgan_epochs=ctgan_epochs,
             cap_ctgan_train=cap_ctgan_train,
             # CTABGAN
-            run_ctabgan=run_ctabgan,
-            alpha_plus_ctabgan_n=alpha_plus_ctabgan_n,
             # CTABGAN wiring
             ctab_python=ctab_python,
             ctab_repo=ctab_repo,

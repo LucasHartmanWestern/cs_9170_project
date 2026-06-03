@@ -8,10 +8,10 @@ FORGE is a generative augmentation framework for improving classifier fairness u
 pip install -r requirements.txt
 
 # Run FORGE on a dataset
-python main.py --spec experiment_specs/census_grid/census_k10_r04_e30.yaml --device cuda:0
+python main.py --spec experiment_specs/census_grid_search/census_k10_r04_e30.yaml --device cuda:0
 
 # Run a baseline comparison
-python run_baseline.py --spec experiment_specs/capture24_rand10_baselines/group_dro_fold0.yaml --device cuda:0
+python run_baseline.py --spec experiment_specs/c24_baselines/group_dro_fold0.yaml --device cuda:0
 
 # Analyse results
 python analysis/check_run.py training_runs/<run_dir>
@@ -35,7 +35,6 @@ python analysis/check_run.py training_runs/<run_dir>
 ├── agents/
 │   ├── reinforce_agent.py   # REINFORCE policy gradient (primary RL agent)
 │   ├── ffnn_agent.py        # Feed-forward classifier (alpha / beta models)
-│   └── cmaes_agent.py       # CMA-ES evolution strategy (ablation baseline)
 │
 ├── benchmarks/              # Baseline method implementations
 │   ├── group_dro.py
@@ -55,17 +54,16 @@ python analysis/check_run.py training_runs/<run_dir>
 ├── tools/                   # Experiment setup utilities
 │   ├── make_spec.py         # Generate spec variants from a base spec
 │   ├── make_search_specs.py # Generate grid/random hyperparameter search specs
-│   └── dataset_viability.py # Pre-flight dataset structural checks
+│   └── make_search_specs.py # Generate grid/random hyperparameter search specs
 │
 ├── paper_figures/           # Paper figure generation scripts (Figures 2–5)
 │
 ├── experiment_specs/        # Experiment configurations (YAML + SLURM scripts)
-│   ├── census_grid/         # Stage 1 grid search — Census Income
-│   ├── census_random/       # Stage 2 random search — Census Income
-│   ├── capture24_kfold_grid/    # Stage 1 grid search — Capture-24
-│   ├── capture24_random/        # Stage 2 random search — Capture-24
-│   ├── capture24_rand10_baselines/  # Baseline specs — Capture-24
-│   └── capture24_rand10_folds34/    # Final FORGE fold specs — Capture-24
+│   ├── census_grid_search/         # Stage 1 grid search — Census Income
+│   ├── census_random_search/       # Stage 2 random search — Census Income
+│   ├── c24_grid_search/    # Stage 1 grid search — Capture-24
+│   ├── c24_random_search/        # Stage 2 random search — Capture-24
+│   └── c24_baselines/        # Baseline + final FORGE fold specs — Capture-24
 │
 ├── search_configs/          # Hyperparameter search space definitions
 └── scripts/                 # Data acquisition scripts
@@ -101,6 +99,6 @@ python tools/make_search_specs.py search_configs/census_random.yaml
 See `EXPERIMENTS.md` for the full experiment log with configurations and results for every experiment reported in the paper.
 
 Key experiment specs:
-- **Census Income** — `experiment_specs/census_grid/` (Stage 1) + `experiment_specs/census_random/` (Stage 2)
-- **Capture-24** — `experiment_specs/capture24_kfold_grid/` (Stage 1) + `experiment_specs/capture24_random/` (Stage 2)
-- **Baselines** — `experiment_specs/capture24_rand10_baselines/`
+- **Census Income** — `experiment_specs/census_grid_search/` (Stage 1) + `experiment_specs/census_random_search/` (Stage 2)
+- **Capture-24** — `experiment_specs/c24_grid_search/` (Stage 1) + `experiment_specs/c24_random_search/` (Stage 2)
+- **Baselines** — `experiment_specs/c24_baselines/`

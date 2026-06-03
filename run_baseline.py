@@ -275,30 +275,6 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
                 acs_states=spec.get("acs_states"),
                 **fold_kwargs,
             )
-        elif baseline == "gaussian_augment":
-            from benchmarks.gaussian_augment import GaussianAugmentTrainer
-            trainer = GaussianAugmentTrainer(
-                exp_group=exp_group,
-                spec_name=spec_name,
-                dataset_name=spec["dataset_name"],
-                seed=seed,
-                device=device,
-                minority_id=spec.get("minority_id"),
-                majority_id=spec.get("majority_id"),
-                third_id=spec.get("third_id"),
-                bias_pct=spec.get("bias_pct"),
-                da_pct=spec.get("da_pct"),
-                real_data_size=spec.get("real_data_size", 3000),
-                ffnn=spec.get("ffnn"),
-                n_synthetic=spec.get("n_synthetic", 2000),
-                multiclass=spec.get("multiclass", False),
-                use_pca=spec.get("use_pca", True),
-                pca_components=spec.get("pca_components", 10),
-                win_seconds=win_seconds,
-                step_seconds=step_seconds,
-                dp_protected_col=spec.get("dp_protected_col", None),
-                **fold_kwargs,
-            )
         elif baseline == "fairtabddpm":
             from benchmarks.fairtabddpm_baseline import FairTabDDPMTrainer
             # n_synthetic defaults to traj_length from spec so budget matches FORGE
@@ -332,7 +308,6 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
             raise ValueError(
                 f"Unknown baseline: {baseline!r}. "
                 "Supported: 'group_dro', 'gaussian_ot_repair', 'ctgan', "
-                "'fairness_loss_balancing', 'fairtabddpm', 'smote', 'gaussian_augment'"
             )
 
         trainer()

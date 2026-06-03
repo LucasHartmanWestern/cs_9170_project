@@ -1,4 +1,0 @@
-#!/bin/bash
-cd "$(dirname "$0")/../.."
-sbatch experiment_specs/capture24_rand10_folds34/rand_0010_learning_rate0p00024106501268706255_lr0p00013646506337961615_delta_scale0p10965398215380505_optimizeradam_optimizeradamw_fold3.sh
-sbatch experiment_specs/capture24_rand10_folds34/rand_0010_learning_rate0p00024106501268706255_lr0p00013646506337961615_delta_scale0p10965398215380505_optimizeradam_optimizeradamw_fold4.sh

@@ -1,6 +1,5 @@
 {
   "_comment": "Vanilla base config. All experiments are deltas from this. Dataset-specific fields (marked null) must be set per experiment. Do not change this file without updating EXPERIMENTS.md and CLAUDE.md.",
-
   "dataset_name": null,
   "multiclass": false,
   "bias_pct": null,
@@ -10,9 +9,11 @@
   "majority_id": null,
   "third_id": null,
   "seeds": null,
-
   "reward_mode": "wgl",
-  "lambda_schedule": [1.0, 1.0],
+  "lambda_schedule": [
+    1.0,
+    1.0
+  ],
   "use_pca": true,
   "pca_components": 10,
   "traj_length": 2000,
@@ -26,12 +27,10 @@
   "delta_clip": 0.2,
   "pca_clip": null,
   "radius_clip": 3.0,
-
   "reward_shaping": {
     "global_sigmoid_k": 10.0,
     "utility_guard_min_factor": 0.0
   },
-
   "local_weights": {
     "use_dvrl_local": false,
     "dvrl_max_bce": 0.693,
@@ -39,33 +38,34 @@
     "w_hard": 0.0,
     "w_div": 0.0
   },
-
   "ffnn": {
-    "hidden_sizes": [32, 16],
+    "hidden_sizes": [
+      32,
+      16
+    ],
     "learning_rate": 0.001,
     "batch_size": 64,
     "epochs": 20,
     "optimizer": "adam"
   },
-
   "reinforce": {
-    "hidden_sizes": [64, 64],
+    "hidden_sizes": [
+      64,
+      64
+    ],
     "lr": 0.0003,
     "gamma": 1.0,
     "entropy_start": 0.02,
     "entropy_end": 0.005,
     "optimizer": "adam"
   },
-
   "curriculum": {
     "start_dim": 10,
     "max_dim_cap": 10,
     "stage_count": 1,
     "schedule": "linear"
   },
-
   "benchmarks": {
-    "run_ctgan": false,
-    "run_ctabgan": false
+    "run_ctgan": false
   }
 }

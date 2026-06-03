@@ -34,7 +34,7 @@ _KNOWN_TOP_LEVEL_FIELDS = {
     "use_pca", "pca_components", "traj_length", "real_data_size",
     "total_episodes", "phase2_episodes", "curriculum_learning",
     "use_delta_actions", "delta_scale", "delta_clip", "pca_clip", "radius_clip",
-    "gen_both_classes", "bias_val", "seeds", "use_cmaes", "cmaes",
+    "gen_both_classes", "bias_val", "seeds",
     "reward_shaping", "local_weights", "ffnn", "reinforce", "curriculum", "benchmarks",
     "win_seconds", "step_seconds", "eo_guard_threshold",
     "whiten_pca", "beta_reset_interval", "beta_warmstart_from_alpha",
@@ -97,10 +97,6 @@ def validate_spec(spec: dict, spec_path: str) -> None:
                 warnings.append(f"Missing required field: '{k}'")
 
     # Suspicious combos
-    if spec.get("use_cmaes") and spec.get("use_delta_actions"):
-        warnings.append("use_cmaes=True + use_delta_actions=True: CMA-ES ignores delta constraints — likely unintended")
-    if spec.get("use_cmaes") and spec.get("curriculum_learning"):
-        warnings.append("use_cmaes=True + curriculum_learning=True: curriculum is a REINFORCE concept; may have no effect with CMA-ES")
     lw = spec.get("local_weights", {})
     lambda_sched = spec.get("lambda_schedule", [1.0, 1.0])
     if isinstance(lambda_sched, list) and len(lambda_sched) == 2:

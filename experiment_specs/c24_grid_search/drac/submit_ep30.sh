@@ -1,0 +1,25 @@
+#!/bin/bash
+# EXP-046 DRAC grid — 20 FORGE jobs, ep=30
+# Run from ~/cs_9170_project on DRAC
+cd ~/cs_9170_project
+
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_fold0.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_fold1.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_fold2.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_fold3.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_fold4.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_ratio04_fold0.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_ratio04_fold1.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_ratio04_fold2.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_ratio04_fold3.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k3_ep30_ratio04_fold4.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_fold0.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_fold1.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_fold2.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_fold3.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_fold4.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_ratio04_fold0.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_ratio04_fold1.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_ratio04_fold2.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_ratio04_fold3.sh
+sbatch experiment_specs/c24_grid_search/drac/forge_k5_ep30_ratio04_fold4.sh

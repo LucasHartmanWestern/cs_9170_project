@@ -26,7 +26,6 @@ import itertools
 from env import Environment
 from dataset import Dataset
 from agents.reinforce_agent import ReinforceAgent
-from agents.cmaes_agent import CMAESAgent
 
 from agents.ffnn_agent import FFNNAgent
 from episode_tracker import EpisodeTracker
@@ -109,10 +108,6 @@ class Training:
             "ctgan_epochs": 300,
             "cap_ctgan_train": None,
 
-            "run_ctabgan": False,
-            "alpha_plus_ctabgan_n": 2000,
-            "ctab_python": None,
-            "ctab_repo": None,
         }
         self.benchmarks_config = {**DEFAULT_BENCHMARKS, **self.benchmarks_overrides}
 
@@ -165,8 +160,6 @@ class Training:
 
         self.dl_generator = torch.Generator(device="cpu").manual_seed(self.seed)
 
-        DEFAULT_CMAES = {"sigma0": 1.0, "popsize": None, "cmaes_opts": {}}
-        self.cmaes_config = {**DEFAULT_CMAES, **(self.cmaes or {})}
 
         # agents (will be rebuilt in __call__ after feature_dim is known)
         self.agent = ReinforceAgent(**reinforce_config)
@@ -291,9 +284,6 @@ class Training:
         self.utility_guard_min_factor = float(_ugmf if _ugmf is not None else 1.0)
         self.roc_eo_lambda=float(lw.get("roc_eo_lambda", 0.5))
 
-        #CMA-ES optimizer (replaces REINFORCE when use_cmaes=True)
-        self.use_cmaes=bool(spec.get("use_cmaes", False))
-        self.cmaes=spec.get("cmaes", None)
 
         #beta warm-start   
         self.beta_reset_interval=int(spec.get("beta_reset_interval", 1))
@@ -943,185 +933,6 @@ class Training:
         return (best_x_syn, best_y_syn)
 
     # ---------------- CMA-ES episode loop ----------------
-    def _run_phase_cmaes(
-        self,
-        *,
-        target_class: int,
-        agent,                         # CMAESAgent
-        x_theta_train,
-        y_theta_train,
-        x_theta_val,
-        y_theta_val,
-        prior_synthetic: tuple | None,
-        phase_label: str,
-        episodes: int | None = None,
-    ) -> tuple:
-        """Run a full episode loop using CMA-ES. Returns (best_x_syn, best_y_syn)."""
-        n_episodes = episodes if episodes is not None else self.episodes
-
-        self._local_buf.clear()
-        self._delta_buf.clear()
-
-        best_phase_reward = -float("inf")
-        best_x_syn = None
-        best_y_syn = None
-
-        print(f"\n{'='*60}")
-        print(f"[CMA-ES Phase {self.process_label}] {phase_label} | target_class={target_class} | "
-              f"episodes={n_episodes} | popsize={agent.popsize}")
-        print(f"{'='*60}")
-
-        converged = False
-
-        for episode in range(n_episodes):
-            if converged:
-                break
-
-            # Vary DataLoader shuffle seed per episode so candidates in the same
-            # generation don't receive identical beta training (real data dominates)
-            self.dl_generator = torch.Generator(device="cpu").manual_seed(
-                self.seed + episode
-            )
-
-            # Get current candidate and sample synthetic data
-            candidate_params = agent.ask()
-            x_phi_t, y_phi_t = agent.sample_synthetic(candidate_params, target_class)
-
-            # Reset beta each episode (same policy as REINFORCE path)
-            if episode % self.beta_reset_interval == 0:
-                if self.beta_warmstart_from_alpha and hasattr(self, "alpha_model"):
-                    self.beta_model.model.load_state_dict(
-                        self.alpha_model.model.state_dict()
-                    )
-                    self.beta_model.optimizer = type(self.beta_model.optimizer)(
-                        self.beta_model.model.parameters(),
-                        **self.beta_model._optim_cfg,
-                    )
-                else:
-                    self.beta_model.reset()
-
-            # Train beta on real + prior_synthetic + current synthetic
-            parts_x = [x_theta_train]
-            parts_y = [y_theta_train]
-            if prior_synthetic is not None:
-                parts_x.append(prior_synthetic[0])
-                parts_y.append(prior_synthetic[1])
-            parts_x.append(x_phi_t)
-            parts_y.append(y_phi_t)
-            x_hybrid = torch.cat(parts_x)
-            y_hybrid = torch.cat(parts_y)
-            self.beta_model = self.train_predictor_model(self.beta_model, x_hybrid, y_hybrid)
-            del x_hybrid, y_hybrid
-
-            progress = (episode + 1) / n_episodes
-
-            # Compute reward — identical to REINFORCE path
-            rewards, diagnostics = self.compute_reward(
-                self.alpha_model,
-                self.beta_model,
-                x_theta_val,
-                y_theta_val,
-                x_phi_t,
-                y_phi_t,
-                progress=progress,
-                f1_thresh=0.5,
-                class_mode=("multiclass" if self.multiclass else "binary"),
-                w_anchor=self.w_anchor,
-                w_hard=self.w_hard,
-                w_div=self.w_div,
-                sigma_anchor=self.sigma_anchor,
-                rho_div=self.rho_div,
-                hard_margin=self.hard_margin,
-                local_squash_k=self.local_squash_k,
-                local_squash_center=self.local_squash_center,
-                hard_from_beta=self.hard_from_beta,
-                use_uncertainty_anchors=False,
-                global_sigmoid_k=self.global_sigmoid_k,
-                use_dvrl_local=self.use_dvrl_local,
-                dvrl_max_bce=self.dvrl_max_bce,
-                dvrl_scale=self.dvrl_scale,
-                utility_guard_min_factor=self.utility_guard_min_factor,
-                roc_eo_lambda=self.roc_eo_lambda,
-            )
-
-            global_obj = diagnostics.get("global", {}).get("global_obj", 0.0)
-            candidate_idx = episode % agent.popsize
-            # Use the full episode return so local rewards influence CMA-ES search.
-            cmaes_obj = float(rewards.sum().item())
-            agent.tell(candidate_idx, cmaes_obj)
-            agent.advance()
-
-            # End of generation — update CMA-ES only when full generation is complete
-            is_full_gen_done = ((episode + 1) % agent.popsize == 0)
-            if is_full_gen_done:
-                stop = agent.step_generation()
-                if stop:
-                    print(f"[CMA-ES {self.process_label}] Converged at episode {episode+1}: {stop}")
-                    converged = True
-
-            # Alignment metrics
-            f = diagnostics.get("fairness", {})
-            g = diagnostics.get("global", {})
-            local_mean = float(g.get("local_reward", float("nan")))
-            delta_val = float(-f.get("worst_loss_beta", float("nan")))
-            self._local_buf.append(local_mean)
-            self._delta_buf.append(delta_val)
-
-            lambda_start, lambda_end = self.lambda_schedule
-            lambda_t = float(lambda_start + (lambda_end - lambda_start) * progress)
-
-            alignment_metrics = {
-                "delta_global": float(delta_val),
-                "corr_local_delta": self._corr_local_delta(),
-                "curriculum_stage": 0,
-                "lambda_t": float(lambda_t),
-                "anchor_refresh_count": 0,
-                "ua_warmup_active": 0,
-                "cmaes_generation": episode // agent.popsize,
-                "cmaes_candidate_idx": candidate_idx,
-                "cmaes_sigma": agent.sigma,
-            }
-
-            avg_reward = float(torch.mean(rewards).item())
-            episode_return = float(rewards.sum().item())
-            meta_metrics = {
-                "avg_reward": avg_reward,
-                "episode_return": episode_return,
-                "phase": phase_label,
-            }
-
-            self.tracker.log_episode(
-                episode + 1,
-                diagnostics=diagnostics,
-                alignment_metrics=alignment_metrics,
-                extra_metrics=meta_metrics,
-            )
-
-            self.tracker.maybe_save_synthetic(
-                episode_num=episode + 1,
-                x_syn=x_phi_t,
-                y_syn=y_phi_t,
-                feature_names=[f"pca_{i}" for i in range(x_phi_t.shape[1])],
-                beta_model=self.beta_model,
-                phase_label=phase_label,
-            )
-
-            best_select_val = global_obj
-            if best_select_val > best_phase_reward:
-                best_phase_reward = best_select_val
-                best_x_syn = x_phi_t.detach().clone()
-                best_y_syn = y_phi_t.detach().clone()
-
-            del x_phi_t, y_phi_t
-            if episode % 100 == 0:
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                gc.collect()
-
-        print(f"[CMA-ES Phase {self.process_label}] Finished {phase_label} | best global_obj={best_phase_reward:.4f}")
-        return (best_x_syn, best_y_syn)
-
-    # ---------------- Training loop ----------------
     def __call__(self):
         start_time = time.time()
 
@@ -1215,16 +1026,11 @@ class Training:
                 )
             )
 
-            # Free the GAN view cache when no GAN-based baselines will run.
-            # For Capture-24, X_train_unbiased_df holds ~595K windows (~157MB) for the
-            # entire training lifetime; releasing it here prevents CPU RAM accumulation
-            # across multi-seed runs on SLURM nodes with limited RAM.
-            b = self.benchmarks_config
-            if not b.get("run_ctgan", False) and not b.get("run_ctabgan", False):
-                gv = getattr(self.dataset, "_gan_view_cache", None)
-                if gv and gv.get("supported"):
-                    gv["X_train_unbiased_df"] = None
-                    gv["y_train_unbiased"] = None
+            # Free the GAN view cache to prevent RAM accumulation across seeds.
+            gv = getattr(self.dataset, "_gan_view_cache", None)
+            if gv and gv.get("supported"):
+                gv["X_train_unbiased_df"] = None
+                gv["y_train_unbiased"] = None
 
             # Resolve actual feature dimension (may differ from pca_components when use_pca=False)
             feature_dim = x_theta_train.shape[1]
@@ -1409,54 +1215,19 @@ class Training:
                     radius_clip=self.radius_clip,
                 )
 
-            # === Build CMA-ES agents (if use_cmaes=True) ===
-            if self.use_cmaes:
-                # Compute init_mean from real_minority_samples mean in PCA space
-                if real_minority_samples is not None and real_minority_samples.shape[0] > 0:
-                    init_mean_1 = real_minority_samples.mean(dim=0).cpu().numpy().astype(np.float64)
-                    init_log_std_1 = np.zeros(self.pca_components, dtype=np.float64)
-                else:
-                    init_mean_1 = np.zeros(self.pca_components, dtype=np.float64)
-                    init_log_std_1 = np.zeros(self.pca_components, dtype=np.float64)
-
-                cmaes_cfg = self.cmaes_config or {}
-                phase1_cmaes_agent = CMAESAgent(
-                    pca_components=self.pca_components,
-                    n_samples=self.traj_length,
-                    init_mean=init_mean_1,
-                    init_log_std=init_log_std_1,
-                    sigma0=float(cmaes_cfg.get("sigma0", 1.0)),
-                    popsize=cmaes_cfg.get("popsize", None),
-                    seed=self.seed,
-                    device=self.device,
-                )
-                phase1_cmaes_agent.reset(phase_label="phase1_class1")
-
             # === Phase 1: target=1 (minority) ===
-            if self.use_cmaes:
-                best_syn_1 = self._run_phase_cmaes(
-                    target_class=1,
-                    agent=phase1_cmaes_agent,
-                    x_theta_train=x_theta_train,
-                    y_theta_train=y_theta_train,
-                    x_theta_val=x_theta_val,
-                    y_theta_val=y_theta_val,
-                    prior_synthetic=None,
-                    phase_label="phase1_class1",
-                )
-            else:
-                phase1_env = _make_env(target=1, seed_samples=real_minority_samples)
-                best_syn_1 = self._run_phase(
-                    target_class=1,
-                    env=phase1_env,
-                    agent=self.agent,
-                    x_theta_train=x_theta_train,
-                    y_theta_train=y_theta_train,
-                    x_theta_val=x_theta_val,
-                    y_theta_val=y_theta_val,
-                    prior_synthetic=None,
-                    phase_label="phase1_class1",
-                )
+            phase1_env = _make_env(target=1, seed_samples=real_minority_samples)
+            best_syn_1 = self._run_phase(
+                target_class=1,
+                env=phase1_env,
+                agent=self.agent,
+                x_theta_train=x_theta_train,
+                y_theta_train=y_theta_train,
+                x_theta_val=x_theta_val,
+                y_theta_val=y_theta_val,
+                prior_synthetic=None,
+                phase_label="phase1_class1",
+            )
 
             best_syn_0 = None
             if self.gen_both_classes:
@@ -1478,61 +1249,29 @@ class Training:
                 if real_majority_samples.shape[0] == 0:
                     real_majority_samples = x_theta_train[y_theta_train == 0]
 
-                if self.use_cmaes:
-                    if real_majority_samples.shape[0] > 0:
-                        init_mean_0 = real_majority_samples.mean(dim=0).cpu().numpy().astype(np.float64)
-                        init_log_std_0 = np.zeros(self.pca_components, dtype=np.float64)
-                    else:
-                        init_mean_0 = np.zeros(self.pca_components, dtype=np.float64)
-                        init_log_std_0 = np.zeros(self.pca_components, dtype=np.float64)
 
-                    phase2_cmaes_agent = CMAESAgent(
-                        pca_components=self.pca_components,
-                        n_samples=self.traj_length,
-                        init_mean=init_mean_0,
-                        init_log_std=init_log_std_0,
-                        sigma0=float(cmaes_cfg.get("sigma0", 1.0)),
-                        popsize=cmaes_cfg.get("popsize", None),
-                        seed=self.seed + 1,
-                        device=self.device,
-                    )
-                    phase2_cmaes_agent.reset(phase_label="phase2_class0")
+                    pca_components=self.pca_components,
+                    n_samples=self.traj_length,
+                # Fresh RL agent for phase 2
+                phase2_agent = ReinforceAgent(**self.reinforce_config)
 
-                    # Fresh beta model for phase 2
-                    self.beta_model = FFNNAgent(**self.ffnn_config)
+                # Fresh beta model for phase 2
+                self.beta_model = FFNNAgent(**self.ffnn_config)
 
-                    best_syn_0 = self._run_phase_cmaes(
-                        target_class=0,
-                        agent=phase2_cmaes_agent,
-                        x_theta_train=x_theta_train,
-                        y_theta_train=y_theta_train,
-                        x_theta_val=x_theta_val,
-                        y_theta_val=y_theta_val,
-                        prior_synthetic=best_syn_1,
-                        phase_label="phase2_class0",
-                        episodes=self.phase2_episodes,
-                    )
-                else:
-                    # Fresh RL agent for phase 2
-                    phase2_agent = ReinforceAgent(**self.reinforce_config)
+                phase2_env = _make_env(target=0, seed_samples=real_majority_samples)
 
-                    # Fresh beta model for phase 2
-                    self.beta_model = FFNNAgent(**self.ffnn_config)
-
-                    phase2_env = _make_env(target=0, seed_samples=real_majority_samples)
-
-                    best_syn_0 = self._run_phase(
-                        target_class=0,
-                        env=phase2_env,
-                        agent=phase2_agent,
-                        x_theta_train=x_theta_train,
-                        y_theta_train=y_theta_train,
-                        x_theta_val=x_theta_val,
-                        y_theta_val=y_theta_val,
-                        prior_synthetic=best_syn_1,
-                        phase_label="phase2_class0",
-                        episodes=self.phase2_episodes,
-                    )
+                best_syn_0 = self._run_phase(
+                    target_class=0,
+                    env=phase2_env,
+                    agent=phase2_agent,
+                    x_theta_train=x_theta_train,
+                    y_theta_train=y_theta_train,
+                    x_theta_val=x_theta_val,
+                    y_theta_val=y_theta_val,
+                    prior_synthetic=best_syn_1,
+                    phase_label="phase2_class0",
+                    episodes=self.phase2_episodes,
+                )
 
             # === Final test ===
             if self.gen_both_classes and best_syn_0 is not None and best_syn_1 is not None:
@@ -1598,13 +1337,8 @@ class Training:
                 cap_ctgan_train=b.get("cap_ctgan_train", None),
 
                 # CTABGAN baseline toggles/params
-                run_ctabgan=bool(b.get("run_ctabgan", False)),
-                alpha_plus_ctabgan_n=int(b.get("alpha_plus_ctabgan_n", self.traj_length)),
 
                 # CTABGAN subprocess wiring
-                ctab_python=b.get("ctab_python", None),
-                ctab_repo=b.get("ctab_repo", None),
-                ctab_runner=str(self.project_root / "benchmarks" / "ctabgan" / "run_ctabgan.py"),
 
                 # Dataset rebuild params
                 data_path=None,
