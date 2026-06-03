@@ -1,21 +1,15 @@
 import csv
 import json
-import time
 import numpy as np
 import torch
 from pathlib import Path
 
 
 class TestSuite:
-    def __init__(self, seed_dir, experiment_dir, seed, run_id,
-                 beta_factory=None, best_beta_path=None, alpha_factory=None, dataset=None):
+    def __init__(self, seed_dir, beta_factory=None, best_beta_path=None, dataset=None, **_ignored):
         self.seed_dir = Path(seed_dir)
-        self.experiment_dir = experiment_dir
-        self.seed = seed
-        self.run_id = run_id
         self.beta_factory = beta_factory
         self.best_beta_path = Path(best_beta_path) if best_beta_path else None
-        self.alpha_factory = alpha_factory or beta_factory
         self.dataset = dataset
 
     # ------------------------------------------------------------------ helpers

@@ -333,12 +333,8 @@ class EpisodeTracker:
     ):
         tests = TestSuite(
             seed_dir=self.seed_dir,
-            experiment_dir=self.experiment_dir,
-            seed=self.seed,
-            run_id=self.run_id,
             beta_factory=self.beta_factory,
             best_beta_path=self.best_beta_path,
-            alpha_factory=self.beta_factory,
             dataset=self.dataset,
         )
         return tests.log_final_test(

@@ -1,18 +1,20 @@
 # run_baseline.py
 """
-Entry point for standalone baselines (Group DRO, etc.).
+Entry point for standalone fairness baselines.
 
 Usage:
-    python run_baseline.py --spec experiment_specs/baseline_gdro_credit.yaml --device cuda:0
+    python run_baseline.py --spec experiment_specs/census/baselines/group_dro.yaml --device cuda:0
 """
 
 import hashlib
 import json
 import os
+import re
 import random
 import sys
 from datetime import datetime
 from pathlib import Path
+
 import yaml
 
 _project_root = Path(__file__).parent
@@ -23,6 +25,8 @@ for _p in [str(_project_root / 'utilities'), str(_project_root / 'FORGE')]:
 import numpy as np
 import torch
 
+from spec_helpers import _load_spec
+
 
 def _seed_everything(seed: int) -> None:
     random.seed(seed)
@@ -32,22 +36,15 @@ def _seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-from spec_helpers import _load_spec
-
-
 def _build_exp_group(baseline: str, spec_name: str, spec: dict) -> str:
-    import re
-    ts      = datetime.now().strftime("%Y%m%d%H%M")
-    payload = json.dumps(spec, sort_keys=True).encode("utf-8")
-    h       = hashlib.sha1(payload).hexdigest()[:8]
-    slug    = re.sub(r"[^A-Za-z0-9_.-]+", "-", spec_name).strip("-")
+    ts   = datetime.now().strftime("%Y%m%d%H%M")
+    h    = hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:8]
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", spec_name).strip("-")
     return f"BASELINE_{baseline}_{slug}_{h}__G{ts}"
 
 
 def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
-    """Train alpha on real data for this seed/split and return soft EO gap.
-    Uses PCA-transformed features (pca_components=10) to match the RL framework."""
-    import torch
+    """Train alpha on real data and return soft EO gap. Uses PCA to match FORGE's feature space."""
     from torch.utils.data import DataLoader, TensorDataset
     from dataset import Dataset
     from agents.ffnn_agent import FFNNAgent
@@ -55,10 +52,8 @@ def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
 
     ds = Dataset(
         spec["dataset_name"],
-        spec.get("multiclass", False),
         minority_id=spec.get("minority_id"),
         majority_id=spec.get("majority_id"),
-        third_id=spec.get("third_id"),
         pca_components=10,
         seed=seed,
         device=torch.device(device),
@@ -67,40 +62,52 @@ def _compute_alpha_eo(spec: dict, seed: int, device: str) -> float:
 
     dp_col   = spec.get("dp_protected_col")
     fold_idx = spec.get("fold_idx")
-    n_folds  = spec.get("n_folds", 5)
     x_tr, x_val, _, y_tr, y_val, _ = ds.get_data_splits(
         train_size=spec.get("real_data_size"),
-        bias_pct=spec.get("bias_pct"),
         da_pct=spec.get("da_pct"),
         pca_components=10,
         drop_protected=False,
         protected_cols=ds.protected_attributes,
-        bias_val=True,
-        win_seconds=float(spec.get("win_seconds", 5.0)),
-        step_seconds=float(spec.get("step_seconds", 2.5)),
         **({"dp_protected_col": dp_col} if dp_col is not None else {}),
-        **({"acs_states": spec.get("acs_states")} if spec.get("acs_states") is not None else {}),
-        **({"fold_idx": fold_idx, "n_folds": n_folds,
+        **({"fold_idx": fold_idx, "n_folds": spec.get("n_folds", 5),
             "fold_rng_seed": spec.get("fold_rng_seed")} if fold_idx is not None else {}),
     )
 
-    ffnn_cfg   = spec.get("ffnn", {})
-    hidden     = ffnn_cfg.get("hidden_sizes", [32, 16])
-    lr         = float(ffnn_cfg.get("learning_rate", ffnn_cfg.get("lr", 0.001)))
-    batch_size = int(ffnn_cfg.get("batch_size", 64))
-    epochs     = int(ffnn_cfg.get("epochs", 20))
-
-    alpha = FFNNAgent(x_tr.shape[1], hidden_sizes=hidden, output_size=2,
-                      classes=[0, 1], type="classification", learning_rate=lr,
-                      batch_size=batch_size, epochs=epochs, device=device, seed=seed)
-    loader = DataLoader(TensorDataset(x_tr, y_tr.float()), batch_size=batch_size, shuffle=True)
-    alpha.train(loader)
+    ffnn_cfg = spec.get("ffnn", {})
+    alpha = FFNNAgent(
+        x_tr.shape[1],
+        hidden_sizes=ffnn_cfg.get("hidden_sizes", [32, 16]),
+        output_size=2, classes=[0, 1], type="classification",
+        learning_rate=float(ffnn_cfg.get("learning_rate", ffnn_cfg.get("lr", 0.001))),
+        batch_size=int(ffnn_cfg.get("batch_size", 64)),
+        epochs=int(ffnn_cfg.get("epochs", 20)),
+        device=device, seed=seed,
+    )
+    alpha.train(DataLoader(TensorDataset(x_tr, y_tr.float()),
+                           batch_size=int(ffnn_cfg.get("batch_size", 64)), shuffle=True))
 
     with torch.no_grad():
-        p1  = rh.p1_from_agent(alpha, x_val)
-        eo  = rh.soft_eo_gap(ds.a_val, y_val, p1)
-
+        eo = rh.soft_eo_gap(ds.a_val, y_val, rh.p1_from_agent(alpha, x_val))
     return float(eo.item())
+
+
+def _common_kwargs(spec, seed, device, exp_group, spec_name):
+    """Parameters shared by every baseline trainer."""
+    return dict(
+        exp_group=exp_group,
+        spec_name=spec_name,
+        dataset_name=spec["dataset_name"],
+        seed=seed,
+        device=device,
+        minority_id=spec.get("minority_id"),
+        majority_id=spec.get("majority_id"),
+        da_pct=spec.get("da_pct"),
+        real_data_size=spec.get("real_data_size", 3000),
+        ffnn=spec.get("ffnn"),
+        use_pca=spec.get("use_pca", False),
+        pca_components=spec.get("pca_components", 10),
+        dp_protected_col=spec.get("dp_protected_col"),
+    )
 
 
 def run_baseline_all_seeds(spec_path: str, device: str) -> None:
@@ -110,211 +117,78 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
     if not isinstance(seeds, list) or len(seeds) == 0:
         raise ValueError(f"spec['seeds'] must be a non-empty list. Got: {seeds!r}")
 
-    eo_guard_threshold = float(spec.get("eo_guard_threshold", 0.0))
-    n_seeds_needed     = len(seeds)
-    primary_set        = set(int(s) for s in seeds)
-    fallback_pool      = [s for s in range(200) if s not in primary_set][:20]
-    seed_queue         = [int(s) for s in seeds] + fallback_pool
+    eo_guard  = float(spec.get("eo_guard_threshold", 0.0))
+    n_needed  = len(seeds)
+    fallback  = [s for s in range(200) if s not in set(int(s) for s in seeds)][:20]
+    queue     = [int(s) for s in seeds] + fallback
 
     spec_name = os.path.splitext(os.path.basename(spec_path))[0]
     exp_group = _build_exp_group(baseline, spec_name, spec)
 
-    print(f"[run_baseline] baseline={baseline}")
-    print(f"[run_baseline] spec={spec_path}")
-    print(f"[run_baseline] device={device}")
-    print(f"[run_baseline] exp_group={exp_group}")
-    fold_idx      = spec.get("fold_idx")
-    n_folds       = int(spec.get("n_folds", 5))
-    fold_rng_seed = spec.get("fold_rng_seed")
-    fold_kwargs   = ({"fold_idx": fold_idx, "n_folds": n_folds, "fold_rng_seed": fold_rng_seed}
-                     if fold_idx is not None else {})
+    fold_idx  = spec.get("fold_idx")
+    fold_kw   = ({"fold_idx": fold_idx, "n_folds": int(spec.get("n_folds", 5)),
+                  "fold_rng_seed": spec.get("fold_rng_seed")}
+                 if fold_idx is not None else {})
 
-    print(f"[run_baseline] seeds={seeds}")
+    print(f"[run_baseline] baseline={baseline}  spec={spec_path}  device={device}")
+    print(f"[run_baseline] exp_group={exp_group}  seeds={seeds}")
     if fold_idx is not None:
-        print(f"[run_baseline] k-fold mode: fold_idx={fold_idx}, n_folds={n_folds}")
-    if eo_guard_threshold > 0.0:
-        print(f"[run_baseline] eo_guard_threshold={eo_guard_threshold} (fallback pool: {fallback_pool[:5]}...)")
+        print(f"[run_baseline] k-fold: fold_idx={fold_idx}, n_folds={spec.get('n_folds', 5)}")
+    if eo_guard > 0.0:
+        print(f"[run_baseline] eo_guard_threshold={eo_guard}")
 
     completed = 0
-    for seed in seed_queue:
-        if completed >= n_seeds_needed:
+    for seed in queue:
+        if completed >= n_needed:
             break
         seed = int(seed)
         print(f"\n[run_baseline] ---- seed={seed} ----")
         _seed_everything(seed)
 
-        if eo_guard_threshold > 0.0:
+        if eo_guard > 0.0:
             eo = _compute_alpha_eo(spec, seed, device)
-            if eo < eo_guard_threshold:
-                print(f"[EO guard] alpha-EO={eo:.4f} < threshold={eo_guard_threshold:.4f} — skipping seed {seed}")
+            if eo < eo_guard:
+                print(f"[EO guard] alpha-EO={eo:.4f} < {eo_guard:.4f} — skipping seed {seed}")
                 continue
-            print(f"[EO guard] alpha-EO={eo:.4f} >= threshold={eo_guard_threshold:.4f} — proceeding")
+            print(f"[EO guard] alpha-EO={eo:.4f} >= {eo_guard:.4f} — proceeding")
 
-        win_seconds  = float(spec.get("win_seconds",  5.0))
-        step_seconds = float(spec.get("step_seconds", 2.5))
+        kw = {**_common_kwargs(spec, seed, device, exp_group, spec_name), **fold_kw}
 
         if baseline == "group_dro":
             from benchmarks.group_dro import GroupDROTrainer
-            trainer = GroupDROTrainer(
-                exp_group=exp_group,
-                spec_name=spec_name,
-                dataset_name=spec["dataset_name"],
-                seed=seed,
-                device=device,
-                minority_id=spec.get("minority_id"),
-                majority_id=spec.get("majority_id"),
-                third_id=spec.get("third_id"),
-                bias_pct=spec.get("bias_pct"),
-                da_pct=spec.get("da_pct"),
-                real_data_size=spec.get("real_data_size", 3000),
-                ffnn=spec.get("ffnn"),
-                group_dro=spec.get("group_dro"),
-                multiclass=spec.get("multiclass", False),
-                use_pca=spec.get("use_pca", False),
-                pca_components=spec.get("pca_components", 10),
-                win_seconds=win_seconds,
-                step_seconds=step_seconds,
-                dp_protected_col=spec.get("dp_protected_col", None),
-                acs_states=spec.get("acs_states"),
-                **fold_kwargs,
-            )
+            trainer = GroupDROTrainer(**kw, group_dro=spec.get("group_dro"))
+
         elif baseline == "gaussian_ot_repair":
             from benchmarks.gaussian_ot_repair import GaussianOTRepairTrainer
-            trainer = GaussianOTRepairTrainer(
-                exp_group=exp_group,
-                spec_name=spec_name,
-                dataset_name=spec["dataset_name"],
-                seed=seed,
-                device=device,
-                minority_id=spec.get("minority_id"),
-                majority_id=spec.get("majority_id"),
-                third_id=spec.get("third_id"),
-                bias_pct=spec.get("bias_pct"),
-                da_pct=spec.get("da_pct"),
-                real_data_size=spec.get("real_data_size", 3000),
-                ffnn=spec.get("ffnn"),
-                ot_repair=spec.get("ot_repair"),
-                multiclass=spec.get("multiclass", False),
-                use_pca=spec.get("use_pca", False),
-                pca_components=spec.get("pca_components", 10),
-                win_seconds=win_seconds,
-                step_seconds=step_seconds,
-                dp_protected_col=spec.get("dp_protected_col", None),
-                acs_states=spec.get("acs_states"),
-                **fold_kwargs,
-            )
+            trainer = GaussianOTRepairTrainer(**kw, ot_repair=spec.get("ot_repair"))
+
         elif baseline == "ctgan":
             from benchmarks.ctgan_baseline import CTGANBaselineTrainer
-            # n_synthetic defaults to traj_length from spec so budget matches FORGE
             ctgan_cfg = dict(spec.get("ctgan") or {})
             if "n_synthetic" not in ctgan_cfg and spec.get("traj_length"):
                 ctgan_cfg["n_synthetic"] = spec["traj_length"]
-            trainer = CTGANBaselineTrainer(
-                exp_group=exp_group,
-                spec_name=spec_name,
-                dataset_name=spec["dataset_name"],
-                seed=seed,
-                device=device,
-                minority_id=spec.get("minority_id"),
-                majority_id=spec.get("majority_id"),
-                third_id=spec.get("third_id"),
-                bias_pct=spec.get("bias_pct"),
-                da_pct=spec.get("da_pct"),
-                real_data_size=spec.get("real_data_size", 3000),
-                ffnn=spec.get("ffnn"),
-                ctgan=ctgan_cfg,
-                multiclass=spec.get("multiclass", False),
-                use_pca=spec.get("use_pca", False),
-                pca_components=spec.get("pca_components", 10),
-                win_seconds=win_seconds,
-                step_seconds=step_seconds,
-                dp_protected_col=spec.get("dp_protected_col", None),
-                acs_states=spec.get("acs_states"),
-                **fold_kwargs,
-            )
+            trainer = CTGANBaselineTrainer(**kw, ctgan=ctgan_cfg)
+
         elif baseline == "fairness_loss_balancing":
             from benchmarks.fairness_loss_balancing import FairnessLossBalancingTrainer
-            trainer = FairnessLossBalancingTrainer(
-                exp_group=exp_group,
-                spec_name=spec_name,
-                dataset_name=spec["dataset_name"],
-                seed=seed,
-                device=device,
-                minority_id=spec.get("minority_id"),
-                majority_id=spec.get("majority_id"),
-                third_id=spec.get("third_id"),
-                bias_pct=spec.get("bias_pct"),
-                da_pct=spec.get("da_pct"),
-                real_data_size=spec.get("real_data_size", 3000),
-                ffnn=spec.get("ffnn"),
-                flb=spec.get("flb"),
-                multiclass=spec.get("multiclass", False),
-                use_pca=spec.get("use_pca", False),
-                pca_components=spec.get("pca_components", 10),
-                win_seconds=win_seconds,
-                step_seconds=step_seconds,
-                dp_protected_col=spec.get("dp_protected_col", None),
-                acs_states=spec.get("acs_states"),
-                **fold_kwargs,
-            )
+            trainer = FairnessLossBalancingTrainer(**kw, flb=spec.get("flb"))
+
         elif baseline == "smote":
             from benchmarks.smote_baseline import SMOTEBaselineTrainer
-            trainer = SMOTEBaselineTrainer(
-                exp_group=exp_group,
-                spec_name=spec_name,
-                dataset_name=spec["dataset_name"],
-                seed=seed,
-                device=device,
-                minority_id=spec.get("minority_id"),
-                majority_id=spec.get("majority_id"),
-                third_id=spec.get("third_id"),
-                bias_pct=spec.get("bias_pct"),
-                da_pct=spec.get("da_pct"),
-                real_data_size=spec.get("real_data_size", 3000),
-                ffnn=spec.get("ffnn"),
-                smote=spec.get("smote"),
-                multiclass=spec.get("multiclass", False),
-                use_pca=spec.get("use_pca", True),
-                pca_components=spec.get("pca_components", 10),
-                win_seconds=win_seconds,
-                step_seconds=step_seconds,
-                dp_protected_col=spec.get("dp_protected_col", None),
-                acs_states=spec.get("acs_states"),
-                **fold_kwargs,
-            )
+            trainer = SMOTEBaselineTrainer(**kw, smote=spec.get("smote"))
+
         elif baseline == "fairtabddpm":
             from benchmarks.fairtabddpm_baseline import FairTabDDPMTrainer
-            # n_synthetic defaults to traj_length from spec so budget matches FORGE
             fairtabddpm_cfg = dict(spec.get("fairtabddpm") or {})
             if "n_synthetic" not in fairtabddpm_cfg and spec.get("traj_length"):
                 fairtabddpm_cfg["n_synthetic"] = spec["traj_length"]
-            trainer = FairTabDDPMTrainer(
-                exp_group=exp_group,
-                spec_name=spec_name,
-                dataset_name=spec["dataset_name"],
-                seed=seed,
-                device=device,
-                minority_id=spec.get("minority_id"),
-                majority_id=spec.get("majority_id"),
-                third_id=spec.get("third_id"),
-                bias_pct=spec.get("bias_pct"),
-                da_pct=spec.get("da_pct"),
-                real_data_size=spec.get("real_data_size", 3000),
-                ffnn=spec.get("ffnn"),
-                fairtabddpm=fairtabddpm_cfg,
-                multiclass=spec.get("multiclass", False),
-                use_pca=spec.get("use_pca", False),
-                pca_components=spec.get("pca_components", 10),
-                win_seconds=win_seconds,
-                step_seconds=step_seconds,
-                dp_protected_col=spec.get("dp_protected_col", None),
-                acs_states=spec.get("acs_states"),
-                **fold_kwargs,
-            )
+            trainer = FairTabDDPMTrainer(**kw, fairtabddpm=fairtabddpm_cfg)
+
         else:
             raise ValueError(
                 f"Unknown baseline: {baseline!r}. "
-                "Supported: 'group_dro', 'gaussian_ot_repair', 'ctgan', "
+                "Supported: group_dro, gaussian_ot_repair, ctgan, "
+                "fairness_loss_balancing, smote, fairtabddpm"
             )
 
         trainer()
@@ -324,20 +198,20 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
             torch.cuda.synchronize(torch.device(device))
             torch.cuda.empty_cache()
 
-    if completed < n_seeds_needed:
-        print(f"[run_baseline] WARNING: only {completed}/{n_seeds_needed} seeds completed — fallback pool exhausted")
+    if completed < n_needed:
+        print(f"[run_baseline] WARNING: only {completed}/{n_needed} seeds completed")
 
 
 def main():
     import argparse
     p = argparse.ArgumentParser(description="Run a standalone fairness baseline.")
-    p.add_argument("--spec",   required=True, help="Path to a YAML baseline spec file")
-    p.add_argument("--device", default="cuda:0", help="cuda:0 or cpu (auto-falls back to cpu)")
+    p.add_argument("--spec",   required=True)
+    p.add_argument("--device", default="cuda:0")
     args = p.parse_args()
 
     device = args.device
     if "cuda" in device and not torch.cuda.is_available():
-        print(f"[run_baseline] CUDA unavailable, falling back to cpu")
+        print("[run_baseline] CUDA unavailable, falling back to cpu")
         device = "cpu"
 
     run_baseline_all_seeds(args.spec, device)
