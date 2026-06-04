@@ -1,0 +1,3 @@
+[submodule "paper"]
+	path = paper
+	url = https://github.com/E3than/2026-RL-for-fairnes-synthetic-data-generation.git
