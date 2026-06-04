@@ -22,9 +22,9 @@ ffnn:
   hidden_sizes:
   - 32
   - 16
-  learning_rate: 0.001
+  learning_rate: 0.00024106501268706255
   batch_size: 64
-  epochs: 20
+  epochs: 10
   optimizer: adam
 ctgan:
   epochs: 300

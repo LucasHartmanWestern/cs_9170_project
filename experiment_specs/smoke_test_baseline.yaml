@@ -1,0 +1,23 @@
+dataset_name: census_income
+minority_id: 0
+majority_id: 1
+da_pct: 0.01433
+dp_protected_col: sex
+seeds:
+- 42
+use_pca: true
+pca_components: 5
+real_data_size: 300
+ffnn:
+  hidden_sizes: [16, 8]
+  learning_rate: 0.001
+  batch_size: 32
+  epochs: 2
+  optimizer: adam
+baseline: group_dro
+group_dro:
+  lr: 0.001
+  batch_size: 32
+  epochs: 2
+  eta: 0.1
+  n_groups: 4

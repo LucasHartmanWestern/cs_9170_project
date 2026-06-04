@@ -24,7 +24,7 @@ ffnn:
   - 16
   learning_rate: 0.00024106501268706255
   batch_size: 64
-  epochs: 20
+  epochs: 10
   optimizer: adam
 flb:
   lr: 0.001

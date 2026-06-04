@@ -6,9 +6,6 @@ majority_id: 1
 dp_protected_col: sex
 real_data_size: 3000
 seeds:
-- 0
-- 1
-- 2
 - 3
 - 42
 use_pca: true
@@ -22,17 +19,4 @@ ffnn:
   batch_size: 64
   epochs: 30
   optimizer: adam
-baseline: fairtabddpm
-fairtabddpm:
-  timesteps: 100
-  d_emb: 128
-  n_layers: 4
-  lr: 0.00039
-  weight_decay: 0.0
-  diff_epochs: 1000
-  batch_size: 256
-  n_synthetic: 2000
-  overall_guid_weight: 1.0
-  cond_guid_weight: 1.0
-  cond_guid_threshold: 0.1
-  warmup_steps: 10
+baseline: group_dro

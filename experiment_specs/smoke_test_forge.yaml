@@ -1,0 +1,34 @@
+dataset_name: census_income
+minority_id: 0
+majority_id: 1
+da_pct: 0.01433
+dp_protected_col: sex
+seeds:
+- 42
+use_pca: true
+pca_components: 5
+traj_length: 50
+real_data_size: 300
+total_episodes: 2
+lambda_schedule:
+- 1.0
+- 1.0
+use_delta_actions: true
+delta_scale: 0.1
+delta_clip: 0.2
+radius_clip: 3.0
+reward_shaping:
+  global_sigmoid_k: 10
+ffnn:
+  hidden_sizes: [16, 8]
+  learning_rate: 0.001
+  batch_size: 32
+  epochs: 2
+  optimizer: adam
+reinforce:
+  hidden_sizes: [32, 32]
+  lr: 0.0003
+  gamma: 1.0
+  entropy_start: 0.02
+  entropy_end: 0.005
+  optimizer: adam

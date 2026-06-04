@@ -74,6 +74,11 @@ def reconstruct_dataset(meta: dict, device: str):
     dp_col = meta.get("dp_protected_col", None)
     if dp_col is not None:
         kwargs["dp_protected_col"] = dp_col
+    # Pass fold params for k-fold datasets (Capture-24)
+    if meta.get("n_folds") is not None:
+        kwargs["n_folds"] = int(meta["n_folds"])
+        kwargs["fold_idx"] = int(meta["fold_idx"])
+        kwargs["fold_rng_seed"] = int(meta.get("fold_rng_seed", 6))
     splits = ds.get_data_splits(**kwargs)
     x_tr, _, _, y_tr, _, _ = splits
     return ds, x_tr.cpu().numpy(), y_tr.cpu().numpy()
@@ -212,86 +217,50 @@ def plot_row(ax_dist, ax_cos, data: dict,
                  va="center", ha="right")
 
 
-def compute_run_metrics_multifold(fold_dirs, seed="42", device="cpu"):
-    """Aggregate centroid drift across multiple fold directories (each with one seed)."""
-    all_eps, all_dist, all_cos = [], [], []
+def compute_run_metrics_multifold(fold_dirs: list, seed: str = "42", device: str = "cpu") -> dict:
+    """Aggregate centroid drift across multiple fold directories (each with one seed).
+
+    Each fold_dir is treated as an independent run: find_seed_dirs returns [seed_42].
+    reconstruct_dataset picks up fold_idx/n_folds/fold_rng_seed from meta.json,
+    so the correct training split is reconstructed per fold.
+    Results are aggregated exactly as in compute_run_metrics.
+    """
+    all_results = []
     for fold_dir in fold_dirs:
-        sd = fold_dir / f"seed_{seed}"
-        if not sd.exists():
-            print(f"  [warn] missing: {sd}")
-            continue
-        meta = load_meta(sd)
-        snap_dir = sd / "synthetic_snapshots"
-        if not snap_dir.exists():
-            continue
-        eps = snapshot_episodes(snap_dir)
-        if not eps:
-            continue
-        _, X_tr, y_tr = reconstruct_dataset(meta, device)
-        a_tr = __import__('json').loads(open(sd / "meta.json").read())
-        # reuse reconstruct_dataset which returns ds too
-        import json as _json
-        with open(sd / "meta.json") as f:
-            meta2 = _json.load(f)
-        from dataset import Dataset
-        ds2 = Dataset(
-            dataset_name=meta2["dataset_name"],
-            multiclass=bool(meta2.get("multiclass", False)),
-            minority_id=int(meta2.get("minority_id", 1)),
-            majority_id=int(meta2.get("majority_id", 0)),
-            pca_components=int(meta2.get("pca_components", 15)),
-            seed=int(meta2["seed"]),
-            device=device,
-            use_pca=True,
-        )
-        splits = ds2.get_data_splits(
-            train_size=meta2.get("REAL_DATA_SIZE"),
-            da_pct=meta2.get("DA_PCT"),
-            pca_components=int(meta2.get("pca_components", 15)),
-            drop_protected=False,
-            protected_cols=ds2.protected_attributes,
-            win_seconds=meta2.get("win_seconds", 1.0),
-            step_seconds=meta2.get("step_seconds", 0.5),
-            n_folds=int(meta2.get("n_folds", 5)),
-            fold_idx=int(meta2.get("fold_idx", 0)),
-            fold_rng_seed=int(meta2.get("fold_rng_seed", 6)),
-        )
-        x_tr2 = splits[0].cpu().numpy()
-        y_tr2 = splits[3].cpu().numpy()
-        a_tr2 = ds2.a_train.cpu().numpy()
-        min_id = int(meta2.get("minority_id", 1))
-        mask = (a_tr2 == min_id) & (y_tr2 == 1)
-        if mask.sum() == 0:
-            continue
-        dp_centroid = x_tr2[mask].mean(axis=0)
-        dp_norm = np.linalg.norm(dp_centroid)
-        ep_list, dist_list, cos_list = [], [], []
-        for ep in eps:
-            f = snap_dir / f"synthetic_ep{ep:04d}_phase1_class1.npz"
-            if not f.exists():
-                continue
-            pts = np.load(f)["x"]
-            syn_centroid = pts.mean(axis=0)
-            dist = np.linalg.norm(syn_centroid - dp_centroid)
-            syn_norm = np.linalg.norm(syn_centroid)
-            cos = float(np.dot(syn_centroid, dp_centroid) / (syn_norm * dp_norm + 1e-8))
-            ep_list.append(ep); dist_list.append(dist); cos_list.append(cos)
-        if ep_list:
-            all_eps.append(np.array(ep_list))
-            all_dist.append(np.array(dist_list))
-            all_cos.append(np.array(cos_list))
-    if not all_eps:
+        # Wrap each fold dir so compute_run_metrics sees it as a single-seed run
+        result = compute_run_metrics(fold_dir, device)
+        if result:
+            all_results.append(result)
+        else:
+            print(f"  [warn] no data from {fold_dir.name[-16:]}")
+
+    if not all_results:
         return {}
-    common_eps = all_eps[0]
-    for e in all_eps[1:]:
-        common_eps = np.intersect1d(common_eps, e)
-    def align(arrays, eps_list):
-        return np.array([a[np.isin(e, common_eps)] for a, e in zip(arrays, eps_list)])
-    dist_mat = align(all_dist, all_eps)
-    cos_mat  = align(all_cos,  all_eps)
-    return {"episodes": common_eps,
-            "dist_mean": dist_mat.mean(0), "dist_std": dist_mat.std(0),
-            "cos_mean":  cos_mat.mean(0),  "cos_std":  cos_mat.std(0)}
+
+    # Intersect episode indices across folds
+    common_eps = all_results[0]["episodes"]
+    for r in all_results[1:]:
+        common_eps = np.intersect1d(common_eps, r["episodes"])
+
+    def realign(key):
+        rows = []
+        for r in all_results:
+            mask = np.isin(r["episodes"], common_eps)
+            # reconstruct per-sample arrays from mean/std (not stored — re-run per seed)
+            rows.append(r[key][mask])
+        return np.array(rows)
+
+    # dist_mean/cos_mean per fold are already per-fold means; aggregate across folds
+    dist_stack = realign("dist_mean")
+    cos_stack  = realign("cos_mean")
+
+    return {
+        "episodes":  common_eps,
+        "dist_mean": dist_stack.mean(0),
+        "dist_std":  dist_stack.std(0),
+        "cos_mean":  cos_stack.mean(0),
+        "cos_std":   cos_stack.std(0),
+    }
 
 
 def main():

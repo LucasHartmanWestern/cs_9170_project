@@ -1,46 +1,44 @@
 """
-Regenerate radar_top_down_AB.png from main_table_metrics_per_seed.csv.
+Generate radar_top_down_AB.png — 6-axis multi-metric trade-off profiles.
 
-Changes vs original:
-  - Brier Inv. Score replaced by EOd Inv. Score
-  - Panel labels A/B → a/b
-  - Legend added
-  - Max normalization (value / max across methods, no min subtraction)
-  - Inverted metrics: EO, DP, EOd  (1 - normalized so high = good on radar)
-  - Values are means over seeds per method/dataset
+Methods shown: Alpha, FORGE, GroupDRO, FairTabDDPM.
+Axes (3 utility, 3 fairness):
+  AUC, F1 Weighted, Accuracy  (higher = better, direct)
+  EO' Score, EOd' Score, DP' Score  (lower = better, inverted: 1 - normalised)
+
+Normalisation: value / max across all 4 methods per dataset (no min subtraction),
+so values fill [0, 1] with 1 = best observed for that metric on that dataset.
 """
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
 
-CSV_PATH = "/home/epigou/cs_9170_project/figures/main_table_metrics_per_seed.csv"
+CSV_PATH = "/storage_1/epigou_storage/FORGE/experiment3/experiment3_radar_metrics.csv"
 OUT_PATH = "/home/epigou/cs_9170_project/paper/figures/radar_top_down_AB.png"
 
 # (csv_column, axis_label, invert)
-# 3 axes: all available for every method from EXP-050 data
 METRICS = [
-    ("f1_weighted",  "F1 Weighted",  False),
-    ("roc_auc",      "ROC-AUC",      False),
-    ("eo_tpr_diff",  "EO' Score",    True),
+    ("beta_roc_auc",       "AUC",          False),
+    ("beta_f1_weighted",   "F1 Weighted",  False),
+    ("beta_acc",           "Accuracy",     False),
+    ("beta_eo_tpr_diff",   "EO' Score",    True),
+    ("beta_eod_avg_diff",  "EOd' Score",   True),
+    ("beta_dp_diff",       "DP' Score",    True),
 ]
 
-DATASETS      = ["Census", "Capture-24"]
-PANEL_LABELS  = ["a)", "b)"]
+DATASETS     = ["Census", "Capture-24"]
+PANEL_LABELS = ["a)", "b)"]
 
+# method name in CSV → display style
 METHOD_STYLES = {
-    "Alpha":       {"color": "tab:red",    "ls": "-",  "label": "Alpha"},
-    "RL (ours)":   {"color": "tab:blue",   "ls": "-",  "label": "FORGE"},
-    "GroupDRO":    {"color": "tab:orange", "ls": "--", "label": "GDRO"},
-    "FairTabDDPM": {"color": "tab:green",  "ls": "--", "label": "FairTabDDPM"},
+    "Alpha":       {"color": "tab:red",    "ls": "-",  "lw": 1.5, "label": "Alpha"},
+    "FORGE":       {"color": "tab:blue",   "ls": "-",  "lw": 2.0, "label": "FORGE"},
+    "GroupDRO":    {"color": "tab:orange", "ls": "--", "lw": 1.5, "label": "GDRO"},
+    "FairTabDDPM": {"color": "tab:green",  "ls": "--", "lw": 1.5, "label": "FairTabDDPM"},
 }
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-def radar_values(means_row, labels):
-    """Return normalized radar values (closed polygon) for one method."""
-    return means_row[labels].tolist()
 
 
 def build_normed(df, dataset):
@@ -53,65 +51,65 @@ def build_normed(df, dataset):
     for col, label, invert in METRICS:
         mx = sub[col].max()
         n  = sub[col] / mx if mx > 0 else sub[col] * 0.0
-        normed[label] = (1 - n) if invert else n
+        normed[label] = (1.0 - n) if invert else n
     return normed
 
 
-# ── plot ─────────────────────────────────────────────────────────────────────
+# ── plot ──────────────────────────────────────────────────────────────────────
 
-df       = pd.read_csv(CSV_PATH)
-n        = len(METRICS)
-labels   = [m[1] for m in METRICS]
-angles   = np.linspace(0, 2 * np.pi, n, endpoint=False).tolist()
-angles  += angles[:1]   # close the polygon
+df     = pd.read_csv(CSV_PATH)
+n      = len(METRICS)
+labels = [m[1] for m in METRICS]
+angles = np.linspace(0, 2 * np.pi, n, endpoint=False).tolist()
+angles += angles[:1]   # close polygon
 
 fig, axes = plt.subplots(
     nrows=1, ncols=2,
-    figsize=(9.0, 5.0),
+    figsize=(10.0, 5.2),
     subplot_kw=dict(polar=True),
 )
 
 for ax, dataset, panel_label in zip(axes, DATASETS, PANEL_LABELS):
     normed = build_normed(df, dataset)
 
-    for method, row in normed.iterrows():
-        style  = METHOD_STYLES.get(method, {"color": "black", "ls": "-"})
-        vals   = row[labels].tolist() + [row[labels[0]]]   # close
-        ax.plot(angles, vals, color=style["color"], ls=style["ls"], linewidth=1.5)
-        ax.fill(angles, vals, color=style["color"], alpha=0.08)
+    for method, style in METHOD_STYLES.items():
+        if method not in normed.index:
+            continue
+        row  = normed.loc[method]
+        vals = row[labels].tolist() + [row[labels[0]]]
+        ax.plot(angles, vals,
+                color=style["color"], ls=style["ls"], lw=style["lw"])
+        ax.fill(angles, vals, color=style["color"], alpha=0.07)
 
     ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(labels, size=11)
-    # Shift "Accuracy" right and "EO' Score" left so they aren't obscured
-    # Nudge ROC-AUC and F1 Weighted labels outward a little
-    for tick, lbl in zip(ax.xaxis.get_major_ticks(), ax.get_xticklabels()):
-        tick.set_pad(14)
+    ax.set_xticklabels(labels, size=10)
+    for tick in ax.xaxis.get_major_ticks():
+        tick.set_pad(12)
     ax.set_ylim(0, 1)
-    ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8", "1.0"], size=9, color="gray")
+    ax.set_yticks([0.25, 0.5, 0.75, 1.0])
+    ax.set_yticklabels(["0.25", "0.50", "0.75", "1.00"], size=8, color="gray")
 
-    # panel label in upper-left (outside the radar)
-    ax.text(-0.12, 1.12, panel_label, transform=ax.transAxes,
-            fontsize=15, fontweight="bold", va="top", ha="left")
+    ax.text(-0.12, 1.14, panel_label, transform=ax.transAxes,
+            fontsize=14, fontweight="bold", va="top", ha="left")
 
-# ── legend ───────────────────────────────────────────────────────────────────
+# ── legend ────────────────────────────────────────────────────────────────────
 
 handles = []
 for method, style in METHOD_STYLES.items():
-    patch = mpatches.Patch(color=style["color"], label=style["label"])
-    handles.append(patch)
+    h = mlines.Line2D([], [],
+                      color=style["color"], ls=style["ls"], lw=style["lw"],
+                      label=style["label"])
+    handles.append(h)
 
 fig.legend(
     handles=handles,
     loc="lower center",
-    ncol=2,
+    ncol=4,
     fontsize=11,
     frameon=True,
     bbox_to_anchor=(0.5, 0.01),
-    title="Method",
-    title_fontsize=11,
 )
 
-plt.tight_layout(rect=[0, 0.12, 1, 1])
+plt.tight_layout(rect=[0, 0.10, 1, 1])
 plt.savefig(OUT_PATH, dpi=150, bbox_inches="tight")
 print(f"Saved → {OUT_PATH}")

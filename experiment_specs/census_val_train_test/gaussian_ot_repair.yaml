@@ -20,7 +20,7 @@ ffnn:
   - 16
   learning_rate: 0.001
   batch_size: 64
-  epochs: 20
+  epochs: 30
   optimizer: adam
 baseline: gaussian_ot_repair
 ot_repair:

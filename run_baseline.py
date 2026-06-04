@@ -148,7 +148,31 @@ def run_baseline_all_seeds(spec_path: str, device: str) -> None:
         win_seconds  = float(spec.get("win_seconds",  5.0))
         step_seconds = float(spec.get("step_seconds", 2.5))
 
-        if baseline == "group_dro":
+        if baseline == "alpha":
+            from benchmarks.alpha_baseline import AlphaBaselineTrainer
+            trainer = AlphaBaselineTrainer(
+                exp_group=exp_group,
+                spec_name=spec_name,
+                dataset_name=spec["dataset_name"],
+                seed=seed,
+                device=device,
+                minority_id=spec.get("minority_id"),
+                majority_id=spec.get("majority_id"),
+                third_id=spec.get("third_id"),
+                bias_pct=spec.get("bias_pct"),
+                da_pct=spec.get("da_pct"),
+                real_data_size=spec.get("real_data_size", 3000),
+                ffnn=spec.get("ffnn"),
+                multiclass=spec.get("multiclass", False),
+                use_pca=spec.get("use_pca", False),
+                pca_components=spec.get("pca_components", 10),
+                win_seconds=win_seconds,
+                step_seconds=step_seconds,
+                dp_protected_col=spec.get("dp_protected_col", None),
+                acs_states=spec.get("acs_states"),
+                **fold_kwargs,
+            )
+        elif baseline == "group_dro":
             from benchmarks.group_dro import GroupDROTrainer
             trainer = GroupDROTrainer(
                 exp_group=exp_group,

@@ -1,31 +1,27 @@
-baseline: fairtabddpm
-dataset_name: capture24
-multiclass: false
+dataset_name: census_income
+da_pct: 0.01433
 bias_pct: null
-da_pct: 0.015
+minority_id: 0
+majority_id: 1
 dp_protected_col: sex
-minority_id: 1
-majority_id: 0
-third_id: null
-real_data_size: 4000
-n_folds: 5
-fold_rng_seed: 6
-fold_idx: 4
-kfold_val_frac: 0.4
+real_data_size: 3000
 seeds:
+- 1
+- 2
+- 3
 - 42
 use_pca: true
-pca_components: 15
-win_seconds: 1.0
-step_seconds: 0.5
+pca_components: 10
+multiclass: false
 ffnn:
   hidden_sizes:
   - 32
   - 16
-  learning_rate: 0.00024106501268706255
+  learning_rate: 0.001
   batch_size: 64
-  epochs: 10
+  epochs: 30
   optimizer: adam
+baseline: fairtabddpm
 fairtabddpm:
   timesteps: 100
   d_emb: 128
