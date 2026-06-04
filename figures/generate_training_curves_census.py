@@ -22,11 +22,16 @@ STORAGE = Path("/storage_1/epigou_storage/FORGE")
 CENSUS_RUN = STORAGE / "experiment3/census_forge"
 CENSUS_SEEDS = ["0", "1", "2", "3", "42"]
 
-# Capture-24: 5 fold directories, each with seed_42
-CAPTURE24_FOLD_DIRS = sorted(
-    Path(d) for d in glob.glob(str(STORAGE / "experiment3/capture24_forge/SPECrand_0010_*"))
-)
-CAPTURE24_SEED = "42"
+# Capture-24: EXP-046 vanilla folds 0-2 (ep=10, healthy alpha-EO per fold)
+import json as _json
+_kfold_base = STORAGE / "capture24_kfold_grid"
+CAPTURE24_FOLD_DIRS = []
+for _fold in range(3):
+    for _d in sorted(_kfold_base.glob(f"SPECtest_fold{_fold}_*")):
+        _mfs = list(_d.glob("seed_*/meta.json"))
+        if _mfs and _json.load(open(_mfs[0])).get("ffnn_epochs") == 10:
+            CAPTURE24_FOLD_DIRS.append(_d)
+            break
 
 FIG_DIR = Path("/home/epigou/cs_9170_project/paper/figures")
 
@@ -74,7 +79,7 @@ def finish_panel(ax, seed_curves, color_main, label):
     arr = np.array([c.values[:min_len] for c in seed_curves])
     eps = seed_curves[0].index[:min_len]
     ax.plot(eps, arr.mean(0), color=color_main, linewidth=2.2, zorder=5,
-            label=f"Mean ({len(seed_curves)} {'seeds' if len(seed_curves) > 1 else 'seed'})")
+            label="Mean")
     ax.fill_between(eps, arr.min(0), arr.max(0),
                     color=color_main, alpha=0.20, zorder=4, label="Min-max range")
     ax.set_xlabel("Episode", fontsize=14)
@@ -97,8 +102,15 @@ ax.text(-0.20, 0.97, "b)", transform=ax.transAxes,
 
 fold_curves = []
 for fold_dir in CAPTURE24_FOLD_DIRS:
+    seed_dirs = sorted(fold_dir.glob("seed_*"))
+    if not seed_dirs:
+        continue
     try:
-        series = load_seed(fold_dir, CAPTURE24_SEED)
+        p = seed_dirs[0] / "metrics.csv"
+        df_f = pd.read_csv(p, usecols=["episode", "meta.phase", METRIC_COL])
+        ph1 = df_f[df_f["meta.phase"] == "phase1_class1"].copy()
+        ph1 = ph1[~ph1["episode"].duplicated(keep="last")]
+        series = ph1.set_index("episode")[METRIC_COL]
         smoothed = smooth(series)
         fold_curves.append(smoothed)
         ax.plot(smoothed.index, smoothed.values,
