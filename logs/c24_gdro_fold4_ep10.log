@@ -1,0 +1,42 @@
+[run_baseline] baseline=group_dro
+[run_baseline] spec=experiment_specs/capture24_rand10_baselines/group_dro_fold4.yaml
+[run_baseline] device=cpu
+[run_baseline] exp_group=BASELINE_group_dro_group_dro_fold4_9da4176c__G202606041525
+[run_baseline] seeds=[42]
+[run_baseline] k-fold mode: fold_idx=4, n_folds=5
+
+[run_baseline] ---- seed=42 ----
+[capture24-kfold] Cache: 992,430 windows, 40 subjects, fold 4/5
+[TRAIN] size=4,000, MVPA=145 (3.6%), female=2,007, female_MVPA=60, male_MVPA=85
+[VAL] size=4,000, MVPA=197 (4.9%), female=1,938, female_MVPA=117, male_MVPA=80
+[TEST] size=118,657, MVPA=5,840 (4.9%), female=57,476, female_MVPA=3,460, male_MVPA=2,380
+fold_idx=4 | held_out_subs=[np.int64(8), np.int64(11), np.int64(16), np.int64(10), np.int64(28), np.int64(30), np.int64(21), np.int64(35)] | theta_dim=15
+[GroupDRO] exp_group=BASELINE_group_dro_group_dro_fold4_9da4176c__G202606041525  seed=42
+[GroupDRO] dataset=capture24  feature_dim=15
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.01, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_fold4_9da4176c__G202606041525/seed_42
+[GroupDRO] epoch=   1 | dro=0.6286 | val_worst=0.7309 | q=[0.256,0.244,0.278,0.222]
+[GroupDRO] epoch=  20 | dro=0.1279 | val_worst=0.4481 | q=[0.173,0.133,0.345,0.350]
+[GroupDRO] epoch=  40 | dro=0.0936 | val_worst=0.4761 | q=[0.179,0.134,0.374,0.313]
+[GroupDRO] epoch=  60 | dro=0.0712 | val_worst=0.7326 | q=[0.214,0.143,0.366,0.277]
+[GroupDRO] epoch=  80 | dro=0.0580 | val_worst=1.0738 | q=[0.263,0.156,0.337,0.244]
+[GroupDRO] epoch= 100 | dro=0.0475 | val_worst=1.1159 | q=[0.309,0.174,0.309,0.208]
+[GroupDRO] epoch= 120 | dro=0.0351 | val_worst=1.8972 | q=[0.349,0.192,0.282,0.177]
+[GroupDRO] epoch= 140 | dro=0.0280 | val_worst=2.0550 | q=[0.371,0.204,0.265,0.159]
+[GroupDRO] epoch= 160 | dro=0.0203 | val_worst=2.9509 | q=[0.388,0.211,0.253,0.147]
+[GroupDRO] epoch= 180 | dro=0.0141 | val_worst=3.2197 | q=[0.398,0.218,0.243,0.141]
+[GroupDRO] epoch= 200 | dro=0.0099 | val_worst=3.7982 | q=[0.406,0.222,0.234,0.137]
+[GroupDRO] Training done. Best val_worst=0.3283
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_fold4_9da4176c__G202606041525/seed_42/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_fold4_9da4176c__G202606041525/seed_42/gdro_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_fold4_9da4176c__G202606041525/seed_42/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.2910 | F1(maj)=0.9729 | F1(weighted)=0.9393 | F1(macro)=0.6319 | Brier=0.0409
+[TEST] Beta  -> F1(min)=0.4538 | F1(maj)=0.9417 | F1(weighted)=0.9177 | F1(macro)=0.6977 | Brier=0.0722
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_fold4_9da4176c__G202606041525/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_fold4_9da4176c__G202606041525/final_test_metrics.csv
+[GroupDRO] Done. seed=42 | time=9120.7s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_fold4_9da4176c__G202606041525/seed_42

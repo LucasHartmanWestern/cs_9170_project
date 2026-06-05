@@ -1,0 +1,45 @@
+[run_baseline] baseline=fairtabddpm
+[run_baseline] spec=experiment_specs/capture24_rand10_baselines/fairtabddpm_fold0.yaml
+[run_baseline] device=cuda:0
+[run_baseline] exp_group=BASELINE_fairtabddpm_fairtabddpm_fold0_9d5788c3__G202606041527
+[run_baseline] seeds=[42]
+[run_baseline] k-fold mode: fold_idx=0, n_folds=5
+
+[run_baseline] ---- seed=42 ----
+[capture24-kfold] Cache: 992,430 windows, 40 subjects, fold 0/5
+[TRAIN] size=4,000, MVPA=150 (3.8%), female=1,927, female_MVPA=60, male_MVPA=90
+[VAL] size=4,000, MVPA=142 (3.5%), female=2,276, female_MVPA=85, male_MVPA=57
+[TEST] size=108,395, MVPA=3,840 (3.5%), female=61,677, female_MVPA=2,300, male_MVPA=1,540
+fold_idx=0 | held_out_subs=[np.int64(17), np.int64(2), np.int64(12), np.int64(13), np.int64(29), np.int64(26), np.int64(22), np.int64(36)] | theta_dim=15
+[FairTabDDPM] exp_group=BASELINE_fairtabddpm_fairtabddpm_fold0_9d5788c3__G202606041527  seed=42
+[FairTabDDPM] dataset=capture24  feature_dim=15
+[FairTabDDPM] cfg={'timesteps': 100, 'd_emb': 128, 'n_layers': 4, 'lr': 0.00039, 'weight_decay': 0.0, 'diff_epochs': 1000, 'batch_size': 256, 'n_synthetic': 2000, 'overall_guid_weight': 1.0, 'cond_guid_weight': 1.0, 'cond_guid_threshold': 0.1, 'warmup_steps': 10}
+[FairTabDDPM] Training diffusion model for 1000 epochs ...
+[FairTabDDPM] epoch=    1 | loss=1.26706
+[FairTabDDPM] epoch=  100 | loss=0.11141
+[FairTabDDPM] epoch=  200 | loss=0.10178
+[FairTabDDPM] epoch=  300 | loss=0.09991
+[FairTabDDPM] epoch=  400 | loss=0.09077
+[FairTabDDPM] epoch=  500 | loss=0.09132
+[FairTabDDPM] epoch=  600 | loss=0.08735
+[FairTabDDPM] epoch=  700 | loss=0.08842
+[FairTabDDPM] epoch=  800 | loss=0.08826
+[FairTabDDPM] epoch=  900 | loss=0.08435
+[FairTabDDPM] epoch= 1000 | loss=0.08623
+[FairTabDDPM] Diffusion done. Best loss=0.08048
+[FairTabDDPM] Diffusion training done in 728.4s
+[FairTabDDPM] Disadvantaged group: a=1 (pos_g0=90, pos_g1=60)
+[FairTabDDPM] Sampling 2000 fair synthetic samples (y=1, a=1) ...
+[FairTabDDPM] Got 2000 synthetic samples.
+[FairTabDDPM] Augmented: 6000 total (2150 pos)
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_fold0_9d5788c3__G202606041525/seed_42/fairtabddpm_model.pt
+
+[TEST] Alpha -> F1(min)=0.3216 | F1(maj)=0.9844 | F1(weighted)=0.9609 | F1(macro)=0.6530 | Brier=0.0268
+[TEST] Beta  -> F1(min)=0.5096 | F1(maj)=0.9723 | F1(weighted)=0.9559 | F1(macro)=0.7410 | Brier=0.0472
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_fold0_9d5788c3__G202606041525/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_fold0_9d5788c3__G202606041525/final_test_metrics.csv
+[FairTabDDPM] Diffusion metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_fold0_9d5788c3__G202606041525/seed_42/diff_metrics.csv
+[FairTabDDPM] Done. seed=42 | time=763.7s

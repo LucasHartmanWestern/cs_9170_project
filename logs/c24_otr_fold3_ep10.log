@@ -1,0 +1,36 @@
+[run_baseline] baseline=gaussian_ot_repair
+[run_baseline] spec=experiment_specs/capture24_rand10_baselines/gaussian_ot_repair_fold3.yaml
+[run_baseline] device=cpu
+[run_baseline] exp_group=BASELINE_gaussian_ot_repair_gaussian_ot_repair_fold3_0e3b113e__G202606041525
+[run_baseline] seeds=[42]
+[run_baseline] k-fold mode: fold_idx=3, n_folds=5
+
+[run_baseline] ---- seed=42 ----
+[capture24-kfold] Cache: 992,430 windows, 40 subjects, fold 3/5
+[TRAIN] size=4,000, MVPA=141 (3.5%), female=2,033, female_MVPA=60, male_MVPA=81
+[VAL] size=4,000, MVPA=111 (2.8%), female=1,985, female_MVPA=57, male_MVPA=54
+[TEST] size=113,490, MVPA=3,170 (2.8%), female=56,311, female_MVPA=1,626, male_MVPA=1,544
+fold_idx=3 | held_out_subs=[np.int64(6), np.int64(4), np.int64(0), np.int64(9), np.int64(34), np.int64(23), np.int64(24), np.int64(38)] | theta_dim=15
+[OTRepair] exp_group=BASELINE_gaussian_ot_repair_gaussian_ot_repair_fold3_0e3b113e__G202606041525  seed=42
+[OTRepair] dataset=capture24  feature_dim=15
+[OTRepair] ot_config={'lam': 1.0, 'n_groups': 2, 'cov_reg': 1e-05, 'barycenter_iters': 100, 'repair_test': True, 'include_val_in_train': False}
+[OTRepair] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_fold3_0e3b113e__G202606041525/seed_42
+[OTRepair] Group 0: n=1967, ||μ||=1.0603, cov_diag=[0.0839, 12.0038]
+[OTRepair] Group 1: n=2033, ||μ||=1.0259, cov_diag=[0.1096, 11.5308]
+[OTRepair] Barycenter computed. μ* norm=0.0172
+[OTRepair] Group 0: A_g computed, ||A_g - I||=71.2646
+[OTRepair] Group 1: A_g computed, ||A_g - I||=69.8154
+[OTRepair] Test features repaired.
+FFNN Using device: cpu
+[OTRepair] ERM trained on repaired features.
+FFNN Using device: cpu
+[OTRepair] Alpha (ERM on original features) trained.
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_fold3_0e3b113e__G202606041525/seed_42/otrep_model.pt
+
+[TEST] Alpha -> F1(min)=0.1823 | F1(maj)=0.9848 | F1(weighted)=0.9624 | F1(macro)=0.5836 | Brier=0.0237
+[TEST] Beta  -> F1(min)=0.1626 | F1(maj)=0.9851 | F1(weighted)=0.9622 | F1(macro)=0.5739 | Brier=0.0244
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_fold3_0e3b113e__G202606041525/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_fold3_0e3b113e__G202606041525/final_test_metrics.csv
+[OTRepair] Done. seed=42 | time=1884.1s
+[OTRepair] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_fold3_0e3b113e__G202606041525/seed_42

@@ -1,0 +1,194 @@
+[run_baseline] baseline=ctgan
+[run_baseline] spec=experiment_specs/census_val_train_test/ctgan.yaml
+[run_baseline] device=cuda:1
+[run_baseline] exp_group=BASELINE_ctgan_ctgan_7d9ef92c__G202606041527
+[run_baseline] seeds=[0, 1, 2, 3, 42]
+
+[run_baseline] ---- seed=0 ----
+[TRAIN] size=3000, minority=689 (22.97%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[CTGAN] exp_group=BASELINE_ctgan_ctgan_7d9ef92c__G202606041527  seed=0
+[CTGAN] dataset=census_income  feature_dim=10
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__', 'group_col': '__a__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_0
+[CTGAN] Training set: n_pos=689, n_neg=2311, n_disadvantaged_pos=43, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 318.9s
+[CTGAN] Sampling 2000 synthetic (y=1, a=0) samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 10/2000 [00:03<11:46,  2.82it/s]Sampling conditions:   4%|4         | 80/2000 [00:33<13:26,  2.38it/s]Sampling conditions:   7%|7         | 145/2000 [01:03<13:37,  2.27it/s]Sampling conditions:  11%|#1        | 228/2000 [01:30<11:26,  2.58it/s]Sampling conditions:  15%|#4        | 298/2000 [01:59<11:12,  2.53it/s]Sampling conditions:  18%|#8        | 366/2000 [02:30<11:19,  2.41it/s]Sampling conditions:  22%|##2       | 446/2000 [02:54<09:40,  2.68it/s]Sampling conditions:  26%|##5       | 511/2000 [03:20<09:26,  2.63it/s]Sampling conditions:  31%|###       | 612/2000 [03:46<07:43,  3.00it/s]Sampling conditions:  34%|###4      | 684/2000 [04:10<07:16,  3.02it/s]Sampling conditions:  38%|###7      | 754/2000 [04:38<07:19,  2.84it/s]Sampling conditions:  41%|####1     | 826/2000 [05:11<07:27,  2.62it/s]Sampling conditions:  45%|####4     | 899/2000 [05:30<06:21,  2.89it/s]Sampling conditions:  49%|####8     | 979/2000 [05:53<05:36,  3.04it/s]Sampling conditions:  53%|#####2    | 1059/2000 [06:18<05:04,  3.09it/s]Sampling conditions:  58%|#####7    | 1151/2000 [06:48<04:36,  3.07it/s]Sampling conditions:  62%|######1   | 1235/2000 [07:16<04:09,  3.07it/s]Sampling conditions:  65%|######5   | 1309/2000 [07:44<03:55,  2.93it/s]Sampling conditions:  69%|######9   | 1385/2000 [08:07<03:23,  3.02it/s]Sampling conditions:  74%|#######4  | 1480/2000 [08:27<02:29,  3.48it/s]Sampling conditions:  78%|#######7  | 1558/2000 [08:52<02:12,  3.35it/s]Sampling conditions:  82%|########1 | 1634/2000 [09:13<01:46,  3.43it/s]Sampling conditions:  86%|########6 | 1726/2000 [09:37<01:17,  3.55it/s]Sampling conditions:  90%|########9 | 1798/2000 [10:05<01:02,  3.21it/s]Sampling conditions:  94%|#########4| 1888/2000 [10:34<00:35,  3.18it/s]Sampling conditions:  97%|#########7| 1949/2000 [11:00<00:17,  2.94it/s]Sampling conditions: 100%|##########| 2000/2000 [11:22<00:00,  2.78it/s]Sampling conditions: 100%|##########| 2000/2000 [11:22<00:00,  2.93it/s]
+[CTGAN] Got 2000 synthetic disadvantaged-positive samples.
+[CTGAN] Augmented set: n_pos=2689, total=5000
+FFNN Using device: cuda:1
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cuda:1
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_0/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6150 | F1(maj)=0.8967 | F1(weighted)=0.8265 | F1(macro)=0.7558 | Brier=0.1149
+[TEST] Beta  -> F1(min)=0.5989 | F1(maj)=0.8835 | F1(weighted)=0.8127 | F1(macro)=0.7412 | Brier=0.1261
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_0/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/final_test_metrics.csv
+[CTGAN] Done. seed=0 | time=1055.1s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_0
+
+[run_baseline] ---- seed=1 ----
+[TRAIN] size=3000, minority=712 (23.73%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[CTGAN] exp_group=BASELINE_ctgan_ctgan_7d9ef92c__G202606041527  seed=1
+[CTGAN] dataset=census_income  feature_dim=10
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__', 'group_col': '__a__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_1
+[CTGAN] Training set: n_pos=712, n_neg=2288, n_disadvantaged_pos=43, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 168.2s
+[CTGAN] Sampling 2000 synthetic (y=1, a=0) samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 6/2000 [00:02<15:34,  2.13it/s]Sampling conditions:   2%|2         | 40/2000 [00:31<25:55,  1.26it/s]Sampling conditions:   5%|4         | 92/2000 [00:54<18:09,  1.75it/s]Sampling conditions:   6%|5         | 116/2000 [01:24<24:05,  1.30it/s]Sampling conditions:   8%|7         | 151/2000 [01:47<22:27,  1.37it/s]Sampling conditions:   9%|9         | 187/2000 [02:19<23:41,  1.28it/s]Sampling conditions:  11%|#1        | 229/2000 [02:40<20:00,  1.47it/s]Sampling conditions:  14%|#3        | 273/2000 [03:09<19:28,  1.48it/s]Sampling conditions:  16%|#6        | 321/2000 [03:41<18:38,  1.50it/s]Sampling conditions:  18%|#8        | 362/2000 [04:14<19:27,  1.40it/s]Sampling conditions:  20%|#9        | 399/2000 [04:39<18:41,  1.43it/s]Sampling conditions:  22%|##2       | 442/2000 [05:10<18:18,  1.42it/s]Sampling conditions:  24%|##4       | 480/2000 [05:36<17:44,  1.43it/s]Sampling conditions:  26%|##6       | 526/2000 [06:06<16:53,  1.45it/s]Sampling conditions:  29%|##8       | 573/2000 [06:33<15:24,  1.54it/s]Sampling conditions:  31%|###       | 614/2000 [06:59<14:54,  1.55it/s]Sampling conditions:  33%|###3      | 661/2000 [07:20<12:54,  1.73it/s]Sampling conditions:  35%|###4      | 696/2000 [07:41<12:42,  1.71it/s]Sampling conditions:  36%|###6      | 730/2000 [08:02<12:40,  1.67it/s]Sampling conditions:  38%|###8      | 769/2000 [08:22<11:45,  1.75it/s]Sampling conditions:  41%|####      | 818/2000 [08:42<10:07,  1.94it/s]Sampling conditions:  43%|####2     | 852/2000 [09:01<09:58,  1.92it/s]Sampling conditions:  45%|####5     | 902/2000 [09:19<08:35,  2.13it/s]Sampling conditions:  48%|####7     | 952/2000 [09:38<07:37,  2.29it/s]Sampling conditions:  50%|#####     | 1003/2000 [09:56<06:50,  2.43it/s]Sampling conditions:  52%|#####2    | 1043/2000 [10:15<06:46,  2.36it/s]Sampling conditions:  54%|#####3    | 1079/2000 [10:33<06:49,  2.25it/s]Sampling conditions:  56%|#####5    | 1113/2000 [10:52<07:02,  2.10it/s]Sampling conditions:  57%|#####7    | 1146/2000 [11:10<07:00,  2.03it/s]Sampling conditions:  59%|#####9    | 1187/2000 [11:29<06:31,  2.08it/s]Sampling conditions:  61%|######1   | 1229/2000 [11:47<05:58,  2.15it/s]Sampling conditions:  64%|######3   | 1278/2000 [12:05<05:12,  2.31it/s]Sampling conditions:  66%|######5   | 1316/2000 [12:22<04:57,  2.30it/s]Sampling conditions:  68%|######7   | 1355/2000 [12:38<04:36,  2.33it/s]Sampling conditions:  70%|######9   | 1398/2000 [12:51<03:56,  2.54it/s]Sampling conditions:  72%|#######1  | 1433/2000 [13:04<03:38,  2.60it/s]Sampling conditions:  74%|#######3  | 1474/2000 [13:17<03:09,  2.78it/s]Sampling conditions:  75%|#######5  | 1503/2000 [13:29<03:07,  2.65it/s]Sampling conditions:  77%|#######7  | 1543/2000 [13:42<02:43,  2.80it/s]Sampling conditions:  79%|#######9  | 1583/2000 [13:54<02:23,  2.90it/s]Sampling conditions:  81%|########  | 1613/2000 [14:07<02:20,  2.75it/s]Sampling conditions:  82%|########2 | 1647/2000 [14:19<02:08,  2.75it/s]Sampling conditions:  85%|########4 | 1693/2000 [14:32<01:41,  3.02it/s]Sampling conditions:  87%|########6 | 1735/2000 [14:44<01:24,  3.12it/s]Sampling conditions:  89%|########8 | 1772/2000 [14:57<01:14,  3.04it/s]Sampling conditions:  90%|######### | 1810/2000 [15:10<01:02,  3.02it/s]Sampling conditions:  92%|#########2| 1842/2000 [15:22<00:54,  2.91it/s]Sampling conditions:  94%|#########4| 1885/2000 [15:35<00:37,  3.06it/s]Sampling conditions:  96%|#########6| 1924/2000 [15:47<00:24,  3.08it/s]Sampling conditions:  98%|#########7| 1958/2000 [16:00<00:14,  2.98it/s]Sampling conditions: 100%|##########| 2000/2000 [16:12<00:00,  3.09it/s]Sampling conditions: 100%|##########| 2000/2000 [16:12<00:00,  2.06it/s]
+[CTGAN] Got 2000 synthetic disadvantaged-positive samples.
+[CTGAN] Augmented set: n_pos=2712, total=5000
+FFNN Using device: cuda:1
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cuda:1
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_1/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6227 | F1(maj)=0.8951 | F1(weighted)=0.8273 | F1(macro)=0.7589 | Brier=0.1125
+[TEST] Beta  -> F1(min)=0.6020 | F1(maj)=0.8801 | F1(weighted)=0.8108 | F1(macro)=0.7410 | Brier=0.1280
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/final_test_metrics.csv
+[CTGAN] Done. seed=1 | time=1180.3s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_1
+
+[run_baseline] ---- seed=2 ----
+[TRAIN] size=3000, minority=742 (24.73%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[CTGAN] exp_group=BASELINE_ctgan_ctgan_7d9ef92c__G202606041527  seed=2
+[CTGAN] dataset=census_income  feature_dim=10
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__', 'group_col': '__a__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_2
+[CTGAN] Training set: n_pos=742, n_neg=2258, n_disadvantaged_pos=43, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 115.8s
+[CTGAN] Sampling 2000 synthetic (y=1, a=0) samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 6/2000 [00:01<10:09,  3.27it/s]Sampling conditions:   3%|3         | 68/2000 [00:14<06:48,  4.73it/s]Sampling conditions:   6%|6         | 123/2000 [00:27<06:55,  4.52it/s]Sampling conditions:   9%|9         | 187/2000 [00:39<06:20,  4.76it/s]Sampling conditions:  12%|#2        | 241/2000 [00:52<06:25,  4.56it/s]Sampling conditions:  15%|#4        | 296/2000 [01:05<06:19,  4.49it/s]Sampling conditions:  18%|#7        | 357/2000 [01:18<06:00,  4.56it/s]Sampling conditions:  21%|##1       | 421/2000 [01:30<05:32,  4.74it/s]Sampling conditions:  23%|##3       | 468/2000 [01:43<05:44,  4.45it/s]Sampling conditions:  26%|##6       | 529/2000 [01:55<05:22,  4.56it/s]Sampling conditions:  30%|##9       | 596/2000 [02:08<04:52,  4.79it/s]Sampling conditions:  33%|###2      | 654/2000 [02:20<04:44,  4.74it/s]Sampling conditions:  35%|###5      | 709/2000 [02:33<04:40,  4.61it/s]Sampling conditions:  38%|###8      | 763/2000 [02:45<04:32,  4.54it/s]Sampling conditions:  40%|####      | 808/2000 [02:58<04:39,  4.26it/s]Sampling conditions:  43%|####2     | 856/2000 [03:10<04:36,  4.14it/s]Sampling conditions:  45%|####5     | 908/2000 [03:23<04:25,  4.12it/s]Sampling conditions:  49%|####9     | 983/2000 [03:36<03:37,  4.67it/s]Sampling conditions:  52%|#####2    | 1043/2000 [03:49<03:27,  4.61it/s]Sampling conditions:  56%|#####5    | 1110/2000 [04:03<03:09,  4.69it/s]Sampling conditions:  59%|#####9    | 1184/2000 [04:16<02:42,  5.03it/s]Sampling conditions:  62%|######1   | 1238/2000 [04:28<02:38,  4.81it/s]Sampling conditions:  65%|######5   | 1307/2000 [04:41<02:18,  5.00it/s]Sampling conditions:  68%|######8   | 1365/2000 [04:54<02:10,  4.87it/s]Sampling conditions:  71%|#######   | 1419/2000 [05:06<02:03,  4.70it/s]Sampling conditions:  74%|#######3  | 1473/2000 [05:19<01:55,  4.56it/s]Sampling conditions:  77%|#######6  | 1534/2000 [05:32<01:40,  4.64it/s]Sampling conditions:  80%|#######9  | 1595/2000 [05:44<01:26,  4.69it/s]Sampling conditions:  82%|########2 | 1647/2000 [05:56<01:17,  4.57it/s]Sampling conditions:  85%|########5 | 1704/2000 [06:09<01:04,  4.57it/s]Sampling conditions:  88%|########7 | 1756/2000 [06:21<00:54,  4.44it/s]Sampling conditions:  91%|######### | 1817/2000 [06:34<00:40,  4.56it/s]Sampling conditions:  93%|#########3| 1865/2000 [06:47<00:31,  4.31it/s]Sampling conditions:  97%|#########7| 1940/2000 [06:59<00:12,  4.80it/s]Sampling conditions:  99%|#########9| 1983/2000 [07:10<00:03,  4.65it/s]Sampling conditions: 100%|#########9| 1998/2000 [07:14<00:00,  4.52it/s]Sampling conditions: 100%|##########| 2000/2000 [07:15<00:00,  4.46it/s]Sampling conditions: 100%|##########| 2000/2000 [07:15<00:00,  4.60it/s]
+[CTGAN] Got 2000 synthetic disadvantaged-positive samples.
+[CTGAN] Augmented set: n_pos=2742, total=5000
+FFNN Using device: cuda:1
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cuda:1
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_2/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6424 | F1(maj)=0.9013 | F1(weighted)=0.8369 | F1(macro)=0.7719 | Brier=0.1102
+[TEST] Beta  -> F1(min)=0.6322 | F1(maj)=0.8836 | F1(weighted)=0.8210 | F1(macro)=0.7579 | Brier=0.1249
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_2/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/final_test_metrics.csv
+[CTGAN] Done. seed=2 | time=581.7s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_2
+
+[run_baseline] ---- seed=3 ----
+[TRAIN] size=3000, minority=748 (24.93%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[CTGAN] exp_group=BASELINE_ctgan_ctgan_7d9ef92c__G202606041527  seed=3
+[CTGAN] dataset=census_income  feature_dim=10
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__', 'group_col': '__a__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_3
+[CTGAN] Training set: n_pos=748, n_neg=2252, n_disadvantaged_pos=43, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 115.9s
+[CTGAN] Sampling 2000 synthetic (y=1, a=0) samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   1%|          | 13/2000 [00:14<36:51,  1.11s/it]Sampling conditions:   2%|1         | 37/2000 [00:27<22:44,  1.44it/s]Sampling conditions:   3%|2         | 52/2000 [00:39<24:18,  1.34it/s]Sampling conditions:   4%|3         | 77/2000 [00:52<20:25,  1.57it/s]Sampling conditions:   5%|4         | 92/2000 [01:06<22:48,  1.39it/s]Sampling conditions:   6%|5         | 111/2000 [01:18<21:53,  1.44it/s]Sampling conditions:   7%|6         | 132/2000 [01:31<20:47,  1.50it/s]Sampling conditions:   8%|7         | 156/2000 [01:44<19:07,  1.61it/s]Sampling conditions:   8%|8         | 169/2000 [01:57<21:23,  1.43it/s]Sampling conditions:  10%|9         | 192/2000 [02:10<19:31,  1.54it/s]Sampling conditions:  10%|#         | 209/2000 [02:23<20:08,  1.48it/s]Sampling conditions:  11%|#1        | 227/2000 [02:35<20:08,  1.47it/s]Sampling conditions:  12%|#2        | 245/2000 [02:47<19:59,  1.46it/s]Sampling conditions:  13%|#2        | 256/2000 [03:00<22:38,  1.28it/s]Sampling conditions:  14%|#3        | 273/2000 [03:13<22:06,  1.30it/s]Sampling conditions:  14%|#4        | 290/2000 [03:25<21:43,  1.31it/s]Sampling conditions:  16%|#5        | 313/2000 [03:38<19:20,  1.45it/s]Sampling conditions:  17%|#6        | 334/2000 [03:51<18:11,  1.53it/s]Sampling conditions:  17%|#7        | 343/2000 [04:03<21:27,  1.29it/s]Sampling conditions:  18%|#8        | 361/2000 [04:16<20:36,  1.33it/s]Sampling conditions:  19%|#8        | 376/2000 [04:29<21:06,  1.28it/s]Sampling conditions:  19%|#9        | 387/2000 [04:42<23:18,  1.15it/s]Sampling conditions:  20%|##        | 401/2000 [04:54<23:17,  1.14it/s]Sampling conditions:  21%|##1       | 423/2000 [05:06<19:47,  1.33it/s]Sampling conditions:  22%|##1       | 436/2000 [05:19<21:01,  1.24it/s]Sampling conditions:  23%|##2       | 452/2000 [05:32<20:48,  1.24it/s]Sampling conditions:  23%|##3       | 464/2000 [05:44<22:01,  1.16it/s]Sampling conditions:  24%|##3       | 479/2000 [05:57<21:34,  1.18it/s]Sampling conditions:  25%|##4       | 496/2000 [06:09<20:30,  1.22it/s]Sampling conditions:  26%|##5       | 511/2000 [06:22<20:35,  1.21it/s]Sampling conditions:  27%|##6       | 531/2000 [06:35<18:32,  1.32it/s]Sampling conditions:  28%|##7       | 551/2000 [06:48<17:16,  1.40it/s]Sampling conditions:  28%|##8       | 570/2000 [07:00<16:40,  1.43it/s]Sampling conditions:  30%|##9       | 594/2000 [07:13<14:52,  1.58it/s]Sampling conditions:  30%|###       | 610/2000 [07:25<15:34,  1.49it/s]Sampling conditions:  32%|###1      | 633/2000 [07:39<14:40,  1.55it/s]Sampling conditions:  32%|###2      | 647/2000 [07:52<15:55,  1.42it/s]Sampling conditions:  33%|###2      | 656/2000 [08:04<18:41,  1.20it/s]Sampling conditions:  34%|###3      | 674/2000 [08:17<17:28,  1.26it/s]Sampling conditions:  34%|###4      | 685/2000 [08:30<19:05,  1.15it/s]Sampling conditions:  35%|###5      | 705/2000 [08:42<16:50,  1.28it/s]Sampling conditions:  36%|###6      | 720/2000 [08:55<17:04,  1.25it/s]Sampling conditions:  37%|###6      | 735/2000 [09:08<17:08,  1.23it/s]Sampling conditions:  38%|###7      | 751/2000 [09:21<16:51,  1.23it/s]Sampling conditions:  38%|###8      | 768/2000 [09:33<16:10,  1.27it/s]Sampling conditions:  39%|###8      | 778/2000 [09:46<17:58,  1.13it/s]Sampling conditions:  40%|###9      | 796/2000 [09:58<16:33,  1.21it/s]Sampling conditions:  40%|####      | 810/2000 [10:11<16:46,  1.18it/s]Sampling conditions:  41%|####1     | 826/2000 [10:24<16:16,  1.20it/s]Sampling conditions:  42%|####2     | 841/2000 [10:36<16:04,  1.20it/s]Sampling conditions:  43%|####2     | 852/2000 [10:49<17:22,  1.10it/s]Sampling conditions:  43%|####3     | 868/2000 [11:02<16:29,  1.14it/s]Sampling conditions:  44%|####4     | 887/2000 [11:15<14:49,  1.25it/s]Sampling conditions:  45%|####5     | 903/2000 [11:27<14:37,  1.25it/s]Sampling conditions:  46%|####5     | 913/2000 [11:40<16:15,  1.11it/s]Sampling conditions:  46%|####6     | 930/2000 [11:52<15:01,  1.19it/s]Sampling conditions:  47%|####7     | 945/2000 [12:05<14:48,  1.19it/s]Sampling conditions:  48%|####8     | 965/2000 [12:17<13:07,  1.31it/s]Sampling conditions:  49%|####9     | 986/2000 [12:30<12:00,  1.41it/s]Sampling conditions:  50%|####9     | 997/2000 [12:43<13:20,  1.25it/s]Sampling conditions:  51%|#####     | 1011/2000 [12:56<13:49,  1.19it/s]Sampling conditions:  51%|#####1    | 1023/2000 [13:09<14:37,  1.11it/s]Sampling conditions:  52%|#####1    | 1039/2000 [13:22<13:54,  1.15it/s]Sampling conditions:  53%|#####2    | 1057/2000 [13:34<12:42,  1.24it/s]Sampling conditions:  53%|#####3    | 1063/2000 [13:47<15:30,  1.01it/s]Sampling conditions:  54%|#####3    | 1074/2000 [14:00<16:02,  1.04s/it]Sampling conditions:  55%|#####4    | 1094/2000 [14:13<13:13,  1.14it/s]Sampling conditions:  55%|#####5    | 1107/2000 [14:27<13:49,  1.08it/s]Sampling conditions:  56%|#####6    | 1121/2000 [14:39<13:28,  1.09it/s]Sampling conditions:  57%|#####7    | 1141/2000 [14:52<11:37,  1.23it/s]Sampling conditions:  58%|#####8    | 1162/2000 [15:04<10:14,  1.36it/s]Sampling conditions:  59%|#####9    | 1185/2000 [15:17<08:59,  1.51it/s]Sampling conditions:  60%|#####9    | 1197/2000 [15:30<10:04,  1.33it/s]Sampling conditions:  61%|######    | 1219/2000 [15:42<08:57,  1.45it/s]Sampling conditions:  62%|######1   | 1231/2000 [15:55<09:49,  1.31it/s]Sampling conditions:  62%|######2   | 1248/2000 [16:08<09:33,  1.31it/s]Sampling conditions:  63%|######3   | 1263/2000 [16:21<09:40,  1.27it/s]Sampling conditions:  64%|######4   | 1280/2000 [16:34<09:22,  1.28it/s]Sampling conditions:  65%|######4   | 1296/2000 [16:46<09:12,  1.27it/s]Sampling conditions:  66%|######5   | 1313/2000 [16:59<08:51,  1.29it/s]Sampling conditions:  67%|######6   | 1331/2000 [17:12<08:25,  1.32it/s]Sampling conditions:  67%|######7   | 1348/2000 [17:25<08:10,  1.33it/s]Sampling conditions:  68%|######8   | 1366/2000 [17:37<07:48,  1.35it/s]Sampling conditions:  69%|######8   | 1379/2000 [17:50<08:13,  1.26it/s]Sampling conditions:  70%|######9   | 1392/2000 [18:03<08:30,  1.19it/s]Sampling conditions:  70%|#######   | 1403/2000 [18:15<09:00,  1.10it/s]Sampling conditions:  71%|#######   | 1418/2000 [18:28<08:37,  1.12it/s]Sampling conditions:  72%|#######1  | 1437/2000 [18:41<07:36,  1.23it/s]Sampling conditions:  72%|#######2  | 1448/2000 [18:53<08:09,  1.13it/s]Sampling conditions:  74%|#######3  | 1471/2000 [19:06<06:38,  1.33it/s]Sampling conditions:  74%|#######4  | 1481/2000 [19:19<07:25,  1.17it/s]Sampling conditions:  75%|#######5  | 1502/2000 [19:31<06:20,  1.31it/s]Sampling conditions:  76%|#######5  | 1513/2000 [19:44<06:53,  1.18it/s]Sampling conditions:  76%|#######6  | 1526/2000 [19:57<06:57,  1.14it/s]Sampling conditions:  77%|#######7  | 1542/2000 [20:09<06:31,  1.17it/s]Sampling conditions:  78%|#######7  | 1557/2000 [20:22<06:18,  1.17it/s]Sampling conditions:  79%|#######8  | 1572/2000 [20:35<06:04,  1.17it/s]Sampling conditions:  79%|#######9  | 1586/2000 [20:48<05:57,  1.16it/s]Sampling conditions:  80%|########  | 1606/2000 [21:00<05:08,  1.28it/s]Sampling conditions:  80%|########  | 1606/2000 [21:00<05:09,  1.27it/s]
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/utils.py:158: UserWarning:
+
+Only able to sample 1606 rows for the given conditions. To sample more rows, try increasing `max_tries_per_batch` (currently: 100). Note that increasing this value will also increase the sampling time.
+
+[CTGAN] Got 1606 synthetic disadvantaged-positive samples.
+[CTGAN] Augmented set: n_pos=2354, total=4606
+FFNN Using device: cuda:1
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cuda:1
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_3/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6539 | F1(maj)=0.8947 | F1(weighted)=0.8348 | F1(macro)=0.7743 | Brier=0.1124
+[TEST] Beta  -> F1(min)=0.6357 | F1(maj)=0.8879 | F1(weighted)=0.8251 | F1(macro)=0.7618 | Brier=0.1199
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/final_test_metrics.csv
+[CTGAN] Done. seed=3 | time=1404.5s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_3
+
+[run_baseline] ---- seed=42 ----
+[TRAIN] size=3000, minority=666 (22.20%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[CTGAN] exp_group=BASELINE_ctgan_ctgan_7d9ef92c__G202606041527  seed=42
+[CTGAN] dataset=census_income  feature_dim=10
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__', 'group_col': '__a__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_42
+[CTGAN] Training set: n_pos=666, n_neg=2334, n_disadvantaged_pos=43, total=3000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+[CTGAN] CTGAN fitted in 113.6s
+[CTGAN] Sampling 2000 synthetic (y=1, a=0) samples …
+  0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   0%|          | 0/2000 [00:00<?, ?it/s]Sampling conditions:   1%|          | 12/2000 [00:01<04:31,  7.32it/s]Sampling conditions:   5%|4         | 93/2000 [00:14<04:54,  6.48it/s]Sampling conditions:   9%|8         | 179/2000 [00:27<04:34,  6.64it/s]Sampling conditions:  12%|#2        | 247/2000 [00:39<04:46,  6.12it/s]Sampling conditions:  17%|#6        | 331/2000 [00:51<04:20,  6.40it/s]Sampling conditions:  21%|##1       | 428/2000 [01:03<03:46,  6.94it/s]Sampling conditions:  26%|##6       | 529/2000 [01:16<03:21,  7.31it/s]Sampling conditions:  31%|###1      | 627/2000 [01:29<03:04,  7.42it/s]Sampling conditions:  36%|###5      | 713/2000 [01:41<02:56,  7.27it/s]Sampling conditions:  40%|###9      | 798/2000 [01:54<02:49,  7.08it/s]Sampling conditions:  44%|####4     | 890/2000 [02:07<02:35,  7.13it/s]Sampling conditions:  49%|####8     | 974/2000 [02:19<02:27,  6.97it/s]Sampling conditions:  53%|#####2    | 1052/2000 [02:32<02:21,  6.69it/s]Sampling conditions:  57%|#####7    | 1149/2000 [02:45<02:00,  7.03it/s]Sampling conditions:  61%|######1   | 1228/2000 [02:57<01:53,  6.81it/s]Sampling conditions:  67%|######7   | 1344/2000 [03:10<01:27,  7.53it/s]Sampling conditions:  71%|#######1  | 1427/2000 [03:22<01:18,  7.29it/s]Sampling conditions:  76%|#######6  | 1524/2000 [03:35<01:04,  7.37it/s]Sampling conditions:  80%|########  | 1603/2000 [03:47<00:56,  7.06it/s]Sampling conditions:  84%|########4 | 1689/2000 [04:00<00:44,  7.00it/s]Sampling conditions:  89%|########8 | 1771/2000 [04:13<00:33,  6.87it/s]Sampling conditions:  93%|#########2| 1859/2000 [04:25<00:20,  6.89it/s]Sampling conditions:  98%|#########7| 1951/2000 [04:37<00:06,  7.08it/s]Sampling conditions: 100%|#########9| 1997/2000 [04:44<00:00,  7.04it/s]Sampling conditions: 100%|##########| 2000/2000 [04:45<00:00,  6.92it/s]Sampling conditions: 100%|##########| 2000/2000 [04:45<00:00,  7.01it/s]
+[CTGAN] Got 2000 synthetic disadvantaged-positive samples.
+[CTGAN] Augmented set: n_pos=2666, total=5000
+FFNN Using device: cuda:1
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cuda:1
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_42/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.6302 | F1(maj)=0.8948 | F1(weighted)=0.8290 | F1(macro)=0.7625 | Brier=0.1143
+[TEST] Beta  -> F1(min)=0.6212 | F1(maj)=0.8879 | F1(weighted)=0.8215 | F1(macro)=0.7545 | Brier=0.1230
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/final_test_metrics.csv
+[CTGAN] Done. seed=42 | time=425.7s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_7d9ef92c__G202606041527/seed_42

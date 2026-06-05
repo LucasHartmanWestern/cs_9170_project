@@ -1,0 +1,47 @@
+[run_baseline] baseline=ctgan
+[run_baseline] spec=experiment_specs/capture24_rand10_baselines/ctgan_fold0.yaml
+[run_baseline] device=cuda:0
+[run_baseline] exp_group=BASELINE_ctgan_ctgan_fold0_a87fb931__G202606041527
+[run_baseline] seeds=[42]
+[run_baseline] k-fold mode: fold_idx=0, n_folds=5
+
+[run_baseline] ---- seed=42 ----
+[capture24-kfold] Cache: 992,430 windows, 40 subjects, fold 0/5
+[TRAIN] size=4,000, MVPA=150 (3.8%), female=1,927, female_MVPA=60, male_MVPA=90
+[VAL] size=4,000, MVPA=142 (3.5%), female=2,276, female_MVPA=85, male_MVPA=57
+[TEST] size=108,395, MVPA=3,840 (3.5%), female=61,677, female_MVPA=2,300, male_MVPA=1,540
+fold_idx=0 | held_out_subs=[np.int64(17), np.int64(2), np.int64(12), np.int64(13), np.int64(29), np.int64(26), np.int64(22), np.int64(36)] | theta_dim=15
+[CTGAN] exp_group=BASELINE_ctgan_ctgan_fold0_a87fb931__G202606041527  seed=42
+[CTGAN] dataset=capture24  feature_dim=15
+[CTGAN] ctgan_config={'epochs': 300, 'batch_size': 500, 'n_synthetic': 2000, 'label_col': '__y__', 'group_col': '__a__'}
+[CTGAN] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_fold0_a87fb931__G202606041527/seed_42
+[CTGAN] Training set: n_pos=150, n_neg=3850, n_disadvantaged_pos=60, total=4000
+[CTGAN] Fitting CTGAN for 300 epochs …
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:168: FutureWarning:
+
+The 'SingleTableMetadata' is deprecated. Please use the new 'Metadata' class for synthesizers.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/sdv/single_table/base.py:134: UserWarning:
+
+We strongly recommend saving the metadata using 'save_to_json' for replicability in future SDV versions.
+
+/home/epigou/envs/rl/lib/python3.10/site-packages/joblib/externals/loky/backend/resource_tracker.py:299: UserWarning: resource_tracker: There appear to be 70 leaked semlock objects to clean up at shutdown
+  warnings.warn(
+/home/epigou/envs/rl/lib/python3.10/site-packages/joblib/externals/loky/backend/resource_tracker.py:299: UserWarning: resource_tracker: There appear to be 1 leaked folder objects to clean up at shutdown
+  warnings.warn(
+#| 2000/2000 [00:36<00:00, 55.00it/s]Sampling conditions: 100%|##########| 2000/2000 [00:36<00:00, 54.76it/s]
+[CTGAN] Got 2000 synthetic disadvantaged-positive samples.
+[CTGAN] Augmented set: n_pos=2150, total=6000
+FFNN Using device: cuda:0
+[CTGAN] ERM trained on augmented features.
+FFNN Using device: cuda:0
+[CTGAN] Alpha (ERM on original biased data) trained.
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_fold0_a87fb931__G202606041525/seed_42/ctgan_model.pt
+
+[TEST] Alpha -> F1(min)=0.3216 | F1(maj)=0.9844 | F1(weighted)=0.9609 | F1(macro)=0.6530 | Brier=0.0268
+[TEST] Beta  -> F1(min)=0.4255 | F1(maj)=0.9715 | F1(weighted)=0.9521 | F1(macro)=0.6985 | Brier=0.0448
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_fold0_a87fb931__G202606041525/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_fold0_a87fb931__G202606041525/final_test_metrics.csv
+[CTGAN] Done. seed=42 | time=487.6s
+[CTGAN] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_ctgan_ctgan_fold0_a87fb931__G202606041525/seed_42

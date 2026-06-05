@@ -1,0 +1,175 @@
+[run_baseline] baseline=group_dro
+[run_baseline] spec=experiment_specs/census_val_train_test/group_dro_high_eta.yaml
+[run_baseline] device=cuda:0
+[run_baseline] exp_group=BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850
+[run_baseline] seeds=[0, 1, 2, 3, 42]
+
+[run_baseline] ---- seed=0 ----
+[TRAIN] size=3000, minority=689 (22.97%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[GroupDRO] exp_group=BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850  seed=0
+[GroupDRO] dataset=census_income  feature_dim=10
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.1, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_0
+[GroupDRO] epoch=   1 | dro=0.6199 | val_worst=0.8049 | q=[0.226,0.138,0.274,0.362]
+[GroupDRO] epoch=  20 | dro=0.4069 | val_worst=0.6994 | q=[0.000,0.000,0.515,0.484]
+[GroupDRO] epoch=  40 | dro=0.3970 | val_worst=0.7108 | q=[0.000,0.016,0.531,0.453]
+[GroupDRO] epoch=  60 | dro=0.3786 | val_worst=0.6935 | q=[0.000,0.006,0.526,0.469]
+[GroupDRO] epoch=  80 | dro=0.3676 | val_worst=0.6735 | q=[0.000,0.002,0.507,0.491]
+[GroupDRO] epoch= 100 | dro=0.3531 | val_worst=0.5656 | q=[0.000,0.006,0.534,0.461]
+[GroupDRO] epoch= 120 | dro=0.3491 | val_worst=0.6046 | q=[0.000,0.009,0.506,0.485]
+[GroupDRO] epoch= 140 | dro=0.3436 | val_worst=0.6801 | q=[0.033,0.031,0.487,0.449]
+[GroupDRO] epoch= 160 | dro=0.3401 | val_worst=0.7502 | q=[0.012,0.006,0.513,0.469]
+[GroupDRO] epoch= 180 | dro=0.3210 | val_worst=0.8054 | q=[0.022,0.018,0.494,0.466]
+[GroupDRO] epoch= 200 | dro=0.3173 | val_worst=0.8980 | q=[0.013,0.009,0.512,0.466]
+[GroupDRO] Training done. Best val_worst=0.5165
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_0/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_0/gdro_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_0/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.6150 | F1(maj)=0.8967 | F1(weighted)=0.8265 | F1(macro)=0.7558 | Brier=0.1149
+[TEST] Beta  -> F1(min)=0.6383 | F1(maj)=0.8491 | F1(weighted)=0.7966 | F1(macro)=0.7437 | Brier=0.1462
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_0/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/final_test_metrics.csv
+[GroupDRO] Done. seed=0 | time=45.0s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_0
+
+[run_baseline] ---- seed=1 ----
+[TRAIN] size=3000, minority=712 (23.73%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[GroupDRO] exp_group=BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850  seed=1
+[GroupDRO] dataset=census_income  feature_dim=10
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.1, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_1
+[GroupDRO] epoch=   1 | dro=0.5823 | val_worst=0.9306 | q=[0.207,0.147,0.298,0.348]
+[GroupDRO] epoch=  20 | dro=0.4051 | val_worst=0.7603 | q=[0.000,0.000,0.523,0.477]
+[GroupDRO] epoch=  40 | dro=0.3824 | val_worst=0.8386 | q=[0.000,0.000,0.501,0.498]
+[GroupDRO] epoch=  60 | dro=0.3685 | val_worst=0.6246 | q=[0.000,0.007,0.512,0.481]
+[GroupDRO] epoch=  80 | dro=0.3546 | val_worst=0.6823 | q=[0.000,0.003,0.529,0.468]
+[GroupDRO] epoch= 100 | dro=0.3450 | val_worst=0.7180 | q=[0.000,0.005,0.516,0.479]
+[GroupDRO] epoch= 120 | dro=0.3333 | val_worst=0.7500 | q=[0.000,0.003,0.527,0.470]
+[GroupDRO] epoch= 140 | dro=0.3251 | val_worst=0.6938 | q=[0.000,0.003,0.517,0.480]
+[GroupDRO] epoch= 160 | dro=0.3183 | val_worst=0.6738 | q=[0.000,0.002,0.508,0.490]
+[GroupDRO] epoch= 180 | dro=0.3133 | val_worst=0.6801 | q=[0.000,0.004,0.507,0.490]
+[GroupDRO] epoch= 200 | dro=0.3120 | val_worst=0.6715 | q=[0.000,0.002,0.532,0.466]
+[GroupDRO] Training done. Best val_worst=0.5520
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_1/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_1/gdro_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_1/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.6227 | F1(maj)=0.8951 | F1(weighted)=0.8273 | F1(macro)=0.7589 | Brier=0.1125
+[TEST] Beta  -> F1(min)=0.6503 | F1(maj)=0.8501 | F1(weighted)=0.8004 | F1(macro)=0.7502 | Brier=0.1425
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/final_test_metrics.csv
+[GroupDRO] Done. seed=1 | time=42.7s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_1
+
+[run_baseline] ---- seed=2 ----
+[TRAIN] size=3000, minority=742 (24.73%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[GroupDRO] exp_group=BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850  seed=2
+[GroupDRO] dataset=census_income  feature_dim=10
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.1, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_2
+[GroupDRO] epoch=   1 | dro=0.6733 | val_worst=0.6920 | q=[0.243,0.069,0.255,0.433]
+[GroupDRO] epoch=  20 | dro=0.4244 | val_worst=0.7283 | q=[0.000,0.000,0.471,0.529]
+[GroupDRO] epoch=  40 | dro=0.3961 | val_worst=0.9759 | q=[0.000,0.000,0.503,0.497]
+[GroupDRO] epoch=  60 | dro=0.3762 | val_worst=0.9224 | q=[0.000,0.006,0.512,0.482]
+[GroupDRO] epoch=  80 | dro=0.3624 | val_worst=1.1541 | q=[0.000,0.000,0.522,0.478]
+[GroupDRO] epoch= 100 | dro=0.3434 | val_worst=1.2897 | q=[0.000,0.000,0.528,0.472]
+[GroupDRO] epoch= 120 | dro=0.3319 | val_worst=1.2374 | q=[0.000,0.002,0.527,0.471]
+[GroupDRO] epoch= 140 | dro=0.3247 | val_worst=1.5576 | q=[0.000,0.001,0.545,0.454]
+[GroupDRO] epoch= 160 | dro=0.3097 | val_worst=1.3788 | q=[0.000,0.004,0.544,0.452]
+[GroupDRO] epoch= 180 | dro=0.2998 | val_worst=1.5398 | q=[0.000,0.003,0.532,0.466]
+[GroupDRO] epoch= 200 | dro=0.2904 | val_worst=1.6638 | q=[0.000,0.002,0.532,0.466]
+[GroupDRO] Training done. Best val_worst=0.6920
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_2/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_2/gdro_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_2/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.6424 | F1(maj)=0.9013 | F1(weighted)=0.8369 | F1(macro)=0.7719 | Brier=0.1102
+[TEST] Beta  -> F1(min)=0.5834 | F1(maj)=0.8412 | F1(weighted)=0.7770 | F1(macro)=0.7123 | Brier=0.1808
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_2/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/final_test_metrics.csv
+[GroupDRO] Done. seed=2 | time=39.9s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_2
+
+[run_baseline] ---- seed=3 ----
+[TRAIN] size=3000, minority=748 (24.93%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[GroupDRO] exp_group=BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850  seed=3
+[GroupDRO] dataset=census_income  feature_dim=10
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.1, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_3
+[GroupDRO] epoch=   1 | dro=0.6478 | val_worst=0.8092 | q=[0.064,0.221,0.401,0.314]
+[GroupDRO] epoch=  20 | dro=0.4276 | val_worst=1.0340 | q=[0.000,0.000,0.516,0.484]
+[GroupDRO] epoch=  40 | dro=0.4076 | val_worst=1.3307 | q=[0.000,0.037,0.516,0.447]
+[GroupDRO] epoch=  60 | dro=0.3886 | val_worst=1.1460 | q=[0.000,0.005,0.517,0.478]
+[GroupDRO] epoch=  80 | dro=0.3713 | val_worst=1.0794 | q=[0.000,0.004,0.528,0.467]
+[GroupDRO] epoch= 100 | dro=0.3637 | val_worst=1.0678 | q=[0.000,0.007,0.557,0.436]
+[GroupDRO] epoch= 120 | dro=0.3477 | val_worst=0.8705 | q=[0.000,0.010,0.513,0.477]
+[GroupDRO] epoch= 140 | dro=0.3452 | val_worst=0.9896 | q=[0.000,0.013,0.513,0.474]
+[GroupDRO] epoch= 160 | dro=0.3333 | val_worst=0.9503 | q=[0.000,0.007,0.510,0.483]
+[GroupDRO] epoch= 180 | dro=0.3302 | val_worst=1.0252 | q=[0.000,0.015,0.521,0.464]
+[GroupDRO] epoch= 200 | dro=0.3210 | val_worst=1.0392 | q=[0.000,0.010,0.518,0.472]
+[GroupDRO] Training done. Best val_worst=0.6834
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_3/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_3/gdro_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_3/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.6539 | F1(maj)=0.8947 | F1(weighted)=0.8348 | F1(macro)=0.7743 | Brier=0.1124
+[TEST] Beta  -> F1(min)=0.6473 | F1(maj)=0.8530 | F1(weighted)=0.8018 | F1(macro)=0.7502 | Brier=0.1434
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/final_test_metrics.csv
+[GroupDRO] Done. seed=3 | time=39.9s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_3
+
+[run_baseline] ---- seed=42 ----
+[TRAIN] size=3000, minority=666 (22.20%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[GroupDRO] exp_group=BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850  seed=42
+[GroupDRO] dataset=census_income  feature_dim=10
+[GroupDRO] gdro_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'eta': 0.1, 'n_groups': 4}
+[GroupDRO] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_42
+[GroupDRO] epoch=   1 | dro=0.7351 | val_worst=1.0825 | q=[0.100,0.170,0.163,0.568]
+[GroupDRO] epoch=  20 | dro=0.3908 | val_worst=0.7031 | q=[0.000,0.000,0.497,0.502]
+[GroupDRO] epoch=  40 | dro=0.3687 | val_worst=0.8378 | q=[0.000,0.001,0.525,0.474]
+[GroupDRO] epoch=  60 | dro=0.3515 | val_worst=0.6155 | q=[0.000,0.003,0.543,0.454]
+[GroupDRO] epoch=  80 | dro=0.3407 | val_worst=0.6841 | q=[0.000,0.004,0.520,0.476]
+[GroupDRO] epoch= 100 | dro=0.3300 | val_worst=0.5845 | q=[0.000,0.003,0.528,0.469]
+[GroupDRO] epoch= 120 | dro=0.3171 | val_worst=0.6745 | q=[0.000,0.005,0.537,0.458]
+[GroupDRO] epoch= 140 | dro=0.3132 | val_worst=0.8547 | q=[0.020,0.017,0.533,0.431]
+[GroupDRO] epoch= 160 | dro=0.3030 | val_worst=0.9335 | q=[0.004,0.004,0.535,0.456]
+[GroupDRO] epoch= 180 | dro=0.2954 | val_worst=0.9525 | q=[0.025,0.013,0.509,0.453]
+[GroupDRO] epoch= 200 | dro=0.2877 | val_worst=1.0565 | q=[0.015,0.013,0.530,0.442]
+[GroupDRO] Training done. Best val_worst=0.5345
+[GroupDRO] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_42/metrics.csv
+[GroupDRO] Best model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_42/gdro_model.pt
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_42/gdro_model.pt
+
+[TEST] Alpha -> F1(min)=0.6302 | F1(maj)=0.8948 | F1(weighted)=0.8290 | F1(macro)=0.7625 | Brier=0.1143
+[TEST] Beta  -> F1(min)=0.6428 | F1(maj)=0.8362 | F1(weighted)=0.7881 | F1(macro)=0.7395 | Brier=0.1500
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/final_test_metrics.csv
+[GroupDRO] Done. seed=42 | time=39.9s
+[GroupDRO] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_group_dro_group_dro_high_eta_d79866bf__G202606041850/seed_42

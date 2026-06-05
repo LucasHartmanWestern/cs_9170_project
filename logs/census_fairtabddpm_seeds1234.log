@@ -1,0 +1,153 @@
+[run_baseline] baseline=fairtabddpm
+[run_baseline] spec=experiment_specs/census_val_train_test/fairtabddpm_seeds1234.yaml
+[run_baseline] device=cuda:1
+[run_baseline] exp_group=BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610
+[run_baseline] seeds=[1, 2, 3, 42]
+
+[run_baseline] ---- seed=1 ----
+[TRAIN] size=3000, minority=712 (23.73%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[FairTabDDPM] exp_group=BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610  seed=1
+[FairTabDDPM] dataset=census_income  feature_dim=10
+[FairTabDDPM] cfg={'timesteps': 100, 'd_emb': 128, 'n_layers': 4, 'lr': 0.00039, 'weight_decay': 0.0, 'diff_epochs': 1000, 'batch_size': 256, 'n_synthetic': 2000, 'overall_guid_weight': 1.0, 'cond_guid_weight': 1.0, 'cond_guid_threshold': 0.1, 'warmup_steps': 10}
+[FairTabDDPM] Training diffusion model for 1000 epochs ...
+[FairTabDDPM] epoch=    1 | loss=1.17629
+[FairTabDDPM] epoch=  100 | loss=0.16431
+[FairTabDDPM] epoch=  200 | loss=0.15548
+[FairTabDDPM] epoch=  300 | loss=0.15408
+[FairTabDDPM] epoch=  400 | loss=0.14340
+[FairTabDDPM] epoch=  500 | loss=0.14473
+[FairTabDDPM] epoch=  600 | loss=0.14394
+[FairTabDDPM] epoch=  700 | loss=0.14854
+[FairTabDDPM] epoch=  800 | loss=0.13983
+[FairTabDDPM] epoch=  900 | loss=0.14196
+[FairTabDDPM] epoch= 1000 | loss=0.14029
+[FairTabDDPM] Diffusion done. Best loss=0.12732
+[FairTabDDPM] Diffusion training done in 368.4s
+[FairTabDDPM] Disadvantaged group: a=0 (pos_g0=43, pos_g1=669)
+[FairTabDDPM] Sampling 2000 fair synthetic samples (y=1, a=0) ...
+[FairTabDDPM] Got 2000 synthetic samples.
+[FairTabDDPM] Augmented: 5000 total (2712 pos)
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_1/fairtabddpm_model.pt
+
+[TEST] Alpha -> F1(min)=0.6227 | F1(maj)=0.8951 | F1(weighted)=0.8273 | F1(macro)=0.7589 | Brier=0.1125
+[TEST] Beta  -> F1(min)=0.6258 | F1(maj)=0.8406 | F1(weighted)=0.7871 | F1(macro)=0.7332 | Brier=0.1523
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/final_test_metrics.csv
+[FairTabDDPM] Diffusion metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_1/diff_metrics.csv
+[FairTabDDPM] Done. seed=1 | time=405.0s
+
+[run_baseline] ---- seed=2 ----
+[TRAIN] size=3000, minority=742 (24.73%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[FairTabDDPM] exp_group=BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610  seed=2
+[FairTabDDPM] dataset=census_income  feature_dim=10
+[FairTabDDPM] cfg={'timesteps': 100, 'd_emb': 128, 'n_layers': 4, 'lr': 0.00039, 'weight_decay': 0.0, 'diff_epochs': 1000, 'batch_size': 256, 'n_synthetic': 2000, 'overall_guid_weight': 1.0, 'cond_guid_weight': 1.0, 'cond_guid_threshold': 0.1, 'warmup_steps': 10}
+[FairTabDDPM] Training diffusion model for 1000 epochs ...
+[FairTabDDPM] epoch=    1 | loss=1.17707
+[FairTabDDPM] epoch=  100 | loss=0.15917
+[FairTabDDPM] epoch=  200 | loss=0.15861
+[FairTabDDPM] epoch=  300 | loss=0.14145
+[FairTabDDPM] epoch=  400 | loss=0.13604
+[FairTabDDPM] epoch=  500 | loss=0.13504
+[FairTabDDPM] epoch=  600 | loss=0.13234
+[FairTabDDPM] epoch=  700 | loss=0.13413
+[FairTabDDPM] epoch=  800 | loss=0.13243
+[FairTabDDPM] epoch=  900 | loss=0.14109
+[FairTabDDPM] epoch= 1000 | loss=0.13257
+[FairTabDDPM] Diffusion done. Best loss=0.12379
+[FairTabDDPM] Diffusion training done in 365.5s
+[FairTabDDPM] Disadvantaged group: a=0 (pos_g0=43, pos_g1=699)
+[FairTabDDPM] Sampling 2000 fair synthetic samples (y=1, a=0) ...
+[FairTabDDPM] Got 2000 synthetic samples.
+[FairTabDDPM] Augmented: 5000 total (2742 pos)
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_2/fairtabddpm_model.pt
+
+[TEST] Alpha -> F1(min)=0.6424 | F1(maj)=0.9013 | F1(weighted)=0.8369 | F1(macro)=0.7719 | Brier=0.1102
+[TEST] Beta  -> F1(min)=0.6612 | F1(maj)=0.8661 | F1(weighted)=0.8151 | F1(macro)=0.7637 | Brier=0.1353
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_2/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/final_test_metrics.csv
+[FairTabDDPM] Diffusion metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_2/diff_metrics.csv
+[FairTabDDPM] Done. seed=2 | time=401.7s
+
+[run_baseline] ---- seed=3 ----
+[TRAIN] size=3000, minority=748 (24.93%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[FairTabDDPM] exp_group=BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610  seed=3
+[FairTabDDPM] dataset=census_income  feature_dim=10
+[FairTabDDPM] cfg={'timesteps': 100, 'd_emb': 128, 'n_layers': 4, 'lr': 0.00039, 'weight_decay': 0.0, 'diff_epochs': 1000, 'batch_size': 256, 'n_synthetic': 2000, 'overall_guid_weight': 1.0, 'cond_guid_weight': 1.0, 'cond_guid_threshold': 0.1, 'warmup_steps': 10}
+[FairTabDDPM] Training diffusion model for 1000 epochs ...
+[FairTabDDPM] epoch=    1 | loss=1.52961
+[FairTabDDPM] epoch=  100 | loss=0.17345
+[FairTabDDPM] epoch=  200 | loss=0.15763
+[FairTabDDPM] epoch=  300 | loss=0.15386
+[FairTabDDPM] epoch=  400 | loss=0.14849
+[FairTabDDPM] epoch=  500 | loss=0.15198
+[FairTabDDPM] epoch=  600 | loss=0.13543
+[FairTabDDPM] epoch=  700 | loss=0.14096
+[FairTabDDPM] epoch=  800 | loss=0.13795
+[FairTabDDPM] epoch=  900 | loss=0.13673
+[FairTabDDPM] epoch= 1000 | loss=0.13501
+[FairTabDDPM] Diffusion done. Best loss=0.12442
+[FairTabDDPM] Diffusion training done in 366.7s
+[FairTabDDPM] Disadvantaged group: a=0 (pos_g0=43, pos_g1=705)
+[FairTabDDPM] Sampling 2000 fair synthetic samples (y=1, a=0) ...
+[FairTabDDPM] Got 2000 synthetic samples.
+[FairTabDDPM] Augmented: 5000 total (2748 pos)
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_3/fairtabddpm_model.pt
+
+[TEST] Alpha -> F1(min)=0.6539 | F1(maj)=0.8947 | F1(weighted)=0.8348 | F1(macro)=0.7743 | Brier=0.1124
+[TEST] Beta  -> F1(min)=0.6531 | F1(maj)=0.8526 | F1(weighted)=0.8030 | F1(macro)=0.7529 | Brier=0.1407
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/final_test_metrics.csv
+[FairTabDDPM] Diffusion metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_3/diff_metrics.csv
+[FairTabDDPM] Done. seed=3 | time=403.4s
+
+[run_baseline] ---- seed=42 ----
+[TRAIN] size=3000, minority=666 (22.20%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[FairTabDDPM] exp_group=BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610  seed=42
+[FairTabDDPM] dataset=census_income  feature_dim=10
+[FairTabDDPM] cfg={'timesteps': 100, 'd_emb': 128, 'n_layers': 4, 'lr': 0.00039, 'weight_decay': 0.0, 'diff_epochs': 1000, 'batch_size': 256, 'n_synthetic': 2000, 'overall_guid_weight': 1.0, 'cond_guid_weight': 1.0, 'cond_guid_threshold': 0.1, 'warmup_steps': 10}
+[FairTabDDPM] Training diffusion model for 1000 epochs ...
+[FairTabDDPM] epoch=    1 | loss=1.33216
+[FairTabDDPM] epoch=  100 | loss=0.17468
+[FairTabDDPM] epoch=  200 | loss=0.15416
+[FairTabDDPM] epoch=  300 | loss=0.14784
+[FairTabDDPM] epoch=  400 | loss=0.14643
+[FairTabDDPM] epoch=  500 | loss=0.14143
+[FairTabDDPM] epoch=  600 | loss=0.13922
+[FairTabDDPM] epoch=  700 | loss=0.13637
+[FairTabDDPM] epoch=  800 | loss=0.13330
+[FairTabDDPM] epoch=  900 | loss=0.13461
+[FairTabDDPM] epoch= 1000 | loss=0.12753
+[FairTabDDPM] Diffusion done. Best loss=0.12538
+[FairTabDDPM] Diffusion training done in 371.4s
+[FairTabDDPM] Disadvantaged group: a=0 (pos_g0=43, pos_g1=623)
+[FairTabDDPM] Sampling 2000 fair synthetic samples (y=1, a=0) ...
+[FairTabDDPM] Got 2000 synthetic samples.
+[FairTabDDPM] Augmented: 5000 total (2666 pos)
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+FFNN Using device: cuda:1
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_42/fairtabddpm_model.pt
+
+[TEST] Alpha -> F1(min)=0.6302 | F1(maj)=0.8948 | F1(weighted)=0.8290 | F1(macro)=0.7625 | Brier=0.1143
+[TEST] Beta  -> F1(min)=0.6650 | F1(maj)=0.8579 | F1(weighted)=0.8099 | F1(macro)=0.7614 | Brier=0.1357
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/final_test_metrics.csv
+[FairTabDDPM] Diffusion metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairtabddpm_fairtabddpm_seeds1234_93d731a1__G202606041610/seed_42/diff_metrics.csv
+[FairTabDDPM] Done. seed=42 | time=406.8s

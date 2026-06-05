@@ -1,0 +1,43 @@
+[run_baseline] baseline=fairness_loss_balancing
+[run_baseline] spec=experiment_specs/capture24_rand10_baselines/fairness_loss_balancing_fold0.yaml
+[run_baseline] device=cpu
+[run_baseline] exp_group=BASELINE_fairness_loss_balancing_fairness_loss_balancing_fold0_5a27293d__G202606041525
+[run_baseline] seeds=[42]
+[run_baseline] k-fold mode: fold_idx=0, n_folds=5
+
+[run_baseline] ---- seed=42 ----
+[capture24-kfold] Cache: 992,430 windows, 40 subjects, fold 0/5
+[TRAIN] size=4,000, MVPA=150 (3.8%), female=1,927, female_MVPA=60, male_MVPA=90
+[VAL] size=4,000, MVPA=142 (3.5%), female=2,276, female_MVPA=85, male_MVPA=57
+[TEST] size=108,395, MVPA=3,840 (3.5%), female=61,677, female_MVPA=2,300, male_MVPA=1,540
+fold_idx=0 | held_out_subs=[np.int64(17), np.int64(2), np.int64(12), np.int64(13), np.int64(29), np.int64(26), np.int64(22), np.int64(36)] | theta_dim=15
+[FLB] exp_group=BASELINE_fairness_loss_balancing_fairness_loss_balancing_fold0_5a27293d__G202606041525  seed=42
+[FLB] dataset=capture24  feature_dim=15
+[FLB] flb_config={'lr': 0.001, 'epochs': 200, 'batch_size': 64, 'beta': 1.0, 'eta': 0.01, 'n_groups': 4}
+[FLB] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_fairness_loss_balancing_fold0_5a27293d__G202606041525/seed_42
+[FLB] Group sizes (a=0/y=0, a=0/y=1, a=1/y=0, a=1/y=1): [1983, 90, 1867, 60]
+[FLB] epoch=   1 | loss=0.5319 | bsp=[0.333,0.157,0.344,0.166]
+[FLB] epoch=  20 | loss=0.0769 | bsp=[0.551,0.037,0.367,0.046]
+[FLB] epoch=  40 | loss=0.0734 | bsp=[0.532,0.037,0.383,0.049]
+[FLB] epoch=  60 | loss=0.0471 | bsp=[0.475,0.039,0.426,0.061]
+[FLB] epoch=  80 | loss=0.0370 | bsp=[0.395,0.053,0.476,0.076]
+[FLB] epoch= 100 | loss=0.0216 | bsp=[0.364,0.055,0.513,0.069]
+[FLB] epoch= 120 | loss=0.0132 | bsp=[0.399,0.052,0.488,0.060]
+[FLB] epoch= 140 | loss=0.0084 | bsp=[0.350,0.045,0.540,0.065]
+[FLB] epoch= 160 | loss=0.0038 | bsp=[0.391,0.036,0.502,0.071]
+[FLB] epoch= 180 | loss=0.0030 | bsp=[0.382,0.043,0.495,0.080]
+[FLB] epoch= 200 | loss=0.0017 | bsp=[0.390,0.049,0.477,0.084]
+[FLB] Training done. Reporting final-epoch model (no val selection).
+[FLB] Training metrics -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_fairness_loss_balancing_fold0_5a27293d__G202606041525/seed_42/metrics.csv
+[FLB] Final model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_fairness_loss_balancing_fold0_5a27293d__G202606041525/seed_42/flb_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_fairness_loss_balancing_fold0_5a27293d__G202606041525/seed_42/flb_model.pt
+
+[TEST] Alpha -> F1(min)=0.3216 | F1(maj)=0.9844 | F1(weighted)=0.9609 | F1(macro)=0.6530 | Brier=0.0268
+[TEST] Beta  -> F1(min)=0.4414 | F1(maj)=0.9793 | F1(weighted)=0.9602 | F1(macro)=0.7103 | Brier=0.0362
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_fairness_loss_balancing_fold0_5a27293d__G202606041525/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_fairness_loss_balancing_fold0_5a27293d__G202606041525/final_test_metrics.csv
+[FLB] Done. seed=42 | time=9033.0s
+[FLB] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_fairness_loss_balancing_fairness_loss_balancing_fold0_5a27293d__G202606041525/seed_42

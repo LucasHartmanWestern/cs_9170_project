@@ -1,0 +1,26 @@
+[run_baseline] baseline=alpha
+[run_baseline] spec=experiment_specs/capture24_rand10_baselines/alpha_fold1.yaml
+[run_baseline] device=cpu
+[run_baseline] exp_group=BASELINE_alpha_alpha_fold1_bf90578b__G202606041813
+[run_baseline] seeds=[42]
+[run_baseline] k-fold mode: fold_idx=1, n_folds=5
+
+[run_baseline] ---- seed=42 ----
+[capture24-kfold] Cache: 992,430 windows, 40 subjects, fold 1/5
+[TRAIN] size=4,000, MVPA=134 (3.4%), female=2,107, female_MVPA=60, male_MVPA=74
+[VAL] size=4,000, MVPA=260 (6.5%), female=1,899, female_MVPA=169, male_MVPA=91
+[TEST] size=123,988, MVPA=8,048 (6.5%), female=58,862, female_MVPA=5,230, male_MVPA=2,818
+fold_idx=1 | held_out_subs=[np.int64(7), np.int64(15), np.int64(1), np.int64(19), np.int64(37), np.int64(33), np.int64(20), np.int64(25)] | theta_dim=15
+[Alpha] exp_group=BASELINE_alpha_alpha_fold1_bf90578b__G202606041813  seed=42
+[Alpha] dataset=capture24  feature_dim=15
+[Alpha] ffnn_config epochs=10 lr=0.00024106501268706255
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_alpha_alpha_fold1_bf90578b__G202606041813/seed_42/alpha_model.pt
+
+[TEST] Alpha -> F1(min)=0.0613 | F1(maj)=0.9668 | F1(weighted)=0.9080 | F1(macro)=0.5140 | Brier=0.0512
+[TEST] Beta  -> F1(min)=0.0613 | F1(maj)=0.9668 | F1(weighted)=0.9080 | F1(macro)=0.5140 | Brier=0.0512
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_alpha_alpha_fold1_bf90578b__G202606041813/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_alpha_alpha_fold1_bf90578b__G202606041813/final_test_metrics.csv
+[Alpha] Done. seed=42 | time=235.2s
+[Alpha] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_alpha_alpha_fold1_bf90578b__G202606041813/seed_42

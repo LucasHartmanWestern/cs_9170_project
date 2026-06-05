@@ -2862,3 +2862,113 @@ Note: folds 2 and 3 have near-zero α-EO for most methods. FORGE α-EO is also n
 - ~~Run FORGE capture24 folds 3&4~~ COMPLETE — using rand_0010 all 5 folds
 - Update CLAUDE.md capture24 FORGE value from 0.022 → 0.069
 - Update paper figures/tables with these numbers (census confirmation pending)
+
+---
+
+### EXP-051 | grid-search-gaps
+
+**Type:** PARAM-TUNING
+**Status:** PLANNED
+**Dataset(s):** census_income, capture24
+**Follows from:** EXP-021 (census grid), EXP-046 (capture24 kfold grid)
+**Audited:** 2026-06-05
+
+---
+
+**Purpose:** Fill missing cells in the joint ablation grid (k∈{0,3,5} × pca∈{10,15} × ratio∈{0.2,0.4,0.6} × ep∈{10,20,30}) required to support Experiment 1 (sensitivity analysis). Standard is ≥3 seeds (census) or ≥3 folds (capture24) per cell.
+
+**Full grid definition:** 54 configs per dataset — k∈{0,3,5} × pca∈{10,15} × ratio∈{0.2,0.4,0.6} × ep∈{10,20,30}.
+
+---
+
+#### Census — audit result
+
+| k | Status |
+|---|--------|
+| k=3 | COMPLETE — 18 configs × 3 seeds (lambda_runs/census/k3/) |
+| k=5 | COMPLETE — 18 configs × 3 seeds (aulavik_runs/census/k5/) |
+| k=0 | ALL MISSING — 18 configs × 3 seeds lost; original training_runs/ was cleaned; experiment1/census_grid/ symlinks broken |
+
+Note: only pca∈{10,15} are in the new grid (pca=5 from old EXP-021 is dropped). census k=3/k=5 with pca=5 exist but are excluded from the grid.
+
+**Census specs to run (on Huron, run both on separate GPUs):**
+
+| Spec | Perms | max_parallel | Batches | GPU |
+|------|-------|-------------|---------|-----|
+| `experiment_specs/census_grid_v2/census_k0_gaps_ep1020.yaml` | 36 | 4 | 9 × 4 | gpu0 |
+| `experiment_specs/census_grid_v2/census_k0_gaps_ep30.yaml` | 18 | 3 | 6 × 3 | gpu1 |
+
+Output dir: `/storage_1/epigou_storage/FORGE/census_k0_grid/` (new directory; must be created before run).
+
+```bash
+mkdir -p /storage_1/epigou_storage/FORGE/census_k0_grid
+python main.py --spec experiment_specs/census_grid_v2/census_k0_gaps_ep1020.yaml --device cuda:0
+python main.py --spec experiment_specs/census_grid_v2/census_k0_gaps_ep30.yaml --device cuda:1
+```
+
+---
+
+#### Capture-24 kfold — audit result
+
+Complete = all 5 folds present with ≥3 folds having data. Partial = some folds done, some missing. Missing = no folds done.
+
+**pca=15 tier (k=3, k=5):**
+
+| Config | ep=10 | ep=20 | ep=30 |
+|--------|-------|-------|-------|
+| k=3, ratio=0.2 | PARTIAL (folds 0-2 missing) | PARTIAL (folds 0-2 missing) | COMPLETE (folds 0-4) |
+| k=3, ratio=0.4 | COMPLETE (folds 0-4) | COMPLETE (folds 0-4) | COMPLETE (folds 0-4) |
+| k=3, ratio=0.6 | MISSING | MISSING | MISSING |
+| k=5, ratio=0.2 | COMPLETE (folds 0-4) | PARTIAL (fold 2 missing) | COMPLETE (folds 0-4) |
+| k=5, ratio=0.4 | COMPLETE (folds 0-4) | COMPLETE (folds 0-4) | COMPLETE (folds 0-4) |
+| k=5, ratio=0.6 | MISSING | MISSING | MISSING |
+
+**pca=10 tier (k=3, k=5) — fully missing:**
+All 18 configs (k∈{3,5} × ratio∈{0.2,0.4,0.6} × ep∈{10,20,30}) have 0 folds complete.
+
+**k=0 tier (pca∈{10,15}) — fully missing:**
+All 18 configs (pca∈{10,15} × ratio∈{0.2,0.4,0.6} × ep∈{10,20,30}) have 0 folds complete.
+
+**Existing partial specs to submit as-is (already in `drac/`):**
+- `forge_k3_ep10_ratio02_fold{0,1,2}.yaml` — 3 individual jobs
+- `forge_k3_ep20_ratio02_fold{0,1,2}.yaml` — 3 individual jobs
+- `forge_k5_ep20_ratio02_fold2.yaml` — 1 individual job
+
+**New grouped specs (DRAC, `experiment_specs/capture24_kfold_grid/drac/`):**
+
+Each grouped spec uses permutations=[epochs, fold_idx], max_parallel=3. This runs ep=10/20/30 as sequential batches, each batch running folds 0/1/2 in parallel. SLURM: --time=20:00:00, --mem=9G, --cpus-per-task=6.
+
+| Spec | Groups | Perms | Batches | Walltime |
+|------|--------|-------|---------|----------|
+| `forge_gap_k0_pca10_ratio2.yaml` | k=0,p10,r0.2 | 9 | 3×3 | 20h |
+| `forge_gap_k0_pca10_ratio4.yaml` | k=0,p10,r0.4 | 9 | 3×3 | 20h |
+| `forge_gap_k0_pca10_ratio6.yaml` | k=0,p10,r0.6 | 9 | 3×3 | 20h |
+| `forge_gap_k0_pca15_ratio2.yaml` | k=0,p15,r0.2 | 9 | 3×3 | 20h |
+| `forge_gap_k0_pca15_ratio4.yaml` | k=0,p15,r0.4 | 9 | 3×3 | 20h |
+| `forge_gap_k0_pca15_ratio6.yaml` | k=0,p15,r0.6 | 9 | 3×3 | 20h |
+| `forge_gap_k3_pca10_ratio2.yaml` | k=3,p10,r0.2 | 9 | 3×3 | 20h |
+| `forge_gap_k3_pca10_ratio4.yaml` | k=3,p10,r0.4 | 9 | 3×3 | 20h |
+| `forge_gap_k3_pca10_ratio6.yaml` | k=3,p10,r0.6 | 9 | 3×3 | 20h |
+| `forge_gap_k3_pca15_ratio6.yaml` | k=3,p15,r0.6 | 9 | 3×3 | 20h |
+| `forge_gap_k5_pca10_ratio2.yaml` | k=5,p10,r0.2 | 9 | 3×3 | 20h |
+| `forge_gap_k5_pca10_ratio4.yaml` | k=5,p10,r0.4 | 9 | 3×3 | 20h |
+| `forge_gap_k5_pca10_ratio6.yaml` | k=5,p10,r0.6 | 9 | 3×3 | 20h |
+| `forge_gap_k5_pca15_ratio6.yaml` | k=5,p15,r0.6 | 9 | 3×3 | 20h |
+| `forge_gap_k3_pca15_ratio2_e12.yaml` | k=3,p15,r0.2,ep∈{10,20} only | 6 | 2×3 | 12h |
+
+Total DRAC jobs: 15 new grouped + 7 existing individual = 22 jobs.
+
+**Submit all new grouped specs:**
+```bash
+for f in experiment_specs/capture24_kfold_grid/drac/forge_gap_*.sh; do sbatch "$f"; done
+```
+
+---
+
+**Result:** (pending)
+
+**Takeaway:** (pending)
+
+**Next steps:**
+- After completion: add symlinks for new runs to `experiment1/census_grid/` and `experiment1/capture24_grid/`
+- Re-run `analysis/analyze_grid.py` on complete grid to produce Experiment 1 sensitivity heatmaps

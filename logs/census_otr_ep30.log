@@ -1,0 +1,145 @@
+[run_baseline] baseline=gaussian_ot_repair
+[run_baseline] spec=experiment_specs/census_val_train_test/gaussian_ot_repair.yaml
+[run_baseline] device=cuda:0
+[run_baseline] exp_group=BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536
+[run_baseline] seeds=[0, 1, 2, 3, 42]
+
+[run_baseline] ---- seed=0 ----
+[TRAIN] size=3000, minority=689 (22.97%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[OTRepair] exp_group=BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536  seed=0
+[OTRepair] dataset=census_income  feature_dim=10
+[OTRepair] ot_config={'lam': 1.0, 'n_groups': 2, 'cov_reg': 1e-05, 'barycenter_iters': 100, 'repair_test': True, 'include_val_in_train': False}
+[OTRepair] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_0
+[OTRepair] Group 0: n=960, ||μ||=1.2281, cov_diag=[0.1960, 1.0297]
+[OTRepair] Group 1: n=2040, ||μ||=0.5779, cov_diag=[0.2334, 1.4847]
+[OTRepair] Barycenter computed. μ* norm=0.3251
+[OTRepair] Group 0: A_g computed, ||A_g - I||=0.6100
+[OTRepair] Group 1: A_g computed, ||A_g - I||=0.4299
+[OTRepair] Test features repaired.
+FFNN Using device: cuda:0
+[OTRepair] ERM trained on repaired features.
+FFNN Using device: cuda:0
+[OTRepair] Alpha (ERM on original features) trained.
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_0/otrep_model.pt
+
+[TEST] Alpha -> F1(min)=0.6150 | F1(maj)=0.8967 | F1(weighted)=0.8265 | F1(macro)=0.7558 | Brier=0.1149
+[TEST] Beta  -> F1(min)=0.5547 | F1(maj)=0.8891 | F1(weighted)=0.8059 | F1(macro)=0.7219 | Brier=0.1251
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_0/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/final_test_metrics.csv
+[OTRepair] Done. seed=0 | time=55.0s
+[OTRepair] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_0
+
+[run_baseline] ---- seed=1 ----
+[TRAIN] size=3000, minority=712 (23.73%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[OTRepair] exp_group=BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536  seed=1
+[OTRepair] dataset=census_income  feature_dim=10
+[OTRepair] ot_config={'lam': 1.0, 'n_groups': 2, 'cov_reg': 1e-05, 'barycenter_iters': 100, 'repair_test': True, 'include_val_in_train': False}
+[OTRepair] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_1
+[OTRepair] Group 0: n=902, ||μ||=1.2680, cov_diag=[0.1835, 1.0281]
+[OTRepair] Group 1: n=2098, ||μ||=0.5452, cov_diag=[0.2199, 1.5699]
+[OTRepair] Barycenter computed. μ* norm=0.3614
+[OTRepair] Group 0: A_g computed, ||A_g - I||=0.7326
+[OTRepair] Group 1: A_g computed, ||A_g - I||=0.4644
+[OTRepair] Test features repaired.
+FFNN Using device: cuda:0
+[OTRepair] ERM trained on repaired features.
+FFNN Using device: cuda:0
+[OTRepair] Alpha (ERM on original features) trained.
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_1/otrep_model.pt
+
+[TEST] Alpha -> F1(min)=0.6227 | F1(maj)=0.8951 | F1(weighted)=0.8273 | F1(macro)=0.7589 | Brier=0.1125
+[TEST] Beta  -> F1(min)=0.5990 | F1(maj)=0.8887 | F1(weighted)=0.8166 | F1(macro)=0.7439 | Brier=0.1238
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_1/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/final_test_metrics.csv
+[OTRepair] Done. seed=1 | time=38.3s
+[OTRepair] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_1
+
+[run_baseline] ---- seed=2 ----
+[TRAIN] size=3000, minority=742 (24.73%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[OTRepair] exp_group=BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536  seed=2
+[OTRepair] dataset=census_income  feature_dim=10
+[OTRepair] ot_config={'lam': 1.0, 'n_groups': 2, 'cov_reg': 1e-05, 'barycenter_iters': 100, 'repair_test': True, 'include_val_in_train': False}
+[OTRepair] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_2
+[OTRepair] Group 0: n=882, ||μ||=1.2645, cov_diag=[0.1997, 1.0391]
+[OTRepair] Group 1: n=2118, ||μ||=0.5266, cov_diag=[0.2183, 1.5349]
+[OTRepair] Barycenter computed. μ* norm=0.3690
+[OTRepair] Group 0: A_g computed, ||A_g - I||=3.0653
+[OTRepair] Group 1: A_g computed, ||A_g - I||=0.5943
+[OTRepair] Test features repaired.
+FFNN Using device: cuda:0
+[OTRepair] ERM trained on repaired features.
+FFNN Using device: cuda:0
+[OTRepair] Alpha (ERM on original features) trained.
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_2/otrep_model.pt
+
+[TEST] Alpha -> F1(min)=0.6424 | F1(maj)=0.9013 | F1(weighted)=0.8369 | F1(macro)=0.7719 | Brier=0.1102
+[TEST] Beta  -> F1(min)=0.5686 | F1(maj)=0.8848 | F1(weighted)=0.8061 | F1(macro)=0.7267 | Brier=0.1257
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_2/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/final_test_metrics.csv
+[OTRepair] Done. seed=2 | time=44.9s
+[OTRepair] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_2
+
+[run_baseline] ---- seed=3 ----
+[TRAIN] size=3000, minority=748 (24.93%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[OTRepair] exp_group=BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536  seed=3
+[OTRepair] dataset=census_income  feature_dim=10
+[OTRepair] ot_config={'lam': 1.0, 'n_groups': 2, 'cov_reg': 1e-05, 'barycenter_iters': 100, 'repair_test': True, 'include_val_in_train': False}
+[OTRepair] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_3
+[OTRepair] Group 0: n=910, ||μ||=1.2715, cov_diag=[0.1973, 0.9833]
+[OTRepair] Group 1: n=2090, ||μ||=0.5536, cov_diag=[0.2149, 1.5713]
+[OTRepair] Barycenter computed. μ* norm=0.3589
+[OTRepair] Group 0: A_g computed, ||A_g - I||=2.1677
+[OTRepair] Group 1: A_g computed, ||A_g - I||=0.6022
+[OTRepair] Test features repaired.
+FFNN Using device: cuda:0
+[OTRepair] ERM trained on repaired features.
+FFNN Using device: cuda:0
+[OTRepair] Alpha (ERM on original features) trained.
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_3/otrep_model.pt
+
+[TEST] Alpha -> F1(min)=0.6539 | F1(maj)=0.8947 | F1(weighted)=0.8348 | F1(macro)=0.7743 | Brier=0.1124
+[TEST] Beta  -> F1(min)=0.5842 | F1(maj)=0.8828 | F1(weighted)=0.8085 | F1(macro)=0.7335 | Brier=0.1271
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_3/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/final_test_metrics.csv
+[OTRepair] Done. seed=3 | time=44.5s
+[OTRepair] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_3
+
+[run_baseline] ---- seed=42 ----
+[TRAIN] size=3000, minority=666 (22.20%)
+[VAL] size=6032, minority=1501 (24.88%)
+[TEST] size=6033, minority=1502 (24.90%)
+[OTRepair] exp_group=BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536  seed=42
+[OTRepair] dataset=census_income  feature_dim=10
+[OTRepair] ot_config={'lam': 1.0, 'n_groups': 2, 'cov_reg': 1e-05, 'barycenter_iters': 100, 'repair_test': True, 'include_val_in_train': False}
+[OTRepair] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_42
+[OTRepair] Group 0: n=961, ||μ||=1.2177, cov_diag=[0.1863, 1.0087]
+[OTRepair] Group 1: n=2039, ||μ||=0.5739, cov_diag=[0.2181, 1.5428]
+[OTRepair] Barycenter computed. μ* norm=0.3219
+[OTRepair] Group 0: A_g computed, ||A_g - I||=0.9177
+[OTRepair] Group 1: A_g computed, ||A_g - I||=0.5008
+[OTRepair] Test features repaired.
+FFNN Using device: cuda:0
+[OTRepair] ERM trained on repaired features.
+FFNN Using device: cuda:0
+[OTRepair] Alpha (ERM on original features) trained.
+FFNN Using device: cuda:0
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_42/otrep_model.pt
+
+[TEST] Alpha -> F1(min)=0.6302 | F1(maj)=0.8948 | F1(weighted)=0.8290 | F1(macro)=0.7625 | Brier=0.1143
+[TEST] Beta  -> F1(min)=0.5528 | F1(maj)=0.8852 | F1(weighted)=0.8025 | F1(macro)=0.7190 | Brier=0.1271
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/final_test_metrics.csv
+[OTRepair] Done. seed=42 | time=46.0s
+[OTRepair] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_gaussian_ot_repair_gaussian_ot_repair_6ab49b86__G202606041536/seed_42

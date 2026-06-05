@@ -1,0 +1,32 @@
+[run_baseline] baseline=smote
+[run_baseline] spec=experiment_specs/capture24_rand10_baselines/smote_fold3.yaml
+[run_baseline] device=cpu
+[run_baseline] exp_group=BASELINE_smote_smote_fold3_ba752b1e__G202606041525
+[run_baseline] seeds=[42]
+[run_baseline] k-fold mode: fold_idx=3, n_folds=5
+
+[run_baseline] ---- seed=42 ----
+[capture24-kfold] Cache: 992,430 windows, 40 subjects, fold 3/5
+[TRAIN] size=4,000, MVPA=141 (3.5%), female=2,033, female_MVPA=60, male_MVPA=81
+[VAL] size=4,000, MVPA=111 (2.8%), female=1,985, female_MVPA=57, male_MVPA=54
+[TEST] size=113,490, MVPA=3,170 (2.8%), female=56,311, female_MVPA=1,626, male_MVPA=1,544
+fold_idx=3 | held_out_subs=[np.int64(6), np.int64(4), np.int64(0), np.int64(9), np.int64(34), np.int64(23), np.int64(24), np.int64(38)] | theta_dim=15
+[SMOTE] exp_group=BASELINE_smote_smote_fold3_ba752b1e__G202606041525  seed=42
+[SMOTE] dataset=capture24  feature_dim=15
+[SMOTE] smote_config={'n_synthetic': 1000, 'two_phase': True, 'epochs': 100, 'lr': 0.001, 'batch_size': 64, 'include_val_in_train': False}
+[SMOTE] seed_dir=/home/epigou/cs_9170_project/training_runs/BASELINE_smote_smote_fold3_ba752b1e__G202606041525/seed_42
+[SMOTE] Phase-1 synthetic (minority y=1): 1000 samples
+[SMOTE] Phase-2 synthetic (majority y=0): 1000 samples
+[SMOTE] Combined training set: 6000 samples (real=4000, syn1=1000, syn0=1000)
+FFNN Using device: cpu
+[SMOTE] Model saved -> /home/epigou/cs_9170_project/training_runs/BASELINE_smote_smote_fold3_ba752b1e__G202606041525/seed_42/smote_model.pt
+FFNN Using device: cpu
+FFNN Using device: cpu
+[TestSuite] Loaded best β weights from: /home/epigou/cs_9170_project/training_runs/BASELINE_smote_smote_fold3_ba752b1e__G202606041525/seed_42/smote_model.pt
+
+[TEST] Alpha -> F1(min)=0.1823 | F1(maj)=0.9848 | F1(weighted)=0.9624 | F1(macro)=0.5836 | Brier=0.0237
+[TEST] Beta  -> F1(min)=0.4776 | F1(maj)=0.9783 | F1(weighted)=0.9643 | F1(macro)=0.7279 | Brier=0.0340
+[TestSuite] Final test metrics appended to (seed): /home/epigou/cs_9170_project/training_runs/BASELINE_smote_smote_fold3_ba752b1e__G202606041525/seed_42/final_test_metrics.csv
+[TestSuite] Final test metrics appended to (experiment): /home/epigou/cs_9170_project/training_runs/BASELINE_smote_smote_fold3_ba752b1e__G202606041525/final_test_metrics.csv
+[SMOTE] Done. seed=42 | time=2112.8s
+[SMOTE] Results in /home/epigou/cs_9170_project/training_runs/BASELINE_smote_smote_fold3_ba752b1e__G202606041525/seed_42
