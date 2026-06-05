@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. **Motivation claim** — Naive generative baselines (CTGAN, FairTabDDPM) degrade under severe positive-class scarcity (DA+ ≈ 43): both show EO *higher* than alpha on capture24, and CTGAN EO=0.270 vs alpha EO≈0.36 on census (modest reduction). Reward-guided generation avoids this failure mode. Reweighting methods (GroupDRO, FLB) do not fail catastrophically — the claim is that RL achieves *better EO than all baselines* on census, not that reweighting collapses.
 
-2. **Competitive performance claim** — FORGE achieves best EO of all methods on both confirmed datasets. Census: β-EO=0.018±0.005, F1w=0.817, AUC=0.876 (k=10, pca=10, ep=30, traj=2000; EXP-021). Beats GroupDRO (0.057), FairTabDDPM (0.081), OT Repair (0.162), FLB (0.247), CTGAN (0.270), SMOTE (0.285) — all baselines from EXP-050 (matched 20-epoch FFNN, da_pct protocol). Capture24: β-EO=0.022±0.013, F1w=0.955, AUC=0.931 (k=5, pca=15, ep=10, traj=1000; EXP-025/EXP-047). Beats GroupDRO (0.122), CTGAN (0.128), FairTabDDPM (0.168), OT Repair (0.176), FLB (0.219), SMOTE (0.285) — EXP-050 baselines, k-fold protocol.
+2. **Competitive performance claim** — FORGE achieves best EO of all methods on both confirmed datasets. Census: β-EO=0.027±0.032, F1w=0.821, AUC=0.880 (k=10, pca=10, ep=30, traj=2000; EXP-050, 5 seeds). Seed3 (β-EO=0.082) drives the high std; 4/5 seeds give mean 0.014. Beats GroupDRO (0.057), FairTabDDPM (0.081), OT Repair (0.162), FLB (0.247), CTGAN (0.270), SMOTE (0.285) — all baselines from EXP-050 (matched 20-epoch FFNN, da_pct protocol). Capture24: β-EO=0.069±0.030, EOd=0.071±0.031, F1w=0.948, AUC=0.945 (k=5, pca=15, ep=10, traj=1000, rand_0010 secondary params; EXP-049, 5 folds). Beats GroupDRO (0.122), CTGAN (0.128), FairTabDDPM (0.168), OT Repair (0.176), FLB (0.219), SMOTE (0.285) — EXP-050 baselines, k-fold protocol.
 
 3. **Ablation / design validation claim** — Grid search (EXP-021) confirms sigmoid sharpness matters: k=10 (β-EO=0.018) substantially outperforms k=3 (0.039) and k=0 (0.039) on census. Global-only reward (no DVRL local term) confirmed by EXP-007/008. ep=30 classifier epochs per episode outperforms ep=20 vanilla.
 
@@ -22,11 +22,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Datasets confirmed: census_income, capture24. **Wildfire (FPA-FOD, BLM vs PRIVATE land, large-fire prediction) adopted as 3rd dataset candidate 2026-05-21; re-framed 2026-05-22** — passes all 5 viability criteria (alpha-EO=0.136–0.147, sep_ratio=3.30, targeted aug delta=+0.097). Framing corrected: BLM is disadvantaged (minority_id=1), PRIVATE is reference (majority_id=0). EXP-042 (PRIVATE-as-disadvantaged) terminated due to WGL-EO disconnect; EXP-044 (BLM-as-disadvantaged) launched — soft_eo_alpha=0.1284, WGL now correctly points to BLM. MEPS dropped (see Datasets section). ACS Employment (disability) dropped after FORGE failure.
 
-**Best confirmed results — census (3 seeds, EXP-021 grid search):**
-- k=10, pca=10, ep=30, traj=2000: β-EO=0.018±0.005, EOd=0.037±0.013, F1w=0.817±0.005, AUC=0.876±0.008 — beats all baselines on EO; confirmed 2026-05-20
-- Supersedes k=5 result (β-EO=0.031±0.018); k=10 grid on Huron now complete for all confirmed configs
+**Best confirmed results — census (5 seeds, EXP-050):**
+- k=10, pca=10, ep=30, traj=2000: β-EO=0.027±0.032, EOd=0.055±0.027, F1w=0.821, AUC=0.880 — beats all EXP-050 baselines; confirmed 2026-06-04
+- Seed3 drives high std (β-EO=0.082); 4/5 seeds give mean 0.014. 3-seed result was 0.018±0.005 (seeds 0,1,42).
 
-**Capture24 status:** Primary config confirmed: k=5, pca=15, ep=10, traj=1000 (real=4000) — β-EO=0.022±0.013, EOd=0.028±0.009, F1w=0.955, AUC=0.931 (EXP-047, 3/5 folds; folds 3&4 pending DRAC). Beats all EXP-050 baselines (k-fold protocol): GroupDRO 0.122, CTGAN 0.128, FairTabDDPM 0.168, OT Repair 0.176, FLB 0.219, SMOTE 0.285.
+**Capture24 status:** Primary config confirmed: k=5, pca=15, ep=10, traj=1000 (real=4000), rand_0010 secondary params — β-EO=0.069±0.030, EOd=0.071±0.031, F1w=0.948, AUC=0.945 (EXP-049, 5 folds complete). Beats all EXP-050 baselines (k-fold protocol): GroupDRO 0.122, CTGAN 0.128, FairTabDDPM 0.168, OT Repair 0.176, FLB 0.219, SMOTE 0.285. Note: folds 2&3 have near-zero α-EO for all methods (subject-level fold variation); retained for honest comparison. Old value 0.022±0.013 was val EO from 3-fold smoke test (not test EO) — corrected 2026-06-04.
 
 ### Datasets
 
