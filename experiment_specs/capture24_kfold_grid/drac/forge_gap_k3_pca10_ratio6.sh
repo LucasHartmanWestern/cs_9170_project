@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=gc24_k3p10r6
 #SBATCH --account=def-mcapretz
-#SBATCH --time=20:00:00
+#SBATCH --time=24:00:00
 #SBATCH --mem=9G
 #SBATCH --cpus-per-task=6
 #SBATCH --gres=gpu:1
