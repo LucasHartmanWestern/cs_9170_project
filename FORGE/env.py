@@ -91,6 +91,8 @@ class Environment:
 
         editable = self.editable_mask.bool()
 
+        # B.2 Trajectory Generation
+        # Apply walk transition: z_{t+1} = Π(z_t + clip_δ(η · a_t))
         if self.use_delta_actions:
             delta = action
             if self.delta_scale != 1.0:
@@ -109,6 +111,8 @@ class Environment:
         self.current_pca = new_pca
         self.generated_buffer.append(self.current_pca.detach().cpu().numpy())
 
+        # B.1 State Observation
+        # Form s_t = [progress(t), z_t, editable_mask]  (Eq. state)
         frac_done = max(0.0, min(1.0, float(curr_length) / float(self.max_actions)))
         state_vec = self._build_state(frac_done)
         done = curr_length >= self.max_actions

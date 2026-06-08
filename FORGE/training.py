@@ -313,6 +313,7 @@ class Training:
         print(f"[FORGE {self.process_label}] Training | episodes={self.episodes}")
         print(f"{'='*60}")
 
+        # -- for e in 1..E
         for episode in range(self.episodes):
             A = self.pca_components
             D = 1 + 2 * A
@@ -328,13 +329,17 @@ class Training:
             # shuffle order regardless of batch count in prior episodes.
             self.dl_generator = torch.Generator(device="cpu").manual_seed(self.seed + episode)
 
+            # Reset: z_1 ← 0, D_syn ← ∅, β ← init()
             state = env.reset()
 
             if episode % self.beta_reset_interval == 0:
                 self.beta_model.reset()
 
+            # -- for t in 1..T  (B.1 / C / B.2 — see env.py step())
             for t in range(self.traj_length):
+                # C) RL Agent — sample action a_t from policy π_θ(· | s_t)
                 action = agent.predict(state)
+                # B.1 + B.2 — form s_t, apply delta walk, append (z_{t+1}, y*) to D_syn
                 next_state, done, info = env.step(action, t + 1)
 
                 states[t]      = state
@@ -352,11 +357,15 @@ class Training:
             x_syn = x_traj[:T]
             y_syn = y_traj[:T]
 
+            # -- D.1 Dataset Construction and Classifier Training
+            # D_aug = D_real ∪ D_syn; train β on D_aug; evaluate on D_val → WGL_β.
             x_combined = torch.cat([x_train, x_syn])
             y_combined = torch.cat([y_train, y_syn])
             self.beta_model = self.train_classifier(self.beta_model, x_combined, y_combined)
             del x_combined, y_combined
 
+            # -- D.2 Reward Computation
+            # R = σ(k(WGL_α − WGL_β)); distribute R_t = R/T; update θ via REINFORCE.
             progress = (episode + 1) / self.episodes
             rewards, metrics = self.compute_reward(
                 self.alpha_model, self.beta_model,
@@ -393,6 +402,7 @@ class Training:
                 phase_label="phase1_class1",
             )
 
+            # Save best model if R > R*: R* ← R, D*_syn ← D_syn, β* ← β
             wgl_reward = metrics.get("reward", {}).get("wgl_reward", float(rewards.sum().item()))
             if wgl_reward > best_reward:
                 best_reward = wgl_reward
@@ -450,6 +460,9 @@ class Training:
         ) as tracker:
             self.tracker = tracker
 
+            # -- A.1 Dataset Preparation
+            # Split D into D_real / D_val / D_test via stratified sampling;
+            # fit PCA on D_real to d dimensions and project all splits.
             x_train, x_val, x_test, y_train, y_val, y_test = self.dataset.get_data_splits(
                 train_size=self.real_data_size,
                 da_pct=self.da_pct,
@@ -479,10 +492,11 @@ class Training:
             print(f"Beta trains with: {100*len(x_train)/total:.1f}% real, "
                   f"{100*self.traj_length/total:.1f}% synthetic")
 
-            # Train alpha on real data only
+            # -- A.2 Train Alpha Classifier
+            # Train α on D_real; evaluate on D_val to obtain WGL_α.
+            # Identify the disadvantaged group ξ = argmax_g L_g(α).
             self.alpha_model = self.train_classifier(self.alpha_model, x_train, y_train)
 
-            # Compute alpha WGL baseline (used as reference in reward every episode)
             disadv, adv, _, _ = rh.disadvantaged_group_from_alpha(
                 self.alpha_model, x_val, y_val, self.dataset.a_val, group_values=(0, 1),
             )
@@ -504,7 +518,10 @@ class Training:
             print(f"[alpha {self.process_label}] disadv_group={disadv} "
                   f"wgl={self.wgl_alpha_baseline:.4f} soft_eo={self.soft_eo_alpha:.4f}")
 
-            # Seed samples: disadvantaged minority training points for env reset
+            # -- A.3 Initialise RL Agent and Environment
+            # Initialise policy parameters θ; set R* ← −∞.
+            # Seed samples are the real disadvantaged-minority points used to
+            # anchor the environment's walk starting distribution.
             a_train    = self.dataset.a_train
             seed_mask  = (y_train == 1) & (a_train == int(self.disadv_group))
             seed_samples = x_train[seed_mask]
@@ -533,6 +550,7 @@ class Training:
                 radius_clip=self.radius_clip,
             )
 
+            # -- Run E episodes (Algorithm main loop — see _run_episode_loop)
             self._run_episode_loop(
                 env=env,
                 agent=self.agent,
@@ -542,6 +560,8 @@ class Training:
                 y_val=y_val,
             )
 
+            # -- E) Model Evaluation
+            # Evaluate β* on D_test; record fairness and utility metrics M.
             self.tracker.log_final_test(
                 alpha_model=self.alpha_model,
                 x_test=x_test,
