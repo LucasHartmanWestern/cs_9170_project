@@ -23,3 +23,6 @@ archive_figures/
 *.svg
 *.eps
 .claude/
+CLAUDE.md
+EXPERIMENTS.md
+EXPERIMENTS_archive.md
