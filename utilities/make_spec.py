@@ -34,9 +34,71 @@ import yaml
 SPEC_DIR = Path("experiment_specs")
 SLURM_ACCOUNT = "def-mcapretz"
 
+# Canonical defaults. All experiments are deltas from this.
+# Dataset-specific fields (None) must be overridden per experiment.
+# Mirrors vanilla_config.json — keeping it here avoids a missing-file error
+# when the repo is cloned without that file.
+VANILLA_CONFIG: dict = {
+    # Required per-dataset (must override via --patch)
+    "dataset_name":    None,
+    "da_pct":          None,
+    "dp_protected_col": None,
+    "minority_id":     None,
+    "majority_id":     None,
+    "seeds":           None,
+    # Training scale
+    "use_pca":         True,
+    "pca_components":  10,
+    "traj_length":     2000,
+    "real_data_size":  3000,
+    "total_episodes":  800,
+    "lambda_schedule": [1.0, 1.0],
+    # Environment
+    "use_delta_actions": True,
+    "delta_scale":     0.1,
+    "delta_clip":      0.2,
+    "pca_clip":        None,
+    "radius_clip":     3.0,
+    # Reward
+    "reward_shaping": {
+        "global_sigmoid_k": 10.0,
+    },
+    # Classifier (FFNN beta/alpha)
+    "ffnn": {
+        "hidden_sizes":    [32, 16],
+        "learning_rate":   0.001,
+        "batch_size":      64,
+        "epochs":          20,
+        "optimizer":       "adam",
+    },
+    # RL agent (REINFORCE)
+    "reinforce": {
+        "hidden_sizes":  [64, 64],
+        "lr":            0.0003,
+        "gamma":         1.0,
+        "entropy_start": 0.02,
+        "entropy_end":   0.005,
+        "optimizer":     "adam",
+    },
+    # k-fold (capture24)
+    "fold_idx":        None,
+    "n_folds":         5,
+    "fold_rng_seed":   None,
+    # Misc
+    "beta_reset_interval": 1,
+}
+
 
 def load_base_spec(name_or_path: str) -> tuple[dict, str]:
-    """Return (spec_dict, base_name)."""
+    """Return (spec_dict, base_name).
+
+    Passing ``vanilla`` (or ``vanilla_config``) returns the embedded
+    VANILLA_CONFIG without requiring a file on disk.
+    """
+    stem = Path(name_or_path).stem
+    if stem in ("vanilla", "vanilla_config"):
+        return copy.deepcopy(VANILLA_CONFIG), "vanilla"
+
     p = Path(name_or_path)
     if not p.exists():
         p = SPEC_DIR / name_or_path

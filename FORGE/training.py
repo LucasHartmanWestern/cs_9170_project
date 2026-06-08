@@ -324,6 +324,10 @@ class Training:
             x_traj      = torch.zeros((self.traj_length, A), dtype=torch.float32, device=self.device)
             y_traj      = torch.zeros(self.traj_length, dtype=torch.long, device=self.device)
 
+            # Re-seed per episode so each episode's beta training sees a distinct
+            # shuffle order regardless of batch count in prior episodes.
+            self.dl_generator = torch.Generator(device="cpu").manual_seed(self.seed + episode)
+
             state = env.reset()
 
             if episode % self.beta_reset_interval == 0:
