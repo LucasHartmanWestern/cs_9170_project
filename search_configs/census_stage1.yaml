@@ -1,0 +1,29 @@
+# Census Stage 1 grid — map the fairness/utility surface at 3 seeds (CPU-only).
+# 3 (k) x 3 (pca) x 3 (ep) x 3 (synth%) = 81 configs, seeds [0,1,2] co-located
+# per run dir. synth% is controlled via traj_length with real held at 3000:
+#   synth% = synth/(real+synth), real=3000
+#   20% -> traj 750,  40% -> traj 2000,  60% -> traj 4500
+# k uses the NESTED reward_shaping.global_sigmoid_k key so k=0 resolves correctly
+# (training.py:152 `spec.get(...) or rs.get(...)` turns a top-level 0 into the
+# default 10 via short-circuit; nested 0 is safe).
+name: census_stage1
+base: experiment_specs/census/paper_final_seed42.yaml
+
+base_patches:
+  seeds: [0, 1, 2]
+  real_data_size: 3000
+  total_episodes: 5000
+
+grid:
+  reward_shaping.global_sigmoid_k: [0, 5, 10]
+  pca_components: [5, 10, 15]
+  ffnn.epochs: [10, 20, 30]
+  traj_length: [750, 2000, 4500]   # synth% = 20 / 40 / 60 at real=3000
+
+slurm:
+  account: def-mcapretz
+  time: "24:00:00"   # covers heaviest cell (ep30/synth60) x 3 seeds sequential
+  mem: "3G"
+  cpus: 2
+  gpu: 0             # CPU-only: calibration showed GPU at ~0.1% util
+  bundle_size: 1     # one run per job; no packing (packing was ~2.7x slower)

@@ -117,14 +117,25 @@ def make_slurm(spec_path: str, name: str, out_dir: str, slurm: dict) -> str:
     gpu     = slurm.get("gpu",     1)
     log_dir = f"{out_dir}/logs"
     job_name = name[:16]  # SLURM limit
+
+    # CPU-only when gpu is 0/None: drop --gres, run --device cpu, skip cuda module.
+    # (Calibration showed this workload is CPU-bound; GPU sits at ~0.1% util.)
+    if gpu:
+        gres_line   = f"#SBATCH --gres=gpu:{gpu}\n"
+        module_line = "module load python/3.12.4 cuda cudnn"
+        device      = "cuda:0"
+    else:
+        gres_line   = ""
+        module_line = "module load python/3.12.4"
+        device      = "cpu"
+
     return f"""#!/bin/bash
 #SBATCH --job-name={job_name}
 #SBATCH --account={account}
 #SBATCH --time={time}
 #SBATCH --mem={mem}
 #SBATCH --cpus-per-task={cpus}
-#SBATCH --gres=gpu:{gpu}
-#SBATCH --output={log_dir}/{name}.out
+{gres_line}#SBATCH --output={log_dir}/{name}.out
 #SBATCH --error={log_dir}/{name}.err
 
 set -euo pipefail
@@ -137,11 +148,11 @@ export OPENBLAS_NUM_THREADS={cpus}
 export NUMEXPR_NUM_THREADS={cpus}
 
 module purge
-module load python/3.12.4 cuda cudnn
+{module_line}
 source ~/envs/rl/bin/activate
 mkdir -p {log_dir}
 
-python -u main.py --spec {spec_path} --device cuda:0
+python -u main.py --spec {spec_path} --device {device}
 """
 
 
