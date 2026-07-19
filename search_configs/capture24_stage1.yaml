@@ -1,0 +1,30 @@
+# Capture24 Stage 1 grid — same 81-config surface as census, at real=3000.
+# capture24 replicates over FOLDS (k-fold protocol), not seeds: fold_indices
+# expands each config into one job per fold. 81 configs x 3 folds = 243 jobs.
+# (EXP-046 precedent: 3 folds for grid search, 5 folds for the final confirm.)
+# synth% via traj_length at real=3000: 20/40/60 -> traj 750/2000/4500.
+# NOTE: real=3000 (not the old 4000) makes DA+~45, so this is a NEW config,
+# not a reproduction of the confirmed beta-EO=0.069.
+name: capture24_stage1
+base: experiment_specs/capture24/paper_final_fold0.yaml
+
+base_patches:
+  seeds: [42]
+  real_data_size: 3000
+  total_episodes: 5000
+
+grid:
+  reward_shaping.global_sigmoid_k: [0, 5, 10]
+  pca_components: [5, 10, 15]
+  ffnn.epochs: [10, 20, 30]
+  traj_length: [750, 2000, 4500]   # synth% = 20 / 40 / 60 at real=3000
+
+fold_indices: [0, 1, 2]   # 3 folds for the mapping stage
+
+slurm:
+  account: def-mcapretz
+  time: "10:00:00"   # single-fold jobs; heaviest cell (ep30/synth60) ~5-6h
+  mem: "3G"
+  cpus: 2
+  gpu: 0             # CPU-only
+  bundle_size: 1

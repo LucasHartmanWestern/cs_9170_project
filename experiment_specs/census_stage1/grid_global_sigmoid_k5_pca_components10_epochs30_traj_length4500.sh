@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=grid_global_sigm
 #SBATCH --account=def-mcapretz
-#SBATCH --time=24:00:00
+#SBATCH --time=36:00:00
 #SBATCH --mem=3G
 #SBATCH --cpus-per-task=2
 #SBATCH --output=experiment_specs/census_stage1/logs/grid_global_sigmoid_k5_pca_components10_epochs30_traj_length4500.out

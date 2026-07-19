@@ -22,7 +22,7 @@ grid:
 
 slurm:
   account: def-mcapretz
-  time: "24:00:00"   # covers heaviest cell (ep30/synth60) x 3 seeds sequential
+  time: "36:00:00"   # margin over heaviest cell (~21h est: ep30/synth60 x 3 seeds)
   mem: "3G"
   cpus: 2
   gpu: 0             # CPU-only: calibration showed GPU at ~0.1% util
