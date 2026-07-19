@@ -1,0 +1,21 @@
+# Solo companion to cal_census: the SAME pca=10/ep=30 config, run alone on one
+# GPU (no packing). Compare its per-run wall time against the same config inside
+# the 4-way bundle to get the exact packing slowdown -> optimal packing factor.
+name: cal_census_solo
+base: experiment_specs/census/paper_final_seed42.yaml
+
+base_patches:
+  seeds: [0]
+  total_episodes: 250
+
+grid:
+  pca_components: [10]
+  ffnn.epochs: [30]
+
+slurm:
+  account: rrg-kgroling
+  time: "03:00:00"
+  mem: "3G"
+  cpus: 2
+  gpu: 1
+  bundle_size: 1          # one config, one GPU (no packing)

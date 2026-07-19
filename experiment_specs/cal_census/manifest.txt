@@ -1,0 +1,9 @@
+Search: cal_census
+Base:   experiment_specs/census/paper_final_seed42.yaml
+Count:  4
+Bundle size: 4
+
+grid_pca_components10_epochs20
+grid_pca_components10_epochs30
+grid_pca_components15_epochs20
+grid_pca_components15_epochs30

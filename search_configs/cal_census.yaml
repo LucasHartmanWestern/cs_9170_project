@@ -1,0 +1,22 @@
+# Calibration bundle: 4 census grid configs run in parallel on one GPU.
+# Short episode count (250) so we measure per-episode wall time + peak memory
+# quickly on Huron, then extrapolate to the real 5000-episode DRAC walltime.
+name: cal_census
+base: experiment_specs/census/paper_final_seed42.yaml
+
+base_patches:
+  seeds: [0]              # single seed per spec for calibration speed
+  total_episodes: 250     # calibration only; real runs use 5000
+
+# 4 representative grid points (2x2) -> one bundle of 4
+grid:
+  pca_components: [10, 15]
+  ffnn.epochs: [20, 30]
+
+slurm:
+  account: rrg-kgroling
+  time: "03:00:00"        # short calibration -> faster backfill scheduling
+  mem: "3G"               # per-spec; bundle .sh multiplies by bundle_size
+  cpus: 2
+  gpu: 1
+  bundle_size: 4          # pack all 4 specs in parallel on one GPU
