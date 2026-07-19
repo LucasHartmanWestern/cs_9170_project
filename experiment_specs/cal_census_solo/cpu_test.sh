@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=cal_cpu_test
-#SBATCH --account=rrg-kgroling
+#SBATCH --account=def-mcapretz
 #SBATCH --time=01:00:00
 #SBATCH --mem=3G
 #SBATCH --cpus-per-task=2
