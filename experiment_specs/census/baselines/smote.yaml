@@ -23,6 +23,6 @@ ffnn:
   - 16
   learning_rate: 0.001
   batch_size: 64
-  epochs: 20
+  epochs: 30
 smote:
   n_synthetic: 2000
