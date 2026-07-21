@@ -1,0 +1,8 @@
+Search: census_stage2
+Base:   experiment_specs/census/paper_final_seed42.yaml
+Count:  3
+Bundle size: 1
+
+grid_global_sigmoid_k10_pca_components10_epochs30_traj_length4500
+grid_global_sigmoid_k5_pca_components15_epochs30_traj_length4500
+grid_global_sigmoid_k10_pca_components10_epochs30_traj_length2000

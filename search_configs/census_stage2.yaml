@@ -1,0 +1,30 @@
+# Census Stage 2 — 5-seed confirmation of the top utility-controlled configs
+# from Stage 1. Because k/ep/synth% were flat, "the winner" is noisy, so we
+# confirm THREE candidates (zip = exactly these 3, not a cartesian product) and
+# report whichever holds up:
+#   C1 winner:        k10 pca10 ep30 synth60(traj4500)  Stage1 β-EO=0.034 AUC=.854
+#   C2 best-AUC:      k5  pca15 ep30 synth60(traj4500)  Stage1 β-EO=0.034 AUC=.864
+#   C3 canonical:     k10 pca10 ep30 synth40(traj2000)  EXP-021 lineage, cheaper
+# real=3000 (da_pct DA+=43), seeds 0-4 co-located per run dir.
+name: census_stage2
+base: experiment_specs/census/paper_final_seed42.yaml
+
+base_patches:
+  seeds: [0, 1, 2, 3, 4]
+  real_data_size: 3000
+  total_episodes: 5000
+
+grid:
+  zip:
+    reward_shaping.global_sigmoid_k: [10, 5, 10]
+    pca_components:                  [10, 15, 10]
+    ffnn.epochs:                     [30, 30, 30]
+    traj_length:                     [4500, 4500, 2000]
+
+slurm:
+  account: def-mcapretz
+  time: "48:00:00"   # heaviest: synth60/ep30 x 5 seeds sequential (~34h)
+  mem: "3G"
+  cpus: 2
+  gpu: 0
+  bundle_size: 1

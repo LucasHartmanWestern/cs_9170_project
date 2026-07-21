@@ -1,0 +1,28 @@
+baseline: smote
+dataset_name: census_income
+multiclass: false
+bias_pct: null
+da_pct: 0.01433
+dp_protected_col: sex
+minority_id: 0
+majority_id: 1
+third_id: null
+real_data_size: 3000
+seeds:
+- 0
+- 1
+- 2
+- 3
+- 4
+use_pca: true
+pca_components: 10
+traj_length: 2000
+ffnn:
+  hidden_sizes:
+  - 32
+  - 16
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 20
+smote:
+  n_synthetic: 2000
