@@ -1,0 +1,33 @@
+# Census FORGE random search (EXP-022) — explore the RL/training hyperparameters
+# the structural grid never touched. Anchored at the confirmed Stage 2 winner
+# (k5/pca15/ep30/synth60) so any improvement is directly comparable to the
+# β-EO=0.029 headline. 2 seeds (search stage) -> confirm the best at 5 seeds.
+name: census_random
+base: experiment_specs/census/paper_final_seed42.yaml
+
+base_patches:
+  reward_shaping.global_sigmoid_k: 5
+  pca_components: 15
+  ffnn.epochs: 30
+  traj_length: 4500          # synth60 (matches winner)
+  real_data_size: 3000
+  total_episodes: 5000
+  seeds: [0, 1]
+
+random:
+  n_samples: 30
+  seed: 0
+  params:
+    ffnn.learning_rate:  {dist: log_uniform, low: 1.0e-4, high: 1.0e-2}
+    reinforce.lr:        {dist: log_uniform, low: 1.0e-5, high: 1.0e-3}
+    delta_scale:         {dist: uniform,     low: 0.05,   high: 0.30}
+    ffnn.optimizer:      {dist: choice, values: [adam, adamw, sgd]}
+    reinforce.optimizer: {dist: choice, values: [adam, adamw]}
+
+slurm:
+  account: def-mcapretz
+  time: "20:00:00"   # 2 seeds x ~6.7h (synth60/ep30) ~= 13.4h + margin
+  mem: "3G"
+  cpus: 2
+  gpu: 0
+  bundle_size: 1
