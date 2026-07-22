@@ -15,8 +15,8 @@ seeds:
 - 3
 - 4
 use_pca: true
-pca_components: 10
-traj_length: 2000
+pca_components: 15
+traj_length: 4500
 ffnn:
   hidden_sizes:
   - 32
@@ -25,4 +25,4 @@ ffnn:
   batch_size: 64
   epochs: 30
 smote:
-  n_synthetic: 2000
+  n_synthetic: 4500
