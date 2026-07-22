@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=rand_0020_learni
 #SBATCH --account=def-mcapretz
-#SBATCH --time=20:00:00
+#SBATCH --time=30:00:00
 #SBATCH --mem=3G
 #SBATCH --cpus-per-task=2
 #SBATCH --output=experiment_specs/census_random/logs/rand_0020_learning_rate0p0007963907613055002_lr0p0002091658391473368_delta_scale0p2990644598383932_optimizeradamw_optimizeradam.out

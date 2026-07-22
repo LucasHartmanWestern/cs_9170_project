@@ -12,7 +12,7 @@ base_patches:
   traj_length: 4500          # synth60 (matches winner)
   real_data_size: 3000
   total_episodes: 5000
-  seeds: [0, 1]
+  seeds: [0, 1, 2]           # 3-seed search stage (matches grid protocol); confirm winner at 5
 
 random:
   n_samples: 30
@@ -26,7 +26,7 @@ random:
 
 slurm:
   account: def-mcapretz
-  time: "20:00:00"   # 2 seeds x ~6.7h (synth60/ep30) ~= 13.4h + margin
+  time: "30:00:00"   # 3 seeds x ~6.7h (synth60/ep30) ~= 20h + margin
   mem: "3G"
   cpus: 2
   gpu: 0
