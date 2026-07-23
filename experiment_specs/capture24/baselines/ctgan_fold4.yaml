@@ -1,0 +1,28 @@
+baseline: ctgan
+dataset_name: capture24
+multiclass: false
+bias_pct: null
+da_pct: 0.015
+dp_protected_col: sex
+minority_id: 1
+majority_id: 0
+third_id: null
+real_data_size: 3000
+n_folds: 5
+fold_rng_seed: 6
+kfold_val_frac: 0.4
+seeds:
+- 42
+use_pca: true
+pca_components: 10
+win_seconds: 1.0
+step_seconds: 0.5
+traj_length: 2000
+ffnn:
+  hidden_sizes:
+  - 32
+  - 16
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 30
+fold_idx: 4
