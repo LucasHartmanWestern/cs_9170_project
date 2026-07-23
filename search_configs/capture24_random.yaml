@@ -1,0 +1,37 @@
+# Capture24 FORGE random search — mirror of census_random, anchored at the c24
+# 5-fold winner (k5/pca10/ep30/synth40). Explores the same RL/training knobs the
+# structural grid never touched. c24 replicates via 3 FOLDS (search stage), not
+# seeds — matches the grid protocol (folds 0,1,2 search; 3,4 confirm).
+# rng seed 0 (same as census_random) => same 30 hyperparameter draws, applied to
+# the c24 anchor. 30 samples x 3 folds = 90 jobs.
+name: capture24_random
+base: experiment_specs/capture24/paper_final_fold0.yaml
+
+base_patches:
+  reward_shaping.global_sigmoid_k: 5
+  pca_components: 10
+  ffnn.epochs: 30
+  traj_length: 2000          # synth40 (matches winner)
+  real_data_size: 3000
+  total_episodes: 5000
+  seeds: [42]
+
+random:
+  n_samples: 30
+  seed: 0
+  params:
+    ffnn.learning_rate:  {dist: log_uniform, low: 1.0e-4, high: 1.0e-2}
+    reinforce.lr:        {dist: log_uniform, low: 1.0e-5, high: 1.0e-3}
+    delta_scale:         {dist: uniform,     low: 0.05,   high: 0.30}
+    ffnn.optimizer:      {dist: choice, values: [adam, adamw, sgd]}
+    reinforce.optimizer: {dist: choice, values: [adam, adamw]}
+
+fold_indices: [0, 1, 2]   # 3-fold search stage
+
+slurm:
+  account: def-mcapretz
+  time: "08:00:00"   # single-fold traj2000/ep30 ~2-3h + margin
+  mem: "3G"
+  cpus: 2
+  gpu: 0
+  bundle_size: 1
