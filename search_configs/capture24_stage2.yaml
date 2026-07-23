@@ -1,0 +1,31 @@
+# Capture24 Stage 2 — confirm top-3 grid winners on the HELD-OUT folds {3,4}.
+# Combined with Stage 1 folds {0,1,2}, this gives the full 5-fold result on each
+# winner with zero re-runs. All candidates are pca10/ep30 (marginal-best pca,
+# no utility confound) with a large starting gap (α-EO=0.278):
+#   C1 top-EO:    k5  pca10 ep30 synth60(traj4500)  Stage1 β-EO=0.016 AUC=.942
+#   C2 top-AUC:   k5  pca10 ep30 synth40(traj2000)  Stage1 β-EO=0.020 AUC=.948
+#   C3 tightest:  k10 pca10 ep30 synth60(traj4500)  Stage1 β-EO=0.025 AUC=.937
+name: capture24_stage2
+base: experiment_specs/capture24/paper_final_fold0.yaml
+
+base_patches:
+  seeds: [42]
+  real_data_size: 3000
+  total_episodes: 5000
+
+grid:
+  zip:
+    reward_shaping.global_sigmoid_k: [5,  5,  10]
+    pca_components:                  [10, 10, 10]
+    ffnn.epochs:                     [30, 30, 30]
+    traj_length:                     [4500, 2000, 4500]
+
+fold_indices: [3, 4]   # held-out confirmation folds
+
+slurm:
+  account: def-mcapretz
+  time: "10:00:00"
+  mem: "3G"
+  cpus: 2
+  gpu: 0
+  bundle_size: 1

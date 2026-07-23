@@ -1,0 +1,42 @@
+dataset_name: capture24
+da_pct: 0.015
+dp_protected_col: sex
+minority_id: 1
+majority_id: 0
+seeds:
+- 42
+use_pca: true
+pca_components: 10
+traj_length: 2000
+real_data_size: 3000
+total_episodes: 5000
+fold_idx: 4
+n_folds: 5
+fold_rng_seed: 6
+kfold_val_frac: 0.4
+lambda_schedule:
+- 1.0
+- 1.0
+use_delta_actions: true
+delta_scale: 0.10965398215380505
+delta_clip: 0.2
+radius_clip: 3.0
+reward_shaping:
+  global_sigmoid_k: 5
+ffnn:
+  hidden_sizes:
+  - 32
+  - 16
+  learning_rate: 0.00024106501268706255
+  batch_size: 64
+  epochs: 30
+  optimizer: adam
+reinforce:
+  hidden_sizes:
+  - 64
+  - 64
+  lr: 0.00013646506337961615
+  gamma: 1.0
+  entropy_start: 0.02
+  entropy_end: 0.005
+  optimizer: adamw

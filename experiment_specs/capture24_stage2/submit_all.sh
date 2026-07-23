@@ -1,0 +1,9 @@
+#!/bin/bash
+# Submit all SLURM jobs for this search
+cd "$(dirname "$0")/../.."
+sbatch experiment_specs/capture24_stage2/grid_global_sigmoid_k5_pca_components10_epochs30_traj_length4500_fold3.sh
+sbatch experiment_specs/capture24_stage2/grid_global_sigmoid_k5_pca_components10_epochs30_traj_length4500_fold4.sh
+sbatch experiment_specs/capture24_stage2/grid_global_sigmoid_k5_pca_components10_epochs30_traj_length2000_fold3.sh
+sbatch experiment_specs/capture24_stage2/grid_global_sigmoid_k5_pca_components10_epochs30_traj_length2000_fold4.sh
+sbatch experiment_specs/capture24_stage2/grid_global_sigmoid_k10_pca_components10_epochs30_traj_length4500_fold3.sh
+sbatch experiment_specs/capture24_stage2/grid_global_sigmoid_k10_pca_components10_epochs30_traj_length4500_fold4.sh
